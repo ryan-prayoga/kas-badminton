@@ -1,6 +1,8 @@
+require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const cookieParser = require('cookie-parser');
+const { Pool } = require('pg');
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
@@ -8,50 +10,20 @@ const crypto = require('crypto');
 const app = express();
 const PORT = Number(process.env.PORT) || 8200;
 const DATA_DIR = path.join(__dirname, 'data');
-const DATA_FILE = path.join(DATA_DIR, 'db.json');
+const LEGACY_DATA_FILE = path.join(DATA_DIR, 'db.json');
 const ADMIN_PIN_FILE = path.join(DATA_DIR, 'admin-pin.txt');
 const PIN_LENGTH = 6;
 const SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30 hari
 const SESSION_COOKIE = 'admin_session';
 
-const DEFAULT_DB = {
-  settings: {
-    defaultPricePerPerson: 3000,
-  },
-  players: [],
-  games: [],
-};
+if (!process.env.DATABASE_URL) {
+  throw new Error('DATABASE_URL belum di-set (env atau .env)');
+}
+const pool = new Pool({ connectionString: process.env.DATABASE_URL });
+pool.on('error', (err) => console.error('[pg] idle client error', err.message));
 
-function ensureData() {
+function ensureDataDir() {
   if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
-  if (!fs.existsSync(DATA_FILE)) {
-    fs.writeFileSync(DATA_FILE, JSON.stringify(DEFAULT_DB, null, 2));
-  }
-}
-
-function loadDb() {
-  ensureData();
-  try {
-    const raw = JSON.parse(fs.readFileSync(DATA_FILE, 'utf8'));
-    return {
-      settings: {
-        defaultPricePerPerson: Number(raw?.settings?.defaultPricePerPerson) || 3000,
-      },
-      players: Array.isArray(raw?.players) ? raw.players : [],
-      games: Array.isArray(raw?.games) ? raw.games.map(normalizeStoredGame) : [],
-    };
-  } catch {
-    const fresh = structuredClone(DEFAULT_DB);
-    saveDb(fresh);
-    return fresh;
-  }
-}
-
-function saveDb(db) {
-  ensureData();
-  const tmp = DATA_FILE + '.tmp';
-  fs.writeFileSync(tmp, JSON.stringify(db, null, 2));
-  fs.renameSync(tmp, DATA_FILE);
 }
 
 function uid() {
@@ -66,7 +38,7 @@ function generatePin() {
 
 function getAdminPin() {
   if (process.env.ADMIN_PIN) return String(process.env.ADMIN_PIN).trim();
-  ensureData();
+  ensureDataDir();
   if (fs.existsSync(ADMIN_PIN_FILE)) {
     return fs.readFileSync(ADMIN_PIN_FILE, 'utf8').trim();
   }
@@ -319,6 +291,126 @@ function buildKoks(body, defaultPrice) {
   return koks;
 }
 
+// --- Persistence (Postgres) ---
+// Small dataset (personal use, handful of games/week) — whole-table
+// read/replace per request keeps every route handler's business logic
+// identical to the old flat-file version instead of rewriting each into
+// targeted SQL.
+
+function rowToGame(r) {
+  return normalizeStoredGame({
+    id: r.id,
+    date: r.date,
+    players: r.players,
+    scores: r.scores,
+    koks: r.koks,
+    notes: r.notes,
+    createdAt: r.created_at.toISOString(),
+    updatedAt: r.updated_at.toISOString(),
+  });
+}
+
+async function loadDb() {
+  const [settingsRes, playersRes, gamesRes] = await Promise.all([
+    pool.query('SELECT default_price_per_person FROM settings WHERE id = 1'),
+    pool.query('SELECT name FROM players ORDER BY name'),
+    pool.query('SELECT id, date, players, scores, koks, notes, created_at, updated_at FROM games'),
+  ]);
+  return {
+    settings: {
+      defaultPricePerPerson: Number(settingsRes.rows[0]?.default_price_per_person) || 3000,
+    },
+    players: playersRes.rows.map((r) => r.name),
+    games: gamesRes.rows.map(rowToGame),
+  };
+}
+
+async function saveDb(db) {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    await client.query('UPDATE settings SET default_price_per_person = $1 WHERE id = 1', [
+      db.settings.defaultPricePerPerson,
+    ]);
+    await client.query('DELETE FROM players');
+    for (const name of db.players) {
+      await client.query('INSERT INTO players (name) VALUES ($1)', [name]);
+    }
+    await client.query('DELETE FROM games');
+    for (const g of db.games) {
+      await client.query(
+        `INSERT INTO games (id, date, players, scores, koks, notes, created_at, updated_at)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
+        [
+          g.id,
+          g.date,
+          JSON.stringify(g.players),
+          JSON.stringify(g.scores),
+          JSON.stringify(g.koks),
+          g.notes,
+          g.createdAt,
+          g.updatedAt,
+        ]
+      );
+    }
+    await client.query('COMMIT');
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+
+async function migrateLegacyJsonIfNeeded() {
+  const { rows } = await pool.query('SELECT COUNT(*)::int AS n FROM games');
+  if (rows[0].n > 0) return;
+  if (!fs.existsSync(LEGACY_DATA_FILE)) return;
+
+  let raw;
+  try {
+    raw = JSON.parse(fs.readFileSync(LEGACY_DATA_FILE, 'utf8'));
+  } catch {
+    return;
+  }
+  const players = Array.isArray(raw?.players) ? raw.players : [];
+  const games = Array.isArray(raw?.games) ? raw.games.map(normalizeStoredGame) : [];
+  const defaultPrice = Number(raw?.settings?.defaultPricePerPerson) || 3000;
+  if (!games.length && !players.length) return;
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    await client.query('UPDATE settings SET default_price_per_person = $1 WHERE id = 1', [defaultPrice]);
+    for (const name of players) {
+      await client.query('INSERT INTO players (name) VALUES ($1) ON CONFLICT DO NOTHING', [name]);
+    }
+    for (const g of games) {
+      await client.query(
+        `INSERT INTO games (id, date, players, scores, koks, notes, created_at, updated_at)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8) ON CONFLICT (id) DO NOTHING`,
+        [
+          g.id,
+          g.date,
+          JSON.stringify(g.players),
+          JSON.stringify(g.scores),
+          JSON.stringify(g.koks),
+          g.notes,
+          g.createdAt || new Date().toISOString(),
+          g.updatedAt || new Date().toISOString(),
+        ]
+      );
+    }
+    await client.query('COMMIT');
+    console.log(`[migrate] Import ${games.length} game dari data/db.json ke Postgres selesai.`);
+  } catch (err) {
+    await client.query('ROLLBACK');
+    console.error('[migrate] Gagal import data lama:', err.message);
+  } finally {
+    client.release();
+  }
+}
+
 app.set('trust proxy', true);
 app.use(cors());
 app.use(express.json({ limit: '1mb' }));
@@ -364,218 +456,258 @@ app.post('/api/logout', (req, res) => {
   res.json({ ok: true });
 });
 
-app.get('/api/bootstrap', (_req, res) => {
-  const db = loadDb();
-  const games = db.games
-    .slice()
-    .sort((a, b) => String(b.date).localeCompare(String(a.date)) || String(b.createdAt).localeCompare(String(a.createdAt)))
-    .map(enrichGame);
+app.get('/api/bootstrap', async (_req, res, next) => {
+  try {
+    const db = await loadDb();
+    const games = db.games
+      .slice()
+      .sort((a, b) => String(b.date).localeCompare(String(a.date)) || String(b.createdAt).localeCompare(String(a.createdAt)))
+      .map(enrichGame);
 
-  const unpaid = [];
-  for (const g of games) {
-    for (const p of g.players) {
-      if (!p.paid) {
-        unpaid.push({
-          gameId: g.id,
-          date: g.date,
-          name: p.name,
-          amount: g.cost.perPerson,
-          score: g.scoreLabel || null,
-        });
+    const unpaid = [];
+    for (const g of games) {
+      for (const p of g.players) {
+        if (!p.paid) {
+          unpaid.push({
+            gameId: g.id,
+            date: g.date,
+            name: p.name,
+            amount: g.cost.perPerson,
+            score: g.scoreLabel || null,
+          });
+        }
       }
     }
-  }
 
-  const byName = {};
-  for (const u of unpaid) {
-    if (!byName[u.name]) byName[u.name] = { name: u.name, total: 0, items: [] };
-    byName[u.name].total += u.amount;
-    byName[u.name].items.push(u);
-  }
+    const byName = {};
+    for (const u of unpaid) {
+      if (!byName[u.name]) byName[u.name] = { name: u.name, total: 0, items: [] };
+      byName[u.name].total += u.amount;
+      byName[u.name].items.push(u);
+    }
 
-  res.json({
-    settings: db.settings,
-    players: db.players,
-    games,
-    debtSummary: Object.values(byName).sort((a, b) => b.total - a.total || a.name.localeCompare(b.name, 'id')),
-  });
+    res.json({
+      settings: db.settings,
+      players: db.players,
+      games,
+      debtSummary: Object.values(byName).sort((a, b) => b.total - a.total || a.name.localeCompare(b.name, 'id')),
+    });
+  } catch (err) {
+    next(err);
+  }
 });
 
-app.put('/api/settings', requireAdmin, (req, res) => {
-  const price = Number(req.body?.defaultPricePerPerson);
-  if (!Number.isFinite(price) || price < 0) {
-    return res.status(400).json({ error: 'defaultPricePerPerson harus angka >= 0' });
+app.put('/api/settings', requireAdmin, async (req, res, next) => {
+  try {
+    const price = Number(req.body?.defaultPricePerPerson);
+    if (!Number.isFinite(price) || price < 0) {
+      return res.status(400).json({ error: 'defaultPricePerPerson harus angka >= 0' });
+    }
+    const db = await loadDb();
+    db.settings.defaultPricePerPerson = Math.round(price);
+    await saveDb(db);
+    res.json({ settings: db.settings });
+  } catch (err) {
+    next(err);
   }
-  const db = loadDb();
-  db.settings.defaultPricePerPerson = Math.round(price);
-  saveDb(db);
-  res.json({ settings: db.settings });
 });
 
-app.post('/api/games', requireAdmin, (req, res) => {
-  const body = req.body || {};
-  const parsed = parsePlayersFromBody(body);
-  if (parsed.error) return res.status(400).json({ error: parsed.error });
-  const err = validatePlayers(parsed.players);
-  if (err) return res.status(400).json({ error: err });
-
-  const db = loadDb();
-  const scores = parseScoresFromBody(body);
-  const koks = buildKoks(body, db.settings.defaultPricePerPerson);
-
-  const game = {
-    id: uid(),
-    date: body.date || todayWIB(),
-    players: parsed.players,
-    scores,
-    koks,
-    notes: body.notes ? String(body.notes).trim() : '',
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-  };
-
-  rememberPlayers(db, parsed.players.map((p) => p.name));
-  db.games.unshift(game);
-  saveDb(db);
-  res.status(201).json({ game: enrichGame(game) });
-});
-
-app.patch('/api/games/:id', requireAdmin, (req, res) => {
-  const db = loadDb();
-  const idx = db.games.findIndex((g) => g.id === req.params.id);
-  if (idx === -1) return res.status(404).json({ error: 'Game tidak ditemukan' });
-
-  const body = req.body || {};
-  const game = normalizeStoredGame(db.games[idx]);
-
-  if (body.date) game.date = String(body.date);
-  if (body.notes !== undefined) game.notes = String(body.notes || '').trim();
-
-  if (body.scores !== undefined || body.score !== undefined) {
-    game.scores = parseScoresFromBody(body);
-  }
-
-  if (body.pairs || (Array.isArray(body.players) && body.players.length === 4)) {
-    const parsed = parsePlayersFromBody(body, game.players);
+app.post('/api/games', requireAdmin, async (req, res, next) => {
+  try {
+    const body = req.body || {};
+    const parsed = parsePlayersFromBody(body);
     if (parsed.error) return res.status(400).json({ error: parsed.error });
     const err = validatePlayers(parsed.players);
     if (err) return res.status(400).json({ error: err });
-    game.players = parsed.players;
+
+    const db = await loadDb();
+    const scores = parseScoresFromBody(body);
+    const koks = buildKoks(body, db.settings.defaultPricePerPerson);
+
+    const game = {
+      id: uid(),
+      date: body.date || todayWIB(),
+      players: parsed.players,
+      scores,
+      koks,
+      notes: body.notes ? String(body.notes).trim() : '',
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+
     rememberPlayers(db, parsed.players.map((p) => p.name));
+    db.games.unshift(game);
+    await saveDb(db);
+    res.status(201).json({ game: enrichGame(game) });
+  } catch (err) {
+    next(err);
   }
-
-  if (Array.isArray(body.koks) && body.koks.length > 0) {
-    game.koks = body.koks.slice(0, 50).map((k) => ({
-      id: k.id || uid(),
-      pricePerPerson: Number.isFinite(Number(k.pricePerPerson))
-        ? Math.round(Number(k.pricePerPerson))
-        : db.settings.defaultPricePerPerson,
-    }));
-  }
-
-  game.updatedAt = new Date().toISOString();
-  db.games[idx] = game;
-  saveDb(db);
-  res.json({ game: enrichGame(game) });
 });
 
-app.post('/api/games/:id/koks', requireAdmin, (req, res) => {
-  const db = loadDb();
-  const idx = db.games.findIndex((g) => g.id === req.params.id);
-  if (idx === -1) return res.status(404).json({ error: 'Game tidak ditemukan' });
+app.patch('/api/games/:id', requireAdmin, async (req, res, next) => {
+  try {
+    const db = await loadDb();
+    const idx = db.games.findIndex((g) => g.id === req.params.id);
+    if (idx === -1) return res.status(404).json({ error: 'Game tidak ditemukan' });
 
-  const price = Number(req.body?.pricePerPerson);
-  const pricePerPerson = Number.isFinite(price)
-    ? Math.round(price)
-    : db.settings.defaultPricePerPerson;
+    const body = req.body || {};
+    const game = normalizeStoredGame(db.games[idx]);
 
-  const kok = { id: uid(), pricePerPerson };
-  db.games[idx] = normalizeStoredGame(db.games[idx]);
-  db.games[idx].koks.push(kok);
-  db.games[idx].updatedAt = new Date().toISOString();
-  saveDb(db);
-  res.status(201).json({ game: enrichGame(db.games[idx]), kok });
-});
+    if (body.date) game.date = String(body.date);
+    if (body.notes !== undefined) game.notes = String(body.notes || '').trim();
 
-app.delete('/api/games/:id/koks/:kokId', requireAdmin, (req, res) => {
-  const db = loadDb();
-  const idx = db.games.findIndex((g) => g.id === req.params.id);
-  if (idx === -1) return res.status(404).json({ error: 'Game tidak ditemukan' });
+    if (body.scores !== undefined || body.score !== undefined) {
+      game.scores = parseScoresFromBody(body);
+    }
 
-  const game = normalizeStoredGame(db.games[idx]);
-  if (game.koks.length <= 1) {
-    return res.status(400).json({ error: 'Minimal 1 kok per game' });
+    if (body.pairs || (Array.isArray(body.players) && body.players.length === 4)) {
+      const parsed = parsePlayersFromBody(body, game.players);
+      if (parsed.error) return res.status(400).json({ error: parsed.error });
+      const err = validatePlayers(parsed.players);
+      if (err) return res.status(400).json({ error: err });
+      game.players = parsed.players;
+      rememberPlayers(db, parsed.players.map((p) => p.name));
+    }
+
+    if (Array.isArray(body.koks) && body.koks.length > 0) {
+      game.koks = body.koks.slice(0, 50).map((k) => ({
+        id: k.id || uid(),
+        pricePerPerson: Number.isFinite(Number(k.pricePerPerson))
+          ? Math.round(Number(k.pricePerPerson))
+          : db.settings.defaultPricePerPerson,
+      }));
+    }
+
+    game.updatedAt = new Date().toISOString();
+    db.games[idx] = game;
+    await saveDb(db);
+    res.json({ game: enrichGame(game) });
+  } catch (err) {
+    next(err);
   }
-  const before = game.koks.length;
-  game.koks = game.koks.filter((k) => k.id !== req.params.kokId);
-  if (game.koks.length === before) return res.status(404).json({ error: 'Kok tidak ditemukan' });
-  game.updatedAt = new Date().toISOString();
-  db.games[idx] = game;
-  saveDb(db);
-  res.json({ game: enrichGame(game) });
 });
 
-app.patch('/api/games/:id/koks/:kokId', requireAdmin, (req, res) => {
-  const db = loadDb();
-  const idx = db.games.findIndex((g) => g.id === req.params.id);
-  if (idx === -1) return res.status(404).json({ error: 'Game tidak ditemukan' });
+app.post('/api/games/:id/koks', requireAdmin, async (req, res, next) => {
+  try {
+    const db = await loadDb();
+    const idx = db.games.findIndex((g) => g.id === req.params.id);
+    if (idx === -1) return res.status(404).json({ error: 'Game tidak ditemukan' });
 
-  const game = normalizeStoredGame(db.games[idx]);
-  const kok = game.koks.find((k) => k.id === req.params.kokId);
-  if (!kok) return res.status(404).json({ error: 'Kok tidak ditemukan' });
+    const price = Number(req.body?.pricePerPerson);
+    const pricePerPerson = Number.isFinite(price)
+      ? Math.round(price)
+      : db.settings.defaultPricePerPerson;
 
-  const price = Number(req.body?.pricePerPerson);
-  if (!Number.isFinite(price) || price < 0) {
-    return res.status(400).json({ error: 'pricePerPerson harus angka >= 0' });
+    const kok = { id: uid(), pricePerPerson };
+    db.games[idx] = normalizeStoredGame(db.games[idx]);
+    db.games[idx].koks.push(kok);
+    db.games[idx].updatedAt = new Date().toISOString();
+    await saveDb(db);
+    res.status(201).json({ game: enrichGame(db.games[idx]), kok });
+  } catch (err) {
+    next(err);
   }
-  kok.pricePerPerson = Math.round(price);
-  game.updatedAt = new Date().toISOString();
-  db.games[idx] = game;
-  saveDb(db);
-  res.json({ game: enrichGame(game) });
 });
 
-app.patch('/api/games/:id/players/:index/paid', requireAdmin, (req, res) => {
-  const db = loadDb();
-  const idx = db.games.findIndex((g) => g.id === req.params.id);
-  if (idx === -1) return res.status(404).json({ error: 'Game tidak ditemukan' });
+app.delete('/api/games/:id/koks/:kokId', requireAdmin, async (req, res, next) => {
+  try {
+    const db = await loadDb();
+    const idx = db.games.findIndex((g) => g.id === req.params.id);
+    if (idx === -1) return res.status(404).json({ error: 'Game tidak ditemukan' });
 
-  const pIdx = Number(req.params.index);
-  if (!Number.isInteger(pIdx) || pIdx < 0 || pIdx > 3) {
-    return res.status(400).json({ error: 'Index pemain 0-3' });
+    const game = normalizeStoredGame(db.games[idx]);
+    if (game.koks.length <= 1) {
+      return res.status(400).json({ error: 'Minimal 1 kok per game' });
+    }
+    const before = game.koks.length;
+    game.koks = game.koks.filter((k) => k.id !== req.params.kokId);
+    if (game.koks.length === before) return res.status(404).json({ error: 'Kok tidak ditemukan' });
+    game.updatedAt = new Date().toISOString();
+    db.games[idx] = game;
+    await saveDb(db);
+    res.json({ game: enrichGame(game) });
+  } catch (err) {
+    next(err);
   }
+});
 
-  const paid = req.body?.paid;
-  if (typeof paid !== 'boolean') {
-    return res.status(400).json({ error: 'paid harus boolean' });
+app.patch('/api/games/:id/koks/:kokId', requireAdmin, async (req, res, next) => {
+  try {
+    const db = await loadDb();
+    const idx = db.games.findIndex((g) => g.id === req.params.id);
+    if (idx === -1) return res.status(404).json({ error: 'Game tidak ditemukan' });
+
+    const game = normalizeStoredGame(db.games[idx]);
+    const kok = game.koks.find((k) => k.id === req.params.kokId);
+    if (!kok) return res.status(404).json({ error: 'Kok tidak ditemukan' });
+
+    const price = Number(req.body?.pricePerPerson);
+    if (!Number.isFinite(price) || price < 0) {
+      return res.status(400).json({ error: 'pricePerPerson harus angka >= 0' });
+    }
+    kok.pricePerPerson = Math.round(price);
+    game.updatedAt = new Date().toISOString();
+    db.games[idx] = game;
+    await saveDb(db);
+    res.json({ game: enrichGame(game) });
+  } catch (err) {
+    next(err);
   }
-
-  db.games[idx] = normalizeStoredGame(db.games[idx]);
-  db.games[idx].players[pIdx].paid = paid;
-  db.games[idx].updatedAt = new Date().toISOString();
-  saveDb(db);
-  res.json({ game: enrichGame(db.games[idx]) });
 });
 
-app.post('/api/games/:id/mark-all-paid', requireAdmin, (req, res) => {
-  const db = loadDb();
-  const idx = db.games.findIndex((g) => g.id === req.params.id);
-  if (idx === -1) return res.status(404).json({ error: 'Game tidak ditemukan' });
-  const paid = req.body?.paid !== false;
-  db.games[idx] = normalizeStoredGame(db.games[idx]);
-  db.games[idx].players = db.games[idx].players.map((p) => ({ ...p, paid }));
-  db.games[idx].updatedAt = new Date().toISOString();
-  saveDb(db);
-  res.json({ game: enrichGame(db.games[idx]) });
+app.patch('/api/games/:id/players/:index/paid', requireAdmin, async (req, res, next) => {
+  try {
+    const db = await loadDb();
+    const idx = db.games.findIndex((g) => g.id === req.params.id);
+    if (idx === -1) return res.status(404).json({ error: 'Game tidak ditemukan' });
+
+    const pIdx = Number(req.params.index);
+    if (!Number.isInteger(pIdx) || pIdx < 0 || pIdx > 3) {
+      return res.status(400).json({ error: 'Index pemain 0-3' });
+    }
+
+    const paid = req.body?.paid;
+    if (typeof paid !== 'boolean') {
+      return res.status(400).json({ error: 'paid harus boolean' });
+    }
+
+    db.games[idx] = normalizeStoredGame(db.games[idx]);
+    db.games[idx].players[pIdx].paid = paid;
+    db.games[idx].updatedAt = new Date().toISOString();
+    await saveDb(db);
+    res.json({ game: enrichGame(db.games[idx]) });
+  } catch (err) {
+    next(err);
+  }
 });
 
-app.delete('/api/games/:id', requireAdmin, (req, res) => {
-  const db = loadDb();
-  const before = db.games.length;
-  db.games = db.games.filter((g) => g.id !== req.params.id);
-  if (db.games.length === before) return res.status(404).json({ error: 'Game tidak ditemukan' });
-  saveDb(db);
-  res.json({ ok: true });
+app.post('/api/games/:id/mark-all-paid', requireAdmin, async (req, res, next) => {
+  try {
+    const db = await loadDb();
+    const idx = db.games.findIndex((g) => g.id === req.params.id);
+    if (idx === -1) return res.status(404).json({ error: 'Game tidak ditemukan' });
+    const paid = req.body?.paid !== false;
+    db.games[idx] = normalizeStoredGame(db.games[idx]);
+    db.games[idx].players = db.games[idx].players.map((p) => ({ ...p, paid }));
+    db.games[idx].updatedAt = new Date().toISOString();
+    await saveDb(db);
+    res.json({ game: enrichGame(db.games[idx]) });
+  } catch (err) {
+    next(err);
+  }
+});
+
+app.delete('/api/games/:id', requireAdmin, async (req, res, next) => {
+  try {
+    const db = await loadDb();
+    const before = db.games.length;
+    db.games = db.games.filter((g) => g.id !== req.params.id);
+    if (db.games.length === before) return res.status(404).json({ error: 'Game tidak ditemukan' });
+    await saveDb(db);
+    res.json({ ok: true });
+  } catch (err) {
+    next(err);
+  }
 });
 
 // Express 5: bare '*' is invalid path-to-regexp syntax
@@ -584,7 +716,20 @@ app.get('/{*path}', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', file));
 });
 
-ensureData();
-app.listen(PORT, '127.0.0.1', () => {
-  console.log(`kok-badminton on http://127.0.0.1:${PORT}`);
+app.use((err, _req, res, _next) => {
+  console.error(err);
+  res.status(500).json({ error: 'Server error' });
+});
+
+async function main() {
+  ensureDataDir();
+  await migrateLegacyJsonIfNeeded();
+  app.listen(PORT, '127.0.0.1', () => {
+    console.log(`kok-badminton on http://127.0.0.1:${PORT}`);
+  });
+}
+
+main().catch((err) => {
+  console.error('Gagal start:', err);
+  process.exit(1);
 });

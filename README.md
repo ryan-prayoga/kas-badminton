@@ -6,7 +6,7 @@ Pencatatan kok badminton — 2 pair, multi-kok, harga snapshot, bayar/belum.
 https://kok.ryanprayoga.dev
 
 ## Stack
-- Express + JSON store (`data/db.json`)
+- Express + Postgres (`DATABASE_URL` env, wajib)
 - Static UI di `public/`
 - PM2 name: `kok-badminton`
 - Port VPS: `127.0.0.1:8200`
@@ -15,9 +15,11 @@ https://kok.ryanprayoga.dev
 ## Local run
 ```bash
 npm install
+echo "DATABASE_URL=postgresql://user:pass@localhost:5432/kok_badminton" > .env
 npm start
 # open http://127.0.0.1:8200
 ```
+Butuh Postgres jalan (lokal atau tunnel ke VPS) dengan tabel `settings`, `players`, `games` — lihat skema di commit migrasi Postgres. Server auto-import `data/db.json` lama sekali doang, kalau tabel `games` masih kosong pas boot.
 
 ## Fitur
 - 4 pemain = Pair A vs Pair B
