@@ -1,0 +1,57 @@
+name: Deploy kas-badminton
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "server.js"
+      - "public/**"
+      - "package.json"
+      - "package-lock.json"
+      - ".github/workflows/deploy.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: kas-badminton-production-deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy to server
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: ubuntu
+          key: ${{ secrets.SERVER_DEPLOY_KEY }}
+          port: 22
+          script: |
+            set -e
+            export NVM_DIR="$HOME/.nvm"
+            [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"
+            export PATH="/usr/bin:$HOME/.nvm/versions/node/v24.14.0/bin:$PATH"
+
+            PROJECT_DIR="/home/ubuntu/projects/kok-badminton"
+            REPO_URL="https://github.com/ryan-prayoga/kas-badminton.git"
+            BRANCH="${{ github.ref_name }}"
+
+            mkdir -p "$PROJECT_DIR"
+            cd "$PROJECT_DIR"
+
+            if [ ! -d ".git" ]; then
+              git init -b "$BRANCH"
+              git remote add origin "$REPO_URL"
+            fi
+
+            git fetch origin
+            git checkout -f "$BRANCH" 2>/dev/null || git checkout -b "$BRANCH" "origin/$BRANCH"
+            git reset --hard "origin/$BRANCH"
+            git clean -fd -e data
+
+            npm ci --omit=dev
+
+            pm2 restart kok-badminton --update-env || pm2 start server.js --name kok-badminton
+            pm2 save
+
+            echo "Deploy complete: $(git rev-parse --short HEAD) ($(date))"
