@@ -19,6 +19,8 @@
 
 * { box-sizing: border-box; }
 
+[hidden] { display: none !important; }
+
 html, body {
   margin: 0;
   padding: 0;
@@ -514,4 +516,112 @@ dialog::backdrop { background: rgba(0, 0, 0, 0.8); }
     align-items: start;
   }
   .panel { padding: 18px; }
+}
+
+/* Lockscreen (admin PIN gate) */
+.lockscreen {
+  min-height: 100dvh;
+  display: grid;
+  justify-items: center;
+  align-content: center;
+  gap: 18px;
+  padding: calc(24px + var(--safe-t)) 20px calc(24px + var(--safe-b));
+  text-align: center;
+}
+
+.lock-time {
+  font-size: 56px;
+  font-weight: 300;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+}
+
+.lock-label {
+  margin: 0;
+  color: var(--muted);
+}
+
+.lock-dots {
+  display: flex;
+  gap: 14px;
+}
+
+.lock-dots .dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  border: 1.5px solid var(--soft);
+  background: transparent;
+  transition: background 0.15s, transform 0.15s;
+}
+
+.lock-dots .dot.filled {
+  background: var(--text);
+  border-color: var(--text);
+  transform: scale(1.1);
+}
+
+.lock-dots.shake {
+  animation: lock-shake 0.4s;
+}
+
+@keyframes lock-shake {
+  10%, 90% { transform: translateX(-6px); }
+  20%, 80% { transform: translateX(8px); }
+  30%, 50%, 70% { transform: translateX(-10px); }
+  40%, 60% { transform: translateX(10px); }
+}
+
+.lock-error {
+  margin: 0;
+  min-height: 20px;
+  color: var(--danger);
+  font-size: 14px;
+}
+
+.lock-keypad {
+  display: grid;
+  grid-template-columns: repeat(3, 72px);
+  gap: 16px;
+}
+
+.lock-keypad button {
+  width: 72px;
+  height: 72px;
+  border-radius: 50%;
+  border: 1px solid var(--line);
+  background: var(--panel);
+  color: var(--text);
+  font-size: 26px;
+  cursor: pointer;
+}
+
+.lock-keypad button:active {
+  background: var(--panel-2);
+}
+
+.lock-back {
+  color: var(--soft);
+  text-decoration: none;
+  font-size: 14px;
+  margin-top: 8px;
+}
+
+.admin-links {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 6px;
+}
+
+.admin-links a {
+  color: var(--soft);
+  font-size: 13px;
+  text-decoration: none;
+}
+
+/* Public read-only page */
+.public-note {
+  color: var(--soft);
+  font-size: 13px;
 }

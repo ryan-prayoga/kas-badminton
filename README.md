@@ -24,3 +24,8 @@ npm start
 - Skor per pair
 - Multi-kok, harga per-kok di-snapshot (ganti default tidak ubah history)
 - Toggle bayar per orang + ringkasan hutang
+
+## Akses
+- `/` — publik, read-only: riwayat + belum bayar.
+- `/admin` — lockscreen PIN 6 digit, CRUD penuh.
+- PIN admin auto-generate saat server pertama kali jalan, tersimpan di `data/admin-pin.txt` (gitignored). Cek lewat log server (`pm2 logs kok-badminton`) atau override via env `ADMIN_PIN`.

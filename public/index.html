@@ -6,112 +6,30 @@
   <meta name="theme-color" content="#0a0a0a" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <title>Kok Badminton</title>
-  <link rel="stylesheet" href="/styles.css?v=3" />
+  <link rel="stylesheet" href="/styles.css?v=4" />
 </head>
 <body>
   <div class="app">
     <header class="top">
       <div class="brand">
-        <p class="eyebrow">Pencatatan</p>
+        <p class="eyebrow">Kas</p>
         <h1>Kok Badminton</h1>
       </div>
       <div class="price-box">
-        <label for="defaultPrice">Default / orang / kok</label>
-        <div class="price-row">
-          <span>Rp</span>
-          <input id="defaultPrice" inputmode="numeric" type="number" min="0" step="500" />
-          <button id="savePrice" type="button" class="btn ghost">Simpan</button>
+        <p class="public-note">Lihat riwayat main &amp; siapa yang belum bayar.</p>
+        <div class="admin-links">
+          <a href="/admin">Admin</a>
+          <span></span>
         </div>
-        <p class="hint">Harga lama tetap snapshot, ganti default cuma buat main baru.</p>
       </div>
     </header>
-
-    <section class="panel">
-      <div class="panel-head">
-        <h2>Catat main</h2>
-        <p>2 pasangan · skor per pair · multi-kok</p>
-      </div>
-
-      <form id="gameForm" class="form">
-        <label class="full">
-          Tanggal
-          <input id="date" type="date" required />
-        </label>
-
-        <div class="pairs" id="pairInputs">
-          <div class="pair-card" data-pair="a">
-            <div class="pair-head">
-              <div class="pair-badge">Pair A</div>
-              <div class="score-field">
-                <span>Skor</span>
-                <input type="text" inputmode="numeric" name="scoreA" placeholder="21" maxlength="20" autocomplete="off" />
-              </div>
-            </div>
-            <div class="pair-players">
-              <div class="player-field">
-                <div class="label">Pemain 1</div>
-                <input type="text" name="player0" list="player-suggest" placeholder="Nama" autocomplete="off" required maxlength="40" />
-              </div>
-              <div class="player-field">
-                <div class="label">Pemain 2</div>
-                <input type="text" name="player1" list="player-suggest" placeholder="Nama" autocomplete="off" required maxlength="40" />
-              </div>
-            </div>
-          </div>
-
-          <div class="vs-divider">vs</div>
-
-          <div class="pair-card" data-pair="b">
-            <div class="pair-head">
-              <div class="pair-badge">Pair B</div>
-              <div class="score-field">
-                <span>Skor</span>
-                <input type="text" inputmode="numeric" name="scoreB" placeholder="18" maxlength="20" autocomplete="off" />
-              </div>
-            </div>
-            <div class="pair-players">
-              <div class="player-field">
-                <div class="label">Pemain 1</div>
-                <input type="text" name="player2" list="player-suggest" placeholder="Nama" autocomplete="off" required maxlength="40" />
-              </div>
-              <div class="player-field">
-                <div class="label">Pemain 2</div>
-                <input type="text" name="player3" list="player-suggest" placeholder="Nama" autocomplete="off" required maxlength="40" />
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <div class="koks-block">
-          <div class="section-label row-between">
-            <span>Kok (harga snapshot)</span>
-            <button type="button" id="addKok" class="btn ghost sm">+ Kok</button>
-          </div>
-          <div id="kokList" class="kok-list">
-            <div class="kok-row" data-i="0">
-              <div class="tag">Kok 1</div>
-              <input type="number" inputmode="numeric" min="0" step="500" value="3000" data-role="price" />
-              <button type="button" class="btn ghost sm" data-role="remove" disabled>Hapus</button>
-            </div>
-          </div>
-          <p class="hint" id="formCostHint">1 kok · Rp3.000 / orang · total Rp12.000</p>
-        </div>
-
-        <label class="full">
-          Catatan (opsional)
-          <input id="notes" type="text" placeholder="court 3, beli kok baru…" maxlength="160" />
-        </label>
-
-        <button type="submit" class="btn primary full">Simpan game</button>
-      </form>
-    </section>
 
     <section class="panel" id="debtPanel">
       <div class="panel-head">
         <h2>Belum bayar</h2>
         <p id="debtMeta">—</p>
       </div>
-      <div id="debtList" class="debt-list empty-state">Belum ada hutang.</div>
+      <div id="debtList" class="debt-list empty-state">Memuat…</div>
     </section>
 
     <section class="panel">
@@ -119,41 +37,10 @@
         <h2>Riwayat</h2>
         <p id="historyMeta">—</p>
       </div>
-      <div id="gameList" class="game-list empty-state">Belum ada catatan.</div>
+      <div id="gameList" class="game-list empty-state">Memuat…</div>
     </section>
   </div>
 
-  <dialog id="editDialog">
-    <form method="dialog" id="editForm" class="dialog-body">
-      <div class="panel-head">
-        <h2>Edit game</h2>
-        <p>Pair, skor, kok, atau hapus</p>
-      </div>
-      <input type="hidden" id="editId" />
-
-      <label class="full">
-        Tanggal
-        <input id="editDate" type="date" required />
-      </label>
-
-      <div class="pairs" id="editPairs"></div>
-      <div id="editKoks" class="kok-list"></div>
-
-      <label class="full">
-        Catatan
-        <input id="editNotes" type="text" maxlength="160" />
-      </label>
-
-      <div class="dialog-actions">
-        <button type="button" id="deleteGame" class="btn danger">Hapus</button>
-        <div class="spacer"></div>
-        <button type="button" id="cancelEdit" class="btn ghost">Batal</button>
-        <button type="submit" class="btn primary">Simpan</button>
-      </div>
-    </form>
-  </dialog>
-
-  <datalist id="player-suggest"></datalist>
-  <script src="/app.js?v=3"></script>
+  <script src="/public.js?v=4"></script>
 </body>
 </html>

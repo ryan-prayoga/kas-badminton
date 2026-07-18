@@ -57,10 +57,109 @@ function api(path, options) {
     body: options.body,
   }).then(function (res) {
     return res.json().catch(function () { return {}; }).then(function (data) {
+      if (res.status === 401 && path !== '/api/login') {
+        showLock();
+        throw new Error(data.error || 'Sesi habis, login lagi');
+      }
       if (!res.ok) throw new Error(data.error || ('HTTP ' + res.status));
       return data;
     });
   });
+}
+
+// --- Lockscreen (PIN gate) ---
+var pinBuffer = '';
+
+function updateLockClock() {
+  var el = $('#lockClock');
+  if (!el) return;
+  var d = new Date();
+  var hh = String(d.getHours()).padStart(2, '0');
+  var mm = String(d.getMinutes()).padStart(2, '0');
+  el.textContent = hh + ':' + mm;
+}
+
+function renderLockDots() {
+  var dots = $$('#lockDots .dot');
+  dots.forEach(function (dot, i) {
+    dot.classList.toggle('filled', i < pinBuffer.length);
+  });
+}
+
+function showLock(errMsg) {
+  pinBuffer = '';
+  renderLockDots();
+  $('#appRoot').hidden = true;
+  $('#lockScreen').hidden = false;
+  var errEl = $('#lockError');
+  if (errEl) errEl.textContent = errMsg || ' ';
+  if (errMsg) {
+    var dots = $('#lockDots');
+    dots.classList.remove('shake');
+    void dots.offsetWidth;
+    dots.classList.add('shake');
+  }
+}
+
+function showApp() {
+  $('#lockScreen').hidden = true;
+  $('#appRoot').hidden = false;
+}
+
+function submitPin() {
+  var pin = pinBuffer;
+  pinBuffer = '';
+  api('/api/login', {
+    method: 'POST',
+    body: JSON.stringify({ pin: pin }),
+  }).then(function () {
+    showApp();
+    startApp();
+  }).catch(function () {
+    renderLockDots();
+    showLock('PIN salah');
+  });
+}
+
+function wireLock() {
+  updateLockClock();
+  setInterval(updateLockClock, 15000);
+
+  $('#lockKeypad').onclick = function (e) {
+    var btn = e.target.closest('button[data-key]');
+    if (!btn) return;
+    var key = btn.getAttribute('data-key');
+    if (key === 'back') {
+      pinBuffer = pinBuffer.slice(0, -1);
+    } else if (pinBuffer.length < 6) {
+      pinBuffer += key;
+    }
+    renderLockDots();
+    var errEl = $('#lockError');
+    if (errEl) errEl.textContent = ' ';
+    if (pinBuffer.length === 6) submitPin();
+  };
+
+  document.addEventListener('keydown', function (e) {
+    if ($('#lockScreen').hidden) return;
+    if (/^[0-9]$/.test(e.key) && pinBuffer.length < 6) {
+      pinBuffer += e.key;
+      renderLockDots();
+      if (pinBuffer.length === 6) submitPin();
+    } else if (e.key === 'Backspace') {
+      pinBuffer = pinBuffer.slice(0, -1);
+      renderLockDots();
+    }
+  });
+
+  var logoutBtn = $('#logoutBtn');
+  if (logoutBtn) {
+    logoutBtn.onclick = function () {
+      api('/api/logout', { method: 'POST' }).finally(function () {
+        location.reload();
+      });
+    };
+  }
 }
 
 function ensureDatalist() {
@@ -535,7 +634,11 @@ function wire() {
   };
 }
 
-(function init() {
+var appStarted = false;
+
+function startApp() {
+  if (appStarted) return;
+  appStarted = true;
   try {
     var dateEl = $('#date');
     if (dateEl) dateEl.value = todayLocal();
@@ -555,4 +658,21 @@ function wire() {
     console.error(err);
     alert('Gagal init UI: ' + err.message);
   }
+}
+
+(function init() {
+  wireLock();
+  fetch('/api/me')
+    .then(function (r) { return r.json(); })
+    .then(function (d) {
+      if (d.isAdmin) {
+        showApp();
+        startApp();
+      } else {
+        showLock();
+      }
+    })
+    .catch(function () {
+      showLock();
+    });
 })();

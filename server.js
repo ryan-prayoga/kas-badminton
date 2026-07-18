@@ -1,5 +1,6 @@
 const express = require('express');
 const cors = require('cors');
+const cookieParser = require('cookie-parser');
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
@@ -8,6 +9,10 @@ const app = express();
 const PORT = Number(process.env.PORT) || 8200;
 const DATA_DIR = path.join(__dirname, 'data');
 const DATA_FILE = path.join(DATA_DIR, 'db.json');
+const ADMIN_PIN_FILE = path.join(DATA_DIR, 'admin-pin.txt');
+const PIN_LENGTH = 6;
+const SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30 hari
+const SESSION_COOKIE = 'admin_session';
 
 const DEFAULT_DB = {
   settings: {
@@ -51,6 +56,70 @@ function saveDb(db) {
 
 function uid() {
   return crypto.randomUUID();
+}
+
+function generatePin() {
+  let pin = '';
+  for (let i = 0; i < PIN_LENGTH; i++) pin += crypto.randomInt(0, 10);
+  return pin;
+}
+
+function getAdminPin() {
+  if (process.env.ADMIN_PIN) return String(process.env.ADMIN_PIN).trim();
+  ensureData();
+  if (fs.existsSync(ADMIN_PIN_FILE)) {
+    return fs.readFileSync(ADMIN_PIN_FILE, 'utf8').trim();
+  }
+  const generated = generatePin();
+  fs.writeFileSync(ADMIN_PIN_FILE, generated);
+  console.log(`[admin] PIN admin di-generate: ${generated}`);
+  console.log(`[admin] Tersimpan di ${ADMIN_PIN_FILE} — ganti lewat env ADMIN_PIN atau edit file ini lalu restart.`);
+  return generated;
+}
+
+const ADMIN_PIN = getAdminPin();
+
+function timingSafeEqualStr(a, b) {
+  const bufA = Buffer.from(String(a));
+  const bufB = Buffer.from(String(b));
+  if (bufA.length !== bufB.length) return false;
+  return crypto.timingSafeEqual(bufA, bufB);
+}
+
+const sessions = new Map(); // token -> expiresAt
+
+function isValidSession(token) {
+  if (!token) return false;
+  const expiresAt = sessions.get(token);
+  if (!expiresAt || expiresAt < Date.now()) {
+    sessions.delete(token);
+    return false;
+  }
+  return true;
+}
+
+function requireAdmin(req, res, next) {
+  if (isValidSession(req.cookies?.[SESSION_COOKIE])) return next();
+  res.status(401).json({ error: 'Perlu login admin' });
+}
+
+const loginAttempts = new Map(); // ip -> { count, resetAt }
+const LOGIN_WINDOW_MS = 15 * 60 * 1000;
+const LOGIN_MAX_ATTEMPTS = 10;
+
+function loginRateLimit(req, res, next) {
+  const ip = req.ip;
+  const now = Date.now();
+  const entry = loginAttempts.get(ip);
+  if (!entry || entry.resetAt < now) {
+    loginAttempts.set(ip, { count: 1, resetAt: now + LOGIN_WINDOW_MS });
+    return next();
+  }
+  if (entry.count >= LOGIN_MAX_ATTEMPTS) {
+    return res.status(429).json({ error: 'Terlalu banyak percobaan, coba lagi nanti' });
+  }
+  entry.count += 1;
+  next();
 }
 
 function todayWIB() {
@@ -250,8 +319,10 @@ function buildKoks(body, defaultPrice) {
   return koks;
 }
 
+app.set('trust proxy', true);
 app.use(cors());
 app.use(express.json({ limit: '1mb' }));
+app.use(cookieParser());
 app.use(express.static(path.join(__dirname, 'public'), {
   etag: false,
   lastModified: false,
@@ -264,6 +335,33 @@ app.use(express.static(path.join(__dirname, 'public'), {
 
 app.get('/api/health', (_req, res) => {
   res.json({ ok: true, service: 'kok-badminton' });
+});
+
+app.get('/api/me', (req, res) => {
+  res.json({ isAdmin: isValidSession(req.cookies?.[SESSION_COOKIE]) });
+});
+
+app.post('/api/login', loginRateLimit, (req, res) => {
+  const pin = String(req.body?.pin ?? '');
+  if (!timingSafeEqualStr(pin, ADMIN_PIN)) {
+    return res.status(401).json({ error: 'PIN salah' });
+  }
+  const token = crypto.randomBytes(32).toString('hex');
+  sessions.set(token, Date.now() + SESSION_TTL_MS);
+  res.cookie(SESSION_COOKIE, token, {
+    httpOnly: true,
+    sameSite: 'lax',
+    secure: req.secure,
+    maxAge: SESSION_TTL_MS,
+  });
+  res.json({ ok: true });
+});
+
+app.post('/api/logout', (req, res) => {
+  const token = req.cookies?.[SESSION_COOKIE];
+  if (token) sessions.delete(token);
+  res.clearCookie(SESSION_COOKIE);
+  res.json({ ok: true });
 });
 
 app.get('/api/bootstrap', (_req, res) => {
@@ -303,7 +401,7 @@ app.get('/api/bootstrap', (_req, res) => {
   });
 });
 
-app.put('/api/settings', (req, res) => {
+app.put('/api/settings', requireAdmin, (req, res) => {
   const price = Number(req.body?.defaultPricePerPerson);
   if (!Number.isFinite(price) || price < 0) {
     return res.status(400).json({ error: 'defaultPricePerPerson harus angka >= 0' });
@@ -314,7 +412,7 @@ app.put('/api/settings', (req, res) => {
   res.json({ settings: db.settings });
 });
 
-app.post('/api/games', (req, res) => {
+app.post('/api/games', requireAdmin, (req, res) => {
   const body = req.body || {};
   const parsed = parsePlayersFromBody(body);
   if (parsed.error) return res.status(400).json({ error: parsed.error });
@@ -342,7 +440,7 @@ app.post('/api/games', (req, res) => {
   res.status(201).json({ game: enrichGame(game) });
 });
 
-app.patch('/api/games/:id', (req, res) => {
+app.patch('/api/games/:id', requireAdmin, (req, res) => {
   const db = loadDb();
   const idx = db.games.findIndex((g) => g.id === req.params.id);
   if (idx === -1) return res.status(404).json({ error: 'Game tidak ditemukan' });
@@ -381,7 +479,7 @@ app.patch('/api/games/:id', (req, res) => {
   res.json({ game: enrichGame(game) });
 });
 
-app.post('/api/games/:id/koks', (req, res) => {
+app.post('/api/games/:id/koks', requireAdmin, (req, res) => {
   const db = loadDb();
   const idx = db.games.findIndex((g) => g.id === req.params.id);
   if (idx === -1) return res.status(404).json({ error: 'Game tidak ditemukan' });
@@ -399,7 +497,7 @@ app.post('/api/games/:id/koks', (req, res) => {
   res.status(201).json({ game: enrichGame(db.games[idx]), kok });
 });
 
-app.delete('/api/games/:id/koks/:kokId', (req, res) => {
+app.delete('/api/games/:id/koks/:kokId', requireAdmin, (req, res) => {
   const db = loadDb();
   const idx = db.games.findIndex((g) => g.id === req.params.id);
   if (idx === -1) return res.status(404).json({ error: 'Game tidak ditemukan' });
@@ -417,7 +515,7 @@ app.delete('/api/games/:id/koks/:kokId', (req, res) => {
   res.json({ game: enrichGame(game) });
 });
 
-app.patch('/api/games/:id/koks/:kokId', (req, res) => {
+app.patch('/api/games/:id/koks/:kokId', requireAdmin, (req, res) => {
   const db = loadDb();
   const idx = db.games.findIndex((g) => g.id === req.params.id);
   if (idx === -1) return res.status(404).json({ error: 'Game tidak ditemukan' });
@@ -437,7 +535,7 @@ app.patch('/api/games/:id/koks/:kokId', (req, res) => {
   res.json({ game: enrichGame(game) });
 });
 
-app.patch('/api/games/:id/players/:index/paid', (req, res) => {
+app.patch('/api/games/:id/players/:index/paid', requireAdmin, (req, res) => {
   const db = loadDb();
   const idx = db.games.findIndex((g) => g.id === req.params.id);
   if (idx === -1) return res.status(404).json({ error: 'Game tidak ditemukan' });
@@ -459,7 +557,7 @@ app.patch('/api/games/:id/players/:index/paid', (req, res) => {
   res.json({ game: enrichGame(db.games[idx]) });
 });
 
-app.post('/api/games/:id/mark-all-paid', (req, res) => {
+app.post('/api/games/:id/mark-all-paid', requireAdmin, (req, res) => {
   const db = loadDb();
   const idx = db.games.findIndex((g) => g.id === req.params.id);
   if (idx === -1) return res.status(404).json({ error: 'Game tidak ditemukan' });
@@ -471,7 +569,7 @@ app.post('/api/games/:id/mark-all-paid', (req, res) => {
   res.json({ game: enrichGame(db.games[idx]) });
 });
 
-app.delete('/api/games/:id', (req, res) => {
+app.delete('/api/games/:id', requireAdmin, (req, res) => {
   const db = loadDb();
   const before = db.games.length;
   db.games = db.games.filter((g) => g.id !== req.params.id);
@@ -481,8 +579,9 @@ app.delete('/api/games/:id', (req, res) => {
 });
 
 // Express 5: bare '*' is invalid path-to-regexp syntax
-app.get('/{*path}', (_req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'index.html'));
+app.get('/{*path}', (req, res) => {
+  const file = req.path.startsWith('/admin') ? 'admin/index.html' : 'index.html';
+  res.sendFile(path.join(__dirname, 'public', file));
 });
 
 ensureData();
