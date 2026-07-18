@@ -51,7 +51,8 @@ jobs:
 
             npm ci --omit=dev
 
-            pm2 restart kok-badminton --update-env || pm2 start server.js --name kok-badminton
+            # no --update-env di sini biar env var yang di-set manual (mis. ADMIN_PIN) gak ke-reset tiap deploy
+            pm2 restart kok-badminton || pm2 start server.js --name kok-badminton
             pm2 save
 
             echo "Deploy complete: $(git rev-parse --short HEAD) ($(date))"
