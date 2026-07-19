@@ -7,11 +7,11 @@
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <title>Kok Badminton — Admin</title>
-  <link rel="stylesheet" href="/styles.css?v=12" />
-  <script src="/vendor/iconify-icon.js?v=12"></script>
-  <script src="/vendor/icons.js?v=12"></script>
-  <script src="/vendor/qrcode.js?v=12"></script>
-  <script src="/vendor/jsqr.js?v=12"></script>
+  <link rel="stylesheet" href="/styles.css?v=13" />
+  <script src="/vendor/iconify-icon.js?v=13"></script>
+  <script src="/vendor/icons.js?v=13"></script>
+  <script src="/vendor/qrcode.js?v=13"></script>
+  <script src="/vendor/jsqr.js?v=13"></script>
 </head>
 <body class="text-ink50">
 
@@ -311,7 +311,7 @@
             </div>
           </label>
           <label class="grid min-w-0 gap-1">
-            <span class="text-xs font-medium text-muted">Harga / slop (isi 12)</span>
+            <span class="text-xs font-medium text-muted">Harga / slop (default)</span>
             <div class="flex min-w-0 items-center gap-2 rounded-xl border border-line bg-ink px-3">
               <span class="font-mono text-sm text-soft">Rp</span>
               <input id="kokTypeSlopPrice" inputmode="numeric" type="number" min="0" step="1" value="0"
@@ -444,12 +444,22 @@
       </div>
       <input type="hidden" id="buyTypeId" />
       <p id="buyWho" class="text-sm text-muted">—</p>
-      <label class="grid gap-1.5">
-        <span class="text-xs font-medium text-muted">Jumlah slop (1 slop = 12 kok)</span>
-        <input id="buySlops" inputmode="numeric" type="number" min="1" step="1" value="1" required
-          class="w-full rounded-xl border border-line bg-ink px-3 py-2.5 text-base outline-none transition focus:border-brand/60" />
-        <p id="buyHint" class="text-xs text-soft">—</p>
-      </label>
+      <div class="grid grid-cols-2 gap-2">
+        <label class="grid min-w-0 gap-1.5">
+          <span class="text-xs font-medium text-muted">Jumlah slop</span>
+          <input id="buySlops" inputmode="numeric" type="number" min="1" step="1" value="1" required
+            class="w-full rounded-xl border border-line bg-ink px-3 py-2.5 text-base outline-none transition focus:border-brand/60" />
+        </label>
+        <label class="grid min-w-0 gap-1.5">
+          <span class="text-xs font-medium text-muted">Harga / slop</span>
+          <div class="flex min-w-0 items-center gap-2 rounded-xl border border-line bg-ink px-3">
+            <span class="font-mono text-sm text-soft">Rp</span>
+            <input id="buyPrice" inputmode="numeric" type="number" min="0" step="1" value="0" required
+              class="min-w-0 flex-1 bg-transparent py-2.5 text-base outline-none" />
+          </div>
+        </label>
+      </div>
+      <p id="buyHint" class="text-xs text-soft">1 slop = 12 kok · harga boleh beda tiap beli.</p>
       <div class="flex items-center gap-2 border-t border-line pt-3">
         <button type="button" id="cancelBuy" class="rounded-xl border border-line bg-elevated px-3 py-2.5 text-sm font-medium transition active:scale-95">Batal</button>
         <div class="flex-1"></div>
@@ -477,6 +487,6 @@
   <!-- ── Toast stack ── -->
   <div id="toastStack" class="pointer-events-none fixed inset-x-0 bottom-[calc(88px+var(--safe-b))] z-50 mx-auto flex w-full max-w-[720px] flex-col items-stretch gap-2 px-4"></div>
 
-  <script src="/admin/app.js?v=12"></script>
+  <script src="/admin/app.js?v=13"></script>
 </body>
 </html>

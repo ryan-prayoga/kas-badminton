@@ -993,19 +993,20 @@ var buyType = null;
 
 function updateBuyHint() {
   var el = $('#buyHint');
-  if (!el || !buyType) return;
+  if (!el) return;
   var slops = Math.max(0, Math.round(Number($('#buySlops').value) || 0));
+  var price = Math.max(0, Math.round(Number($('#buyPrice').value) || 0));
   var pcs = slops * 12;
-  var cost = slops * (Number(buyType.pricePerSlop) || 0);
-  el.textContent = '+' + pcs + ' kok · kas −' + fmt(cost) +
-    (Number(buyType.pricePerSlop) > 0 ? '' : ' (harga/slop belum diset → kas 0)');
+  var cost = slops * price;
+  el.textContent = '+' + pcs + ' kok · kas −' + fmt(cost) + ' · 1 slop = 12 kok';
 }
 
 function openBuy(type) {
   buyType = type;
   $('#buyTypeId').value = type.id;
-  $('#buyWho').textContent = type.name + ' · ' + fmt(type.pricePerSlop || 0) + ' / slop';
+  $('#buyWho').textContent = type.name + ' · stok ' + (Number(type.stock) || 0);
   $('#buySlops').value = 1;
+  $('#buyPrice').value = Number(type.pricePerSlop) || 0;
   updateBuyHint();
   $('#buyDialog').showModal();
 }
@@ -1344,12 +1345,14 @@ function wire() {
   // Beli slop dialog
   $('#cancelBuy').onclick = function () { $('#buyDialog').close(); };
   $('#buySlops').oninput = updateBuyHint;
+  $('#buyPrice').oninput = updateBuyHint;
   $('#buyForm').onsubmit = function (e) {
     e.preventDefault();
     var id = $('#buyTypeId').value;
     var slops = Math.round(Number($('#buySlops').value) || 0);
+    var price = Math.round(Number($('#buyPrice').value) || 0);
     if (!(slops > 0)) { toast('Jumlah slop harus > 0', 'error'); return; }
-    api('/api/kok-types/' + id + '/buy', { method: 'POST', body: JSON.stringify({ slops: slops }) })
+    api('/api/kok-types/' + id + '/buy', { method: 'POST', body: JSON.stringify({ slops: slops, pricePerSlop: price }) })
       .then(function (data) {
         applyServerState(data);
         renderKokTypeList();

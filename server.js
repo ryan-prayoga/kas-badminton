@@ -987,10 +987,20 @@ app.post('/api/kok-types/:id/buy', requireAdmin, async (req, res, next) => {
     if (!Number.isFinite(slops) || !Number.isInteger(slops) || slops <= 0) {
       return res.status(400).json({ error: 'Jumlah slop harus angka bulat > 0' });
     }
-    const pricePerSlop = Math.max(0, Number(type.pricePerSlop) || 0);
+    // Harga slop per-pembelian (bisa beda tiap beli walau merek sama).
+    // Fallback ke harga tersimpan kalau tidak dikirim.
+    var pricePerSlop = req.body?.pricePerSlop !== undefined
+      ? Number(req.body.pricePerSlop)
+      : Number(type.pricePerSlop) || 0;
+    if (!Number.isFinite(pricePerSlop) || pricePerSlop < 0) {
+      return res.status(400).json({ error: 'Harga per slop harus angka >= 0' });
+    }
+    pricePerSlop = Math.round(pricePerSlop);
     const amount = slops * pricePerSlop;
 
     type.stock = (Number(type.stock) || 0) + slops * 12;
+    // ingat harga terakhir sebagai default pembelian berikutnya
+    type.pricePerSlop = pricePerSlop;
     type.updatedAt = new Date().toISOString();
     await saveDb(db);
     await pool.query(
