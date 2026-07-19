@@ -1,9 +1,10 @@
 const state = {
   settings: { defaultPricePerPerson: 3000 },
   players: [],
+  kokTypes: [],
   games: [],
   debtSummary: [],
-  formKoks: [{ pricePerPerson: 3000 }],
+  formKoks: [{ typeId: null, typeName: null, pricePerPerson: 3000 }],
   edit: null,
 };
 
@@ -303,17 +304,78 @@ function readPairsFrom(container, namePrefix) {
   };
 }
 
-function kokRowHtml(i, price, disableRemove) {
+function activeKokTypes() {
+  return (state.kokTypes || []).filter(function (t) {
+    return t.active !== false;
+  });
+}
+
+function defaultKokEntry() {
+  var types = activeKokTypes();
+  if (types.length) {
+    return {
+      typeId: types[0].id,
+      typeName: types[0].name,
+      pricePerPerson: Number(types[0].pricePerPerson) || 0,
+    };
+  }
+  return {
+    typeId: null,
+    typeName: null,
+    pricePerPerson: Number(state.settings.defaultPricePerPerson) || 3000,
+  };
+}
+
+function typeOptionsHtml(selectedId, snapshotName) {
+  var types = activeKokTypes();
+  var opts =
+    '<option value="">' +
+    (types.length ? '— Manual —' : 'Manual (isi harga)') +
+    '</option>';
+  types.forEach(function (t) {
+    var stock = Number(t.stock) || 0;
+    opts +=
+      '<option value="' +
+      escapeAttr(t.id) +
+      '"' +
+      (selectedId === t.id ? ' selected' : '') +
+      '>' +
+      escapeHtml(t.name) +
+      ' · ' +
+      fmt(t.pricePerPerson) +
+      ' · stok ' +
+      stock +
+      '</option>';
+  });
+  if (selectedId && !types.some(function (t) { return t.id === selectedId; }) && snapshotName) {
+    opts +=
+      '<option value="' +
+      escapeAttr(selectedId) +
+      '" selected>' +
+      escapeHtml(snapshotName) +
+      ' (lama)</option>';
+  }
+  return opts;
+}
+
+function kokRowHtml(i, kok, disableRemove) {
+  kok = kok || {};
   return (
-    '<div class="flex items-center gap-2 rounded-xl border border-line bg-sunken p-2" data-i="' + i + '">' +
-      '<span class="w-12 shrink-0 pl-1 font-mono text-xs text-soft">Kok ' + (i + 1) + '</span>' +
-      '<div class="flex min-w-0 flex-1 items-center gap-1.5 rounded-lg border border-line bg-ink px-2.5">' +
-        '<span class="font-mono text-xs text-soft">Rp</span>' +
-        '<input type="number" inputmode="numeric" min="0" step="500" value="' + Number(price || 0) + '" data-role="price" class="min-w-0 flex-1 bg-transparent py-2 text-base outline-none" />' +
+    '<div class="grid gap-2 rounded-xl border border-line bg-sunken p-2" data-i="' + i + '">' +
+      '<div class="flex items-center gap-2">' +
+        '<span class="w-12 shrink-0 pl-1 font-mono text-xs text-soft">Kok ' + (i + 1) + '</span>' +
+        '<select data-role="type" class="min-w-0 flex-1 rounded-lg border border-line bg-ink px-2 py-2 text-sm outline-none">' +
+          typeOptionsHtml(kok.typeId, kok.typeName) +
+        '</select>' +
+        '<button type="button" data-role="remove"' + (disableRemove ? ' disabled' : '') + ' class="grid h-9 w-9 shrink-0 place-items-center rounded-lg border border-line text-soft transition active:scale-95 hover:text-danger disabled:opacity-40">' +
+          '<iconify-icon icon="mdi:close" width="16"></iconify-icon>' +
+        '</button>' +
       '</div>' +
-      '<button type="button" data-role="remove"' + (disableRemove ? ' disabled' : '') + ' class="grid h-9 w-9 shrink-0 place-items-center rounded-lg border border-line text-soft transition active:scale-95 hover:text-danger disabled:opacity-40">' +
-        '<iconify-icon icon="mdi:close" width="16"></iconify-icon>' +
-      '</button>' +
+      '<div class="flex items-center gap-1.5 rounded-lg border border-line bg-ink px-2.5">' +
+        '<span class="font-mono text-xs text-soft">Rp</span>' +
+        '<input type="number" inputmode="numeric" min="0" step="500" value="' + Number(kok.pricePerPerson || 0) + '" data-role="price" class="min-w-0 flex-1 bg-transparent py-2 text-base outline-none" />' +
+        '<span class="shrink-0 text-[11px] text-soft">/org</span>' +
+      '</div>' +
     '</div>'
   );
 }
@@ -327,11 +389,27 @@ function updateFormCostHint() {
   el.textContent = state.formKoks.length + ' kok · ' + fmt(totalPer) + ' / orang · total ' + fmt(totalPer * 4);
 }
 
+function applyTypeToKok(kok, typeId) {
+  if (!typeId) {
+    kok.typeId = null;
+    kok.typeName = null;
+    return;
+  }
+  var t = (state.kokTypes || []).filter(function (x) { return x.id === typeId; })[0];
+  if (t) {
+    kok.typeId = t.id;
+    kok.typeName = t.name;
+    kok.pricePerPerson = Number(t.pricePerPerson) || 0;
+  } else {
+    kok.typeId = typeId;
+  }
+}
+
 function renderFormKoks() {
   var list = $('#kokList');
   if (!list) return;
   list.innerHTML = state.formKoks.map(function (k, i) {
-    return kokRowHtml(i, k.pricePerPerson, state.formKoks.length === 1);
+    return kokRowHtml(i, k, state.formKoks.length === 1);
   }).join('');
   updateFormCostHint();
 }
@@ -349,6 +427,14 @@ function bindFormKoks() {
     state.formKoks.splice(i, 1);
     renderFormKoks();
   };
+  list.onchange = function (e) {
+    if (!e.target || e.target.getAttribute('data-role') !== 'type') return;
+    var row = e.target.closest('[data-i]');
+    if (!row) return;
+    var i = Number(row.getAttribute('data-i'));
+    applyTypeToKok(state.formKoks[i], e.target.value || null);
+    renderFormKoks();
+  };
   list.oninput = function (e) {
     if (!e.target || e.target.getAttribute('data-role') !== 'price') return;
     var row = e.target.closest('[data-i]');
@@ -357,6 +443,78 @@ function bindFormKoks() {
     state.formKoks[i].pricePerPerson = Number(e.target.value || 0);
     updateFormCostHint();
   };
+}
+
+function resetKokTypeForm() {
+  $('#kokTypeEditId').value = '';
+  $('#kokTypeName').value = '';
+  $('#kokTypePrice').value = state.settings.defaultPricePerPerson || 3000;
+  var stockEl = $('#kokTypeStock');
+  if (stockEl) stockEl.value = 0;
+  $('#kokTypeFormCancel').hidden = true;
+  var submit = $('#kokTypeFormSubmit');
+  if (submit) {
+    submit.innerHTML = '<iconify-icon icon="mdi:plus" width="16"></iconify-icon> Tambah';
+  }
+}
+
+function stockBadgeClass(stock) {
+  if (stock <= 0) return 'bg-danger/12 text-danger';
+  if (stock <= 3) return 'bg-warn/12 text-warn';
+  return 'bg-ok/12 text-ok';
+}
+
+function renderKokTypeList() {
+  var list = $('#kokTypeList');
+  if (!list) return;
+  var types = state.kokTypes || [];
+  if (!types.length) {
+    list.innerHTML = emptyState('game-icons:shuttlecock', 'Belum ada jenis kok');
+    return;
+  }
+  list.innerHTML = types.map(function (t) {
+    var inactive = t.active === false;
+    var stock = Number(t.stock) || 0;
+    return (
+      '<div class="flex items-center gap-2 rounded-xl border border-line bg-elevated p-3' + (inactive ? ' opacity-60' : '') + '" data-id="' + escapeAttr(t.id) + '">' +
+        '<div class="min-w-0 flex-1">' +
+          '<p class="truncate text-sm font-semibold text-ink50">' + escapeHtml(t.name) + '</p>' +
+          '<p class="mt-0.5 font-mono text-xs text-muted">' + fmt(t.pricePerPerson) + ' / orang' +
+            (inactive ? ' · nonaktif' : '') +
+          '</p>' +
+          '<div class="mt-1.5 flex flex-wrap items-center gap-1.5">' +
+            '<span class="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold ' + stockBadgeClass(stock) + '">' +
+              '<iconify-icon icon="mdi:package-variant" width="12"></iconify-icon>stok ' + stock +
+            '</span>' +
+            '<button type="button" data-role="stock-plus" class="rounded-md border border-line bg-surface px-1.5 py-0.5 text-[11px] font-medium text-muted transition active:scale-95 hover:text-ink50" title="Tambah stok +1">+1</button>' +
+            '<button type="button" data-role="stock-plus12" class="rounded-md border border-line bg-surface px-1.5 py-0.5 text-[11px] font-medium text-muted transition active:scale-95 hover:text-ink50" title="Tambah 1 tube (+12)">+12</button>' +
+            '<button type="button" data-role="stock-minus" class="rounded-md border border-line bg-surface px-1.5 py-0.5 text-[11px] font-medium text-muted transition active:scale-95 hover:text-ink50" title="Kurangi stok -1">−1</button>' +
+          '</div>' +
+        '</div>' +
+        '<button type="button" data-role="edit-type" class="grid h-9 w-9 place-items-center rounded-lg border border-line text-muted transition active:scale-95 hover:text-ink50" title="Edit">' +
+          '<iconify-icon icon="mdi:pencil-outline" width="16"></iconify-icon>' +
+        '</button>' +
+        '<button type="button" data-role="toggle-type" class="grid h-9 w-9 place-items-center rounded-lg border border-line text-muted transition active:scale-95 hover:text-ink50" title="' + (inactive ? 'Aktifkan' : 'Nonaktifkan') + '">' +
+          '<iconify-icon icon="' + (inactive ? 'mdi:eye-off-outline' : 'mdi:eye-outline') + '" width="16"></iconify-icon>' +
+        '</button>' +
+        '<button type="button" data-role="delete-type" class="grid h-9 w-9 place-items-center rounded-lg border border-line text-soft transition active:scale-95 hover:text-danger" title="Hapus">' +
+          '<iconify-icon icon="mdi:trash-can-outline" width="16"></iconify-icon>' +
+        '</button>' +
+      '</div>'
+    );
+  }).join('');
+}
+
+function syncKokTypesFromResponse(data) {
+  if (data && Array.isArray(data.kokTypes)) {
+    state.kokTypes = data.kokTypes;
+  }
+}
+
+function openKokTypesDialog() {
+  resetKokTypeForm();
+  renderKokTypeList();
+  $('#kokTypesDialog').showModal();
 }
 
 function groupDebtItems(items) {
@@ -466,6 +624,22 @@ function pairGroup(score, showScoreRow, chips) {
   );
 }
 
+function kokSummaryLabel(g) {
+  var names = [];
+  var seen = {};
+  (g.koks || []).forEach(function (k) {
+    var n = k && k.typeName ? String(k.typeName).trim() : '';
+    if (n && !seen[n]) {
+      seen[n] = true;
+      names.push(n);
+    }
+  });
+  var base = g.cost.kokCount + ' kok · ' + fmt(g.cost.perPerson) + '/org';
+  if (!names.length) return base;
+  if (names.length === 1) return base + ' · ' + names[0];
+  return base + ' · ' + names.length + ' jenis';
+}
+
 function adminGameCard(g) {
   var scoreA = (g.pairs && g.pairs.a && g.pairs.a.score) || (g.scores && g.scores.a) || '';
   var scoreB = (g.pairs && g.pairs.b && g.pairs.b.score) || (g.scores && g.scores.b) || '';
@@ -482,7 +656,7 @@ function adminGameCard(g) {
       '<div class="flex items-center justify-between gap-3">' +
         '<div class="flex min-w-0 items-center gap-1.5 text-xs text-muted">' +
           '<iconify-icon icon="game-icons:shuttlecock" width="13" class="shrink-0 text-soft"></iconify-icon>' +
-          '<span class="truncate">' + g.cost.kokCount + ' kok · ' + fmt(g.cost.perPerson) + '/org</span>' +
+          '<span class="truncate">' + escapeHtml(kokSummaryLabel(g)) + '</span>' +
         '</div>' +
         '<div class="shrink-0">' + statusBadge + '</div>' +
       '</div>' +
@@ -584,6 +758,7 @@ function refresh() {
   return api('/api/bootstrap').then(function (data) {
     state.settings = data.settings;
     state.players = data.players || [];
+    state.kokTypes = data.kokTypes || [];
     state.games = data.games || [];
     state.debtSummary = data.debtSummary || [];
     var priceEl = $('#defaultPrice');
@@ -591,6 +766,9 @@ function refresh() {
     ensureDatalist();
     renderDebt();
     renderGames();
+    if ($('#kokTypesDialog') && $('#kokTypesDialog').open) {
+      renderKokTypeList();
+    }
   });
 }
 
@@ -636,14 +814,11 @@ function renderEditKoks() {
       '</button>' +
     '</div>' +
     state.edit.koks.map(function (k, i) {
-      return kokRowHtml(i, k.pricePerPerson, state.edit.koks.length === 1);
+      return kokRowHtml(i, k, state.edit.koks.length === 1);
     }).join('');
 
   $('#editAddKok').onclick = function () {
-    state.edit.koks.push({
-      id: null,
-      pricePerPerson: state.settings.defaultPricePerPerson,
-    });
+    state.edit.koks.push(defaultKokEntry());
     renderEditKoks();
   };
 
@@ -654,6 +829,15 @@ function renderEditKoks() {
     if (!row) return;
     if (state.edit.koks.length <= 1) return;
     state.edit.koks.splice(Number(row.getAttribute('data-i')), 1);
+    renderEditKoks();
+  };
+
+  list.onchange = function (e) {
+    if (!e.target || e.target.getAttribute('data-role') !== 'type') return;
+    var row = e.target.closest('[data-i]');
+    if (!row) return;
+    var i = Number(row.getAttribute('data-i'));
+    applyTypeToKok(state.edit.koks[i], e.target.value || null);
     renderEditKoks();
   };
 
@@ -682,8 +866,19 @@ function openGameDialog() {
   $('#gameDialog').showModal();
 }
 
+function payloadKoks(list) {
+  return (list || []).map(function (k) {
+    return {
+      id: k.id || undefined,
+      typeId: k.typeId || null,
+      typeName: k.typeName || null,
+      pricePerPerson: Number(k.pricePerPerson) || 0,
+    };
+  });
+}
+
 function wire() {
-  state.formKoks = [{ pricePerPerson: state.settings.defaultPricePerPerson || 3000 }];
+  state.formKoks = [defaultKokEntry()];
   renderFormKoks();
   bindFormKoks();
 
@@ -696,10 +891,123 @@ function wire() {
   };
 
   $('#addKok').onclick = function () {
-    state.formKoks.push({
-      pricePerPerson: Number($('#defaultPrice').value) || state.settings.defaultPricePerPerson || 3000,
-    });
+    state.formKoks.push(defaultKokEntry());
     renderFormKoks();
+  };
+
+  $('#kokTypesBtn').onclick = function () {
+    openKokTypesDialog();
+  };
+
+  $('#closeKokTypes').onclick = function () {
+    $('#kokTypesDialog').close();
+  };
+
+  $('#kokTypeFormCancel').onclick = function () {
+    resetKokTypeForm();
+  };
+
+  $('#kokTypeForm').onsubmit = function (e) {
+    e.preventDefault();
+    var editId = $('#kokTypeEditId').value;
+    var body = {
+      name: $('#kokTypeName').value,
+      pricePerPerson: Number($('#kokTypePrice').value),
+      stock: Number($('#kokTypeStock').value || 0),
+    };
+    var req = editId
+      ? api('/api/kok-types/' + editId, { method: 'PATCH', body: JSON.stringify(body) })
+      : api('/api/kok-types', { method: 'POST', body: JSON.stringify(body) });
+    req
+      .then(function (data) {
+        syncKokTypesFromResponse(data);
+        resetKokTypeForm();
+        renderKokTypeList();
+        renderFormKoks();
+        if (state.edit) renderEditKoks();
+        toast(editId ? 'Jenis kok diupdate.' : 'Jenis kok ditambah.', 'success');
+      })
+      .catch(function (err) {
+        toast(err.message, 'error');
+      });
+  };
+
+  $('#kokTypeList').onclick = function (e) {
+    var btn = e.target.closest('button[data-role]');
+    if (!btn) return;
+    var row = btn.closest('[data-id]');
+    if (!row) return;
+    var id = row.getAttribute('data-id');
+    var type = (state.kokTypes || []).filter(function (t) { return t.id === id; })[0];
+    if (!type) return;
+    var role = btn.getAttribute('data-role');
+
+    if (role === 'edit-type') {
+      $('#kokTypeEditId').value = type.id;
+      $('#kokTypeName').value = type.name;
+      $('#kokTypePrice').value = type.pricePerPerson;
+      $('#kokTypeStock').value = Number(type.stock) || 0;
+      $('#kokTypeFormCancel').hidden = false;
+      $('#kokTypeFormSubmit').innerHTML =
+        '<iconify-icon icon="mdi:content-save-outline" width="16"></iconify-icon> Simpan';
+      $('#kokTypeName').focus();
+      return;
+    }
+
+    if (role === 'stock-plus' || role === 'stock-plus12' || role === 'stock-minus') {
+      var delta = role === 'stock-plus' ? 1 : role === 'stock-plus12' ? 12 : -1;
+      api('/api/kok-types/' + id + '/stock', {
+        method: 'POST',
+        body: JSON.stringify({ delta: delta }),
+      })
+        .then(function (data) {
+          syncKokTypesFromResponse(data);
+          renderKokTypeList();
+          renderFormKoks();
+          if (state.edit) renderEditKoks();
+          toast('Stok diupdate.', 'success');
+        })
+        .catch(function (err) {
+          toast(err.message, 'error');
+        });
+      return;
+    }
+
+    if (role === 'toggle-type') {
+      api('/api/kok-types/' + id, {
+        method: 'PATCH',
+        body: JSON.stringify({ active: type.active === false }),
+      })
+        .then(function (data) {
+          syncKokTypesFromResponse(data);
+          renderKokTypeList();
+          renderFormKoks();
+          if (state.edit) renderEditKoks();
+          toast(type.active === false ? 'Jenis diaktifkan.' : 'Jenis dinonaktifkan.', 'success');
+        })
+        .catch(function (err) {
+          toast(err.message, 'error');
+        });
+      return;
+    }
+
+    if (role === 'delete-type') {
+      askConfirm('Hapus jenis "' + type.name + '"? History game tetap pakai snapshot nama lama.').then(function (ok) {
+        if (!ok) return;
+        api('/api/kok-types/' + id, { method: 'DELETE' })
+          .then(function (data) {
+            syncKokTypesFromResponse(data);
+            resetKokTypeForm();
+            renderKokTypeList();
+            renderFormKoks();
+            if (state.edit) renderEditKoks();
+            toast('Jenis kok dihapus.', 'success');
+          })
+          .catch(function (err) {
+            toast(err.message, 'error');
+          });
+      });
+    }
   };
 
   $('#settingsBtn').onclick = function () {
@@ -736,15 +1044,13 @@ function wire() {
         notes: $('#notes').value,
         pairs: parsed.pairs,
         scores: parsed.scores,
-        koks: state.formKoks.map(function (k) {
-          return { pricePerPerson: Number(k.pricePerPerson) || 0 };
-        }),
+        koks: payloadKoks(state.formKoks),
       }),
     }).then(function () {
       $('#gameDialog').close();
       $('#notes').value = '';
       clearFormPairs();
-      state.formKoks = [{ pricePerPerson: Number($('#defaultPrice').value) || 3000 }];
+      state.formKoks = [defaultKokEntry()];
       renderFormKoks();
       toast('Game tersimpan.', 'success');
       return refresh();
@@ -774,9 +1080,14 @@ function wire() {
         body: JSON.stringify({ paid: btn.getAttribute('data-paid') === 'true' }),
       });
     } else if (action === 'add-kok') {
+      var entry = defaultKokEntry();
       p = api('/api/games/' + id + '/koks', {
         method: 'POST',
-        body: JSON.stringify({ pricePerPerson: Number($('#defaultPrice').value) }),
+        body: JSON.stringify({
+          typeId: entry.typeId,
+          typeName: entry.typeName,
+          pricePerPerson: entry.pricePerPerson,
+        }),
       });
     } else if (action === 'edit') {
       openEdit(state.games.filter(function (g) { return g.id === id; })[0]);
@@ -784,7 +1095,10 @@ function wire() {
     }
 
     if (p) {
-      p.then(function () { return refresh(); }).catch(function (err) {
+      p.then(function (data) {
+        syncKokTypesFromResponse(data);
+        return refresh();
+      }).catch(function (err) {
         toast(err.message, 'error');
       });
     }
@@ -827,12 +1141,7 @@ function wire() {
           b: players.slice(2, 4),
         },
         scores: parsed.scores,
-        koks: state.edit.koks.map(function (k) {
-          return {
-            id: k.id || undefined,
-            pricePerPerson: Number(k.pricePerPerson) || 0,
-          };
-        }),
+        koks: payloadKoks(state.edit.koks),
       }),
     }).then(function () {
       $('#editDialog').close();
@@ -855,8 +1164,8 @@ function startApp() {
     wire();
     refresh()
       .then(function () {
-        if (state.formKoks.length === 1) {
-          state.formKoks[0].pricePerPerson = state.settings.defaultPricePerPerson;
+        if (state.formKoks.length === 1 && !state.formKoks[0].typeId) {
+          state.formKoks = [defaultKokEntry()];
           renderFormKoks();
         }
       })

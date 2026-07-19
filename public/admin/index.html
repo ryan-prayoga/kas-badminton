@@ -7,9 +7,9 @@
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <title>Kok Badminton — Admin</title>
-  <link rel="stylesheet" href="/styles.css?v=7" />
-  <script src="/vendor/iconify-icon.js?v=7"></script>
-  <script src="/vendor/icons.js?v=7"></script>
+  <link rel="stylesheet" href="/styles.css?v=9" />
+  <script src="/vendor/iconify-icon.js?v=9"></script>
+  <script src="/vendor/icons.js?v=9"></script>
 </head>
 <body class="text-ink50">
 
@@ -66,6 +66,9 @@
             </div>
           </div>
           <div class="flex shrink-0 items-center gap-1.5">
+            <button type="button" id="kokTypesBtn" title="Jenis kok" class="grid h-9 w-9 place-items-center rounded-xl border border-line bg-elevated text-muted transition active:scale-95 hover:text-ink50">
+              <iconify-icon icon="game-icons:shuttlecock" width="18"></iconify-icon>
+            </button>
             <button type="button" id="settingsBtn" title="Pengaturan" class="grid h-9 w-9 place-items-center rounded-xl border border-line bg-elevated text-muted transition active:scale-95 hover:text-ink50">
               <iconify-icon icon="mdi:cog" width="18"></iconify-icon>
             </button>
@@ -207,7 +210,7 @@
           <input id="defaultPrice" inputmode="numeric" type="number" min="0" step="500"
             class="min-w-0 flex-1 bg-transparent py-2.5 text-base outline-none" />
         </div>
-        <p class="text-xs text-soft">Harga lama tetap snapshot, ganti default cuma buat main baru.</p>
+        <p class="text-xs text-soft">Dipakai kalau kok belum pilih jenis. Harga di game tetap snapshot.</p>
       </label>
 
       <div class="flex items-center gap-2 border-t border-line pt-3">
@@ -218,6 +221,55 @@
         </button>
       </div>
     </form>
+  </dialog>
+
+  <!-- ── Jenis kok dialog ── -->
+  <dialog id="kokTypesDialog">
+    <div class="grid max-h-[calc(100dvh-20px)] w-[min(100vw-2rem,420px)] gap-4 overflow-auto rounded-xl2 border border-line bg-surface p-4 shadow-card">
+      <div class="flex items-center justify-between gap-2">
+        <div class="flex items-center gap-2">
+          <iconify-icon icon="game-icons:shuttlecock" width="20" class="text-brand"></iconify-icon>
+          <h2 class="text-base font-bold tracking-tight">Jenis kok</h2>
+        </div>
+        <button type="button" id="closeKokTypes" class="grid h-9 w-9 place-items-center rounded-xl border border-line bg-elevated text-muted transition active:scale-95 hover:text-ink50">
+          <iconify-icon icon="mdi:close" width="18"></iconify-icon>
+        </button>
+      </div>
+      <p class="text-xs text-soft">Katalog + stok. Saat catat main pilih jenis — stok otomatis berkurang, harga di-snapshot.</p>
+
+      <form id="kokTypeForm" class="grid gap-2 rounded-xl border border-line bg-elevated p-3">
+        <input type="hidden" id="kokTypeEditId" value="" />
+        <label class="grid gap-1">
+          <span class="text-xs font-medium text-muted">Nama</span>
+          <input id="kokTypeName" type="text" required maxlength="60" placeholder="Yonex Aerosensa 50"
+            class="w-full rounded-xl border border-line bg-ink px-3 py-2.5 text-base outline-none transition focus:border-brand/60" />
+        </label>
+        <div class="grid grid-cols-2 gap-2">
+          <label class="grid gap-1">
+            <span class="text-xs font-medium text-muted">Harga / orang</span>
+            <div class="flex items-center gap-2 rounded-xl border border-line bg-ink px-3">
+              <span class="font-mono text-sm text-soft">Rp</span>
+              <input id="kokTypePrice" inputmode="numeric" type="number" min="0" step="500" required
+                class="min-w-0 flex-1 bg-transparent py-2.5 text-base outline-none" />
+            </div>
+          </label>
+          <label class="grid gap-1">
+            <span class="text-xs font-medium text-muted">Stok</span>
+            <input id="kokTypeStock" inputmode="numeric" type="number" min="0" step="1" value="0" required
+              class="w-full rounded-xl border border-line bg-ink px-3 py-2.5 text-base outline-none transition focus:border-brand/60" />
+          </label>
+        </div>
+        <div class="flex items-center gap-2 pt-1">
+          <button type="button" id="kokTypeFormCancel" class="rounded-xl border border-line bg-surface px-3 py-2 text-sm font-medium transition active:scale-95" hidden>Batal edit</button>
+          <div class="flex-1"></div>
+          <button type="submit" id="kokTypeFormSubmit" class="inline-flex items-center gap-1.5 rounded-xl bg-brand px-3.5 py-2 text-sm font-bold text-ink transition active:scale-95 hover:bg-brand-soft">
+            <iconify-icon icon="mdi:plus" width="16"></iconify-icon> Tambah
+          </button>
+        </div>
+      </form>
+
+      <div id="kokTypeList" class="grid gap-2"></div>
+    </div>
   </dialog>
 
   <!-- ── Edit dialog ── -->
@@ -275,6 +327,6 @@
   <div id="toastStack" class="pointer-events-none fixed inset-x-0 bottom-[calc(16px+var(--safe-b))] z-50 mx-auto flex w-full max-w-[720px] flex-col items-stretch gap-2 px-4"></div>
 
   <datalist id="player-suggest"></datalist>
-  <script src="/admin/app.js?v=7"></script>
+  <script src="/admin/app.js?v=9"></script>
 </body>
 </html>
