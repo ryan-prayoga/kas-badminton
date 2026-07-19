@@ -777,11 +777,15 @@ function renderStats() {
   var totalDebt = state.debtSummary.reduce(function (s, d) { return s + d.total; }, 0);
   var totalKok = games.reduce(function (s, g) { return s + (g.cost ? g.cost.kokCount : 0); }, 0);
   var kas = state.kas || { paid: 0, expense: 0, net: 0 };
+  var types = state.kokTypes || [];
+  var stockLeft = types.reduce(function (s, t) { return s + Math.max(0, Number(t.stock) || 0); }, 0);
+  var typesWithStock = types.filter(function (t) { return (Number(t.stock) || 0) > 0; }).length;
   strip.innerHTML =
     statCard({ icon: 'mdi:cash-register', iconClass: kas.net >= 0 ? 'text-ok' : 'text-danger', label: 'Total kas', value: fmt(kas.net), valueClass: kas.net >= 0 ? 'text-ok' : 'text-danger', sub: 'masuk ' + fmt(kas.paid) + ' · beli ' + fmt(kas.expense) }) +
     statCard({ icon: 'mdi:cash-multiple', iconClass: 'text-warn', label: 'Belum bayar', value: fmt(totalDebt), valueClass: totalDebt ? 'text-warn' : 'text-ok', sub: state.debtSummary.length ? state.debtSummary.length + ' orang' : 'Semua lunas' }) +
     statCard({ icon: 'mdi:badminton', iconClass: 'text-brand', label: 'Total main', value: String(games.length), sub: games.length ? 'game tercatat' : 'belum ada' }) +
-    statCard({ icon: 'game-icons:shuttlecock', iconClass: 'text-brand', label: 'Kok terpakai', value: String(totalKok), sub: 'total kok' });
+    statCard({ icon: 'game-icons:shuttlecock', iconClass: 'text-brand', label: 'Kok terpakai', value: String(totalKok), sub: 'total kok' }) +
+    statCard({ icon: 'mdi:package-variant', iconClass: stockLeft > 0 ? 'text-ok' : 'text-danger', label: 'Stok kok sisa', value: String(stockLeft), valueClass: stockLeft > 0 ? '' : 'text-danger', sub: stockLeft > 0 ? typesWithStock + ' jenis tersedia' : 'stok habis' });
 }
 
 function renderStatPlayers() {

@@ -5,13 +5,15 @@
       "name": "kok-badminton (dev)",
       "runtimeExecutable": "npm",
       "runtimeArgs": ["run", "dev"],
-      "port": 8200
+      "port": 8200,
+      "autoPort": true
     },
     {
       "name": "kok-badminton (start)",
       "runtimeExecutable": "npm",
       "runtimeArgs": ["start"],
-      "port": 8200
+      "port": 8200,
+      "autoPort": true
     }
   ]
 }

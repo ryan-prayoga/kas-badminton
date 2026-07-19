@@ -5,7 +5,7 @@ function $$(sel, root) {
   return Array.prototype.slice.call((root || document).querySelectorAll(sel));
 }
 
-var state = { games: [], debtSummary: [], qrisEnabled: false };
+var state = { games: [], debtSummary: [], qrisEnabled: false, kokTypes: [] };
 
 function fmt(n) {
   return new Intl.NumberFormat('id-ID', {
@@ -112,6 +112,9 @@ function renderStats() {
   var games = state.games;
   var totalDebt = state.debtSummary.reduce(function (s, d) { return s + d.total; }, 0);
   var totalKok = games.reduce(function (s, g) { return s + (g.cost ? g.cost.kokCount : 0); }, 0);
+  var types = state.kokTypes || [];
+  var stockLeft = types.reduce(function (s, t) { return s + Math.max(0, Number(t.stock) || 0); }, 0);
+  var typesWithStock = types.filter(function (t) { return (Number(t.stock) || 0) > 0; }).length;
   // Total kas sengaja TIDAK ditampilkan di publik (admin-only).
   strip.innerHTML =
     statCard({
@@ -126,6 +129,11 @@ function renderStats() {
     statCard({
       icon: 'game-icons:shuttlecock', iconClass: 'text-brand', label: 'Kok terpakai',
       value: String(totalKok), sub: 'total kok',
+    }) +
+    statCard({
+      icon: 'mdi:package-variant', iconClass: stockLeft > 0 ? 'text-ok' : 'text-danger', label: 'Stok kok sisa',
+      value: String(stockLeft), valueClass: stockLeft > 0 ? '' : 'text-danger',
+      sub: stockLeft > 0 ? typesWithStock + ' jenis tersedia' : 'stok habis',
     });
 }
 
@@ -532,6 +540,7 @@ function applyData(data) {
   state.games = data.games || [];
   state.debtSummary = data.debtSummary || [];
   state.qrisEnabled = !!(data.settings && data.settings.qrisEnabled);
+  state.kokTypes = data.kokTypes || [];
   renderStats();
   renderStatPlayers();
   renderDebt();
