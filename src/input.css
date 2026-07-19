@@ -38,14 +38,17 @@ input[type="date"], input[type="number"], input[type="text"] { color-scheme: dar
 ::-webkit-scrollbar-thumb { background: #2a2d34; border-radius: 999px; border: 2px solid transparent; background-clip: content-box; }
 ::-webkit-scrollbar-thumb:hover { background: #3a3e46; background-clip: content-box; }
 
-/* Collapsible cards (debt + history) */
+/* Collapsible cards (debt + history) and section panels */
 details.debt > summary,
-details.history > summary { list-style: none; cursor: pointer; }
+details.history > summary,
+details.panel > summary { list-style: none; cursor: pointer; }
 details.debt > summary::-webkit-details-marker,
-details.history > summary::-webkit-details-marker { display: none; }
+details.history > summary::-webkit-details-marker,
+details.panel > summary::-webkit-details-marker { display: none; }
 .debt-chevron { transition: transform 0.2s ease; }
 details.debt[open] .debt-chevron,
-details.history[open] .debt-chevron { transform: rotate(180deg); }
+details.history[open] .debt-chevron,
+details.panel[open] .debt-chevron { transform: rotate(180deg); }
 details.debt[open] > summary .debt-count { color: #fbbf24; }
 
 /* Dialog */
