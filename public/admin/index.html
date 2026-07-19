@@ -1,188 +1,237 @@
 <!DOCTYPE html>
-<html lang="id">
+<html lang="id" class="dark">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-  <meta name="theme-color" content="#0a0a0a" />
+  <meta name="theme-color" content="#08090b" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <title>Kok Badminton — Admin</title>
-  <link rel="stylesheet" href="/styles.css?v=4" />
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="/theme.js?v=5"></script>
+  <link rel="stylesheet" href="/styles.css?v=5" />
+  <script src="https://code.iconify.design/iconify-icon/2.1.0/iconify-icon.min.js"></script>
 </head>
-<body>
-  <div id="lockScreen" class="lockscreen">
-    <div class="lock-time" id="lockClock">--:--</div>
-    <p class="lock-label">Masukkan PIN admin</p>
-    <div class="lock-dots" id="lockDots">
-      <span class="dot"></span><span class="dot"></span><span class="dot"></span>
-      <span class="dot"></span><span class="dot"></span><span class="dot"></span>
+<body class="text-ink50">
+
+  <!-- ── Lockscreen ── -->
+  <div id="lockScreen" class="grid min-h-[100dvh] content-center justify-items-center gap-5 px-6 pb-[calc(28px+var(--safe-b))] pt-[calc(28px+var(--safe-t))] text-center">
+    <div class="grid h-14 w-14 place-items-center rounded-2xl bg-brand/15 text-brand ring-1 ring-brand/30">
+      <iconify-icon icon="mdi:lock-outline" width="28"></iconify-icon>
     </div>
-    <p class="lock-error" id="lockError">&nbsp;</p>
-    <div class="lock-keypad" id="lockKeypad">
-      <button type="button" data-key="1">1</button>
-      <button type="button" data-key="2">2</button>
-      <button type="button" data-key="3">3</button>
-      <button type="button" data-key="4">4</button>
-      <button type="button" data-key="5">5</button>
-      <button type="button" data-key="6">6</button>
-      <button type="button" data-key="7">7</button>
-      <button type="button" data-key="8">8</button>
-      <button type="button" data-key="9">9</button>
+    <div id="lockClock" class="font-mono text-5xl font-light tracking-tight tabular-nums">--:--</div>
+    <p class="text-sm text-muted">Masukkan PIN admin</p>
+    <div id="lockDots" class="flex gap-3.5">
+      <span class="dot h-3 w-3 rounded-full border-[1.5px] border-soft transition"></span>
+      <span class="dot h-3 w-3 rounded-full border-[1.5px] border-soft transition"></span>
+      <span class="dot h-3 w-3 rounded-full border-[1.5px] border-soft transition"></span>
+      <span class="dot h-3 w-3 rounded-full border-[1.5px] border-soft transition"></span>
+      <span class="dot h-3 w-3 rounded-full border-[1.5px] border-soft transition"></span>
+      <span class="dot h-3 w-3 rounded-full border-[1.5px] border-soft transition"></span>
+    </div>
+    <p id="lockError" class="min-h-[20px] text-sm text-danger">&nbsp;</p>
+    <div id="lockKeypad" class="grid grid-cols-3 gap-4">
+      <button type="button" data-key="1" class="h-[72px] w-[72px] rounded-full border border-line bg-surface text-2xl font-medium transition active:scale-95 active:bg-elevated">1</button>
+      <button type="button" data-key="2" class="h-[72px] w-[72px] rounded-full border border-line bg-surface text-2xl font-medium transition active:scale-95 active:bg-elevated">2</button>
+      <button type="button" data-key="3" class="h-[72px] w-[72px] rounded-full border border-line bg-surface text-2xl font-medium transition active:scale-95 active:bg-elevated">3</button>
+      <button type="button" data-key="4" class="h-[72px] w-[72px] rounded-full border border-line bg-surface text-2xl font-medium transition active:scale-95 active:bg-elevated">4</button>
+      <button type="button" data-key="5" class="h-[72px] w-[72px] rounded-full border border-line bg-surface text-2xl font-medium transition active:scale-95 active:bg-elevated">5</button>
+      <button type="button" data-key="6" class="h-[72px] w-[72px] rounded-full border border-line bg-surface text-2xl font-medium transition active:scale-95 active:bg-elevated">6</button>
+      <button type="button" data-key="7" class="h-[72px] w-[72px] rounded-full border border-line bg-surface text-2xl font-medium transition active:scale-95 active:bg-elevated">7</button>
+      <button type="button" data-key="8" class="h-[72px] w-[72px] rounded-full border border-line bg-surface text-2xl font-medium transition active:scale-95 active:bg-elevated">8</button>
+      <button type="button" data-key="9" class="h-[72px] w-[72px] rounded-full border border-line bg-surface text-2xl font-medium transition active:scale-95 active:bg-elevated">9</button>
       <span></span>
-      <button type="button" data-key="0">0</button>
-      <button type="button" data-key="back" aria-label="Hapus">⌫</button>
+      <button type="button" data-key="0" class="h-[72px] w-[72px] rounded-full border border-line bg-surface text-2xl font-medium transition active:scale-95 active:bg-elevated">0</button>
+      <button type="button" data-key="back" aria-label="Hapus" class="grid h-[72px] w-[72px] place-items-center rounded-full border border-line bg-surface text-muted transition active:scale-95 active:bg-elevated"><iconify-icon icon="mdi:backspace-outline" width="24"></iconify-icon></button>
     </div>
-    <a href="/" class="lock-back">← Halaman publik</a>
+    <a href="/" class="mt-2 inline-flex items-center gap-1 text-sm text-soft transition hover:text-muted">
+      <iconify-icon icon="mdi:arrow-left" width="16"></iconify-icon> Halaman publik
+    </a>
   </div>
 
-  <div class="app" id="appRoot" hidden>
-    <header class="top">
-      <div class="brand">
-        <p class="eyebrow">Admin</p>
-        <h1>Kok Badminton</h1>
-      </div>
-      <div class="price-box">
-        <label for="defaultPrice">Default / orang / kok</label>
-        <div class="price-row">
-          <span>Rp</span>
-          <input id="defaultPrice" inputmode="numeric" type="number" min="0" step="500" />
-          <button id="savePrice" type="button" class="btn ghost">Simpan</button>
+  <!-- ── App ── -->
+  <div id="appRoot" class="mx-auto flex w-full max-w-[720px] flex-col gap-4 px-4 pb-[calc(40px+var(--safe-b))] pt-[calc(16px+var(--safe-t))]" hidden>
+
+    <!-- Header -->
+    <header class="relative overflow-hidden rounded-xl2 border border-line bg-surface shadow-card">
+      <div class="pointer-events-none absolute -right-8 -top-10 h-32 w-32 rounded-full bg-brand/20 blur-3xl"></div>
+      <div class="relative p-4 sm:p-5">
+        <div class="flex items-start justify-between gap-3">
+          <div class="flex items-center gap-3">
+            <div class="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-brand/15 text-brand ring-1 ring-brand/30">
+              <iconify-icon icon="mdi:badminton" width="24"></iconify-icon>
+            </div>
+            <div>
+              <p class="text-[11px] font-semibold uppercase tracking-[0.16em] text-brand">Admin</p>
+              <h1 class="text-2xl font-extrabold leading-tight tracking-tight">Kok Badminton</h1>
+            </div>
+          </div>
+          <div class="flex shrink-0 items-center gap-1.5">
+            <a href="/" title="Halaman publik" class="grid h-9 w-9 place-items-center rounded-xl border border-line bg-elevated text-muted transition active:scale-95 hover:text-ink50">
+              <iconify-icon icon="mdi:earth" width="18"></iconify-icon>
+            </a>
+            <button type="button" id="logoutBtn" title="Kunci" class="grid h-9 w-9 place-items-center rounded-xl border border-line bg-elevated text-muted transition active:scale-95 hover:text-danger">
+              <iconify-icon icon="mdi:lock-outline" width="18"></iconify-icon>
+            </button>
+          </div>
         </div>
-        <p class="hint">Harga lama tetap snapshot, ganti default cuma buat main baru.</p>
-        <div class="admin-links">
-          <a href="/">Halaman publik</a>
-          <button type="button" id="logoutBtn" class="btn ghost sm">Kunci</button>
+
+        <!-- default price -->
+        <div class="mt-4 rounded-xl border border-line bg-sunken p-3">
+          <label for="defaultPrice" class="mb-2 block text-xs font-medium text-muted">Default harga / orang / kok</label>
+          <div class="flex items-center gap-2">
+            <span class="font-mono text-sm text-soft">Rp</span>
+            <input id="defaultPrice" inputmode="numeric" type="number" min="0" step="500"
+              class="min-w-0 flex-1 rounded-xl border border-line bg-ink px-3 py-2.5 text-base outline-none transition focus:border-brand/60" />
+            <button id="savePrice" type="button" class="inline-flex shrink-0 items-center gap-1 rounded-xl border border-line bg-elevated px-3 py-2.5 text-sm font-medium transition active:scale-95 hover:border-line2">
+              <iconify-icon icon="mdi:content-save-outline" width="16"></iconify-icon> Simpan
+            </button>
+          </div>
+          <p class="mt-2 text-xs text-soft">Harga lama tetap snapshot, ganti default cuma buat main baru.</p>
         </div>
       </div>
     </header>
 
-    <section class="panel">
-      <div class="panel-head">
-        <h2>Catat main</h2>
-        <p>2 pasangan · skor per pair · multi-kok</p>
+    <!-- Catat main -->
+    <section class="rounded-xl2 border border-line bg-surface shadow-card p-4">
+      <div class="mb-4 flex items-center gap-2">
+        <iconify-icon icon="mdi:plus-circle-outline" width="20" class="text-brand"></iconify-icon>
+        <h2 class="text-base font-bold tracking-tight">Catat main</h2>
       </div>
 
-      <form id="gameForm" class="form">
-        <label class="full">
-          Tanggal
-          <input id="date" type="date" required />
+      <form id="gameForm" class="grid gap-4">
+        <label class="grid gap-1.5">
+          <span class="text-xs font-medium text-muted">Tanggal</span>
+          <input id="date" type="date" required
+            class="w-full rounded-xl border border-line bg-ink px-3 py-3 text-base outline-none transition focus:border-brand/60" />
         </label>
 
-        <div class="pairs" id="pairInputs">
-          <div class="pair-card" data-pair="a">
-            <div class="pair-head">
-              <div class="pair-badge">Pair A</div>
-              <div class="score-field">
-                <span>Skor</span>
-                <input type="text" inputmode="numeric" name="scoreA" placeholder="21" maxlength="20" autocomplete="off" />
+        <div id="pairInputs" class="grid gap-2.5">
+          <!-- Pair A -->
+          <div class="rounded-xl border border-line bg-elevated p-3" data-pair="a">
+            <div class="mb-3 flex items-center justify-between gap-2">
+              <span class="inline-flex items-center gap-1.5 rounded-md bg-brand/10 px-2 py-1 text-xs font-bold uppercase tracking-wide text-brand">Pair A</span>
+              <div class="flex items-center gap-2">
+                <span class="text-xs text-soft">Skor</span>
+                <input type="text" inputmode="numeric" name="scoreA" placeholder="21" maxlength="20" autocomplete="off"
+                  class="w-16 rounded-lg border border-line bg-ink px-2 py-2 text-center font-mono text-base outline-none transition focus:border-brand/60" />
               </div>
             </div>
-            <div class="pair-players">
-              <div class="player-field">
-                <div class="label">Pemain 1</div>
-                <input type="text" name="player0" list="player-suggest" placeholder="Nama" autocomplete="off" required maxlength="40" />
-              </div>
-              <div class="player-field">
-                <div class="label">Pemain 2</div>
-                <input type="text" name="player1" list="player-suggest" placeholder="Nama" autocomplete="off" required maxlength="40" />
-              </div>
+            <div class="grid gap-2 sm:grid-cols-2">
+              <input type="text" name="player0" list="player-suggest" placeholder="Pemain 1" autocomplete="off" required maxlength="40"
+                class="w-full rounded-xl border border-line bg-ink px-3 py-2.5 text-base outline-none transition focus:border-brand/60" />
+              <input type="text" name="player1" list="player-suggest" placeholder="Pemain 2" autocomplete="off" required maxlength="40"
+                class="w-full rounded-xl border border-line bg-ink px-3 py-2.5 text-base outline-none transition focus:border-brand/60" />
             </div>
           </div>
 
-          <div class="vs-divider">vs</div>
+          <div class="grid place-items-center"><span class="grid h-7 w-7 place-items-center rounded-full border border-line bg-surface text-[10px] font-bold tracking-wider text-soft">VS</span></div>
 
-          <div class="pair-card" data-pair="b">
-            <div class="pair-head">
-              <div class="pair-badge">Pair B</div>
-              <div class="score-field">
-                <span>Skor</span>
-                <input type="text" inputmode="numeric" name="scoreB" placeholder="18" maxlength="20" autocomplete="off" />
+          <!-- Pair B -->
+          <div class="rounded-xl border border-line bg-elevated p-3" data-pair="b">
+            <div class="mb-3 flex items-center justify-between gap-2">
+              <span class="inline-flex items-center gap-1.5 rounded-md bg-ok/10 px-2 py-1 text-xs font-bold uppercase tracking-wide text-ok">Pair B</span>
+              <div class="flex items-center gap-2">
+                <span class="text-xs text-soft">Skor</span>
+                <input type="text" inputmode="numeric" name="scoreB" placeholder="18" maxlength="20" autocomplete="off"
+                  class="w-16 rounded-lg border border-line bg-ink px-2 py-2 text-center font-mono text-base outline-none transition focus:border-brand/60" />
               </div>
             </div>
-            <div class="pair-players">
-              <div class="player-field">
-                <div class="label">Pemain 1</div>
-                <input type="text" name="player2" list="player-suggest" placeholder="Nama" autocomplete="off" required maxlength="40" />
-              </div>
-              <div class="player-field">
-                <div class="label">Pemain 2</div>
-                <input type="text" name="player3" list="player-suggest" placeholder="Nama" autocomplete="off" required maxlength="40" />
-              </div>
+            <div class="grid gap-2 sm:grid-cols-2">
+              <input type="text" name="player2" list="player-suggest" placeholder="Pemain 1" autocomplete="off" required maxlength="40"
+                class="w-full rounded-xl border border-line bg-ink px-3 py-2.5 text-base outline-none transition focus:border-brand/60" />
+              <input type="text" name="player3" list="player-suggest" placeholder="Pemain 2" autocomplete="off" required maxlength="40"
+                class="w-full rounded-xl border border-line bg-ink px-3 py-2.5 text-base outline-none transition focus:border-brand/60" />
             </div>
           </div>
         </div>
 
-        <div class="koks-block">
-          <div class="section-label row-between">
-            <span>Kok (harga snapshot)</span>
-            <button type="button" id="addKok" class="btn ghost sm">+ Kok</button>
+        <div class="grid gap-2">
+          <div class="flex items-center justify-between">
+            <span class="text-xs font-medium text-muted">Kok (harga snapshot)</span>
+            <button type="button" id="addKok" class="inline-flex items-center gap-1 rounded-lg border border-line bg-elevated px-2.5 py-1.5 text-xs font-medium transition active:scale-95 hover:border-line2">
+              <iconify-icon icon="mdi:plus" width="14"></iconify-icon> Kok
+            </button>
           </div>
-          <div id="kokList" class="kok-list">
-            <div class="kok-row" data-i="0">
-              <div class="tag">Kok 1</div>
-              <input type="number" inputmode="numeric" min="0" step="500" value="3000" data-role="price" />
-              <button type="button" class="btn ghost sm" data-role="remove" disabled>Hapus</button>
-            </div>
-          </div>
-          <p class="hint" id="formCostHint">1 kok · Rp3.000 / orang · total Rp12.000</p>
+          <div id="kokList" class="grid gap-2"></div>
+          <p class="text-xs text-soft" id="formCostHint">—</p>
         </div>
 
-        <label class="full">
-          Catatan (opsional)
-          <input id="notes" type="text" placeholder="court 3, beli kok baru…" maxlength="160" />
+        <label class="grid gap-1.5">
+          <span class="text-xs font-medium text-muted">Catatan (opsional)</span>
+          <input id="notes" type="text" placeholder="court 3, beli kok baru…" maxlength="160"
+            class="w-full rounded-xl border border-line bg-ink px-3 py-2.5 text-base outline-none transition focus:border-brand/60" />
         </label>
 
-        <button type="submit" class="btn primary full">Simpan game</button>
+        <button type="submit" class="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-brand px-4 py-3.5 text-base font-bold text-ink transition active:scale-[0.98] hover:bg-brand-soft">
+          <iconify-icon icon="mdi:content-save-check-outline" width="20"></iconify-icon> Simpan game
+        </button>
       </form>
     </section>
 
-    <section class="panel" id="debtPanel">
-      <div class="panel-head">
-        <h2>Belum bayar</h2>
-        <p id="debtMeta">—</p>
+    <!-- Belum bayar -->
+    <section class="rounded-xl2 border border-line bg-surface shadow-card p-4">
+      <div class="mb-3 flex items-center justify-between gap-2">
+        <div class="flex items-center gap-2">
+          <iconify-icon icon="mdi:wallet-outline" width="20" class="text-warn"></iconify-icon>
+          <h2 class="text-base font-bold tracking-tight">Belum bayar</h2>
+        </div>
+        <p id="debtMeta" class="text-xs text-soft">—</p>
       </div>
-      <div id="debtList" class="debt-list empty-state">Belum ada hutang.</div>
+      <div id="debtList" class="grid gap-3"></div>
     </section>
 
-    <section class="panel">
-      <div class="panel-head">
-        <h2>Riwayat</h2>
-        <p id="historyMeta">—</p>
+    <!-- Riwayat -->
+    <section class="rounded-xl2 border border-line bg-surface shadow-card p-4">
+      <div class="mb-3 flex items-center justify-between gap-2">
+        <div class="flex items-center gap-2">
+          <iconify-icon icon="mdi:history" width="20" class="text-brand"></iconify-icon>
+          <h2 class="text-base font-bold tracking-tight">Riwayat</h2>
+        </div>
+        <p id="historyMeta" class="text-xs text-soft">—</p>
       </div>
-      <div id="gameList" class="game-list empty-state">Belum ada catatan.</div>
+      <div id="gameList" class="grid gap-3"></div>
     </section>
   </div>
 
+  <!-- ── Edit dialog ── -->
   <dialog id="editDialog">
-    <form method="dialog" id="editForm" class="dialog-body">
-      <div class="panel-head">
-        <h2>Edit game</h2>
-        <p>Pair, skor, kok, atau hapus</p>
+    <form method="dialog" id="editForm" class="grid max-h-[calc(100dvh-20px)] gap-3 overflow-auto rounded-xl2 border border-line bg-surface p-4 shadow-card">
+      <div class="flex items-center gap-2">
+        <iconify-icon icon="mdi:pencil-outline" width="20" class="text-brand"></iconify-icon>
+        <h2 class="text-base font-bold tracking-tight">Edit game</h2>
       </div>
       <input type="hidden" id="editId" />
 
-      <label class="full">
-        Tanggal
-        <input id="editDate" type="date" required />
+      <label class="grid gap-1.5">
+        <span class="text-xs font-medium text-muted">Tanggal</span>
+        <input id="editDate" type="date" required
+          class="w-full rounded-xl border border-line bg-ink px-3 py-3 text-base outline-none transition focus:border-brand/60" />
       </label>
 
-      <div class="pairs" id="editPairs"></div>
-      <div id="editKoks" class="kok-list"></div>
+      <div class="grid gap-2.5" id="editPairs"></div>
+      <div id="editKoks" class="grid gap-2"></div>
 
-      <label class="full">
-        Catatan
-        <input id="editNotes" type="text" maxlength="160" />
+      <label class="grid gap-1.5">
+        <span class="text-xs font-medium text-muted">Catatan</span>
+        <input id="editNotes" type="text" maxlength="160"
+          class="w-full rounded-xl border border-line bg-ink px-3 py-2.5 text-base outline-none transition focus:border-brand/60" />
       </label>
 
-      <div class="dialog-actions">
-        <button type="button" id="deleteGame" class="btn danger">Hapus</button>
-        <div class="spacer"></div>
-        <button type="button" id="cancelEdit" class="btn ghost">Batal</button>
-        <button type="submit" class="btn primary">Simpan</button>
+      <div class="sticky bottom-0 -mx-4 -mb-4 flex items-center gap-2 border-t border-line bg-surface px-4 py-3">
+        <button type="button" id="deleteGame" class="inline-flex items-center gap-1.5 rounded-xl border border-danger/40 bg-danger/10 px-3 py-2.5 text-sm font-medium text-danger transition active:scale-95">
+          <iconify-icon icon="mdi:trash-can-outline" width="16"></iconify-icon> Hapus
+        </button>
+        <div class="flex-1"></div>
+        <button type="button" id="cancelEdit" class="rounded-xl border border-line bg-elevated px-3 py-2.5 text-sm font-medium transition active:scale-95">Batal</button>
+        <button type="submit" class="inline-flex items-center gap-1.5 rounded-xl bg-brand px-4 py-2.5 text-sm font-bold text-ink transition active:scale-95 hover:bg-brand-soft">
+          <iconify-icon icon="mdi:check" width="16"></iconify-icon> Simpan
+        </button>
       </div>
     </form>
   </dialog>
 
   <datalist id="player-suggest"></datalist>
-  <script src="/admin/app.js?v=4"></script>
+  <script src="/admin/app.js?v=5"></script>
 </body>
 </html>

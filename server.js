@@ -473,6 +473,7 @@ app.get('/api/bootstrap', async (_req, res, next) => {
             date: g.date,
             name: p.name,
             amount: g.cost.perPerson,
+            kokCount: g.cost.kokCount,
             score: g.scoreLabel || null,
           });
         }
