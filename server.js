@@ -270,24 +270,56 @@ function validatePlayers(players) {
   return null;
 }
 
-function buildKoks(body, defaultPrice) {
+function normalizeNameType(name) {
+  return normalizeName(name).slice(0, 60);
+}
+
+function findKokType(db, typeId) {
+  if (!typeId) return null;
+  return (db.kokTypes || []).find((t) => t.id === typeId) || null;
+}
+
+function normalizeKokEntry(raw, defaultPrice, db) {
+  const type = findKokType(db, raw?.typeId);
+  let price = Number(raw?.pricePerPerson);
+  if (!Number.isFinite(price)) {
+    price = type ? type.pricePerPerson : defaultPrice;
+  }
+  let typeName = raw?.typeName != null ? String(raw.typeName).trim().slice(0, 60) : '';
+  if (!typeName && type) typeName = type.name;
+  return {
+    id: raw?.id || uid(),
+    typeId: type ? type.id : raw?.typeId || null,
+    typeName: typeName || null,
+    pricePerPerson: Math.round(price),
+  };
+}
+
+function buildKoks(body, defaultPrice, db) {
   let koks = Array.isArray(body.koks) ? body.koks : null;
   if (!koks || koks.length === 0) {
     const count = Math.max(1, Math.min(50, Number(body.kokCount) || 1));
-    return Array.from({ length: count }, () => ({
-      id: uid(),
-      pricePerPerson: Number.isFinite(Number(body.pricePerPerson))
-        ? Math.round(Number(body.pricePerPerson))
-        : defaultPrice,
-    }));
+    const type = findKokType(db, body.typeId);
+    return Array.from({ length: count }, () =>
+      normalizeKokEntry(
+        {
+          typeId: type?.id || null,
+          typeName: type?.name || null,
+          pricePerPerson: Number.isFinite(Number(body.pricePerPerson))
+            ? Math.round(Number(body.pricePerPerson))
+            : type
+              ? type.pricePerPerson
+              : defaultPrice,
+        },
+        defaultPrice,
+        db
+      )
+    );
   }
-  koks = koks.slice(0, 50).map((k) => ({
-    id: k.id || uid(),
-    pricePerPerson: Number.isFinite(Number(k?.pricePerPerson))
-      ? Math.round(Number(k.pricePerPerson))
-      : defaultPrice,
-  }));
-  if (koks.length === 0) koks = [{ id: uid(), pricePerPerson: defaultPrice }];
+  koks = koks.slice(0, 50).map((k) => normalizeKokEntry(k, defaultPrice, db));
+  if (koks.length === 0) {
+    koks = [normalizeKokEntry({}, defaultPrice, db)];
+  }
   return koks;
 }
 
@@ -310,11 +342,82 @@ function rowToGame(r) {
   });
 }
 
+function rowToKokType(r) {
+  return {
+    id: r.id,
+    name: r.name,
+    pricePerPerson: Number(r.price_per_person) || 0,
+    stock: Number.isFinite(Number(r.stock)) ? Math.max(0, Math.round(Number(r.stock))) : 0,
+    active: r.active !== false,
+    createdAt: r.created_at instanceof Date ? r.created_at.toISOString() : r.created_at,
+    updatedAt: r.updated_at instanceof Date ? r.updated_at.toISOString() : r.updated_at,
+  };
+}
+
+function parseStock(value, fallback = 0) {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return fallback;
+  return Math.max(0, Math.round(n));
+}
+
+function countKoksByType(koks) {
+  const map = new Map();
+  for (const k of koks || []) {
+    const id = k?.typeId;
+    if (!id) continue;
+    map.set(id, (map.get(id) || 0) + 1);
+  }
+  return map;
+}
+
+function applyStockDelta(db, typeId, delta) {
+  if (!typeId || !delta) return;
+  const type = (db.kokTypes || []).find((t) => t.id === typeId);
+  if (!type) return;
+  type.stock = Math.max(0, (Number(type.stock) || 0) + delta);
+  type.updatedAt = new Date().toISOString();
+}
+
+function applyKoksStockDiff(db, oldKoks, newKoks) {
+  const oldMap = countKoksByType(oldKoks);
+  const newMap = countKoksByType(newKoks);
+  const ids = new Set([...oldMap.keys(), ...newMap.keys()]);
+  for (const id of ids) {
+    const delta = (oldMap.get(id) || 0) - (newMap.get(id) || 0);
+    applyStockDelta(db, id, delta);
+  }
+}
+
+async function ensureSchema() {
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS kok_types (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      price_per_person INT NOT NULL DEFAULT 3000,
+      stock INT NOT NULL DEFAULT 0,
+      active BOOLEAN NOT NULL DEFAULT true,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `);
+  await pool.query(`
+    ALTER TABLE kok_types
+    ADD COLUMN IF NOT EXISTS stock INT NOT NULL DEFAULT 0
+  `);
+  await pool.query(`
+    CREATE UNIQUE INDEX IF NOT EXISTS kok_types_name_lower_uidx
+    ON kok_types (lower(name))
+  `);
+}
+
 async function loadDb() {
-  const [settingsRes, playersRes, gamesRes] = await Promise.all([
+  const [settingsRes, playersRes, gamesRes, typesRes] = await Promise.all([
     pool.query('SELECT default_price_per_person FROM settings WHERE id = 1'),
     pool.query('SELECT name FROM players ORDER BY name'),
     pool.query('SELECT id, date, players, scores, koks, notes, created_at, updated_at FROM games'),
+    pool.query(
+      'SELECT id, name, price_per_person, stock, active, created_at, updated_at FROM kok_types ORDER BY lower(name)'
+    ),
   ]);
   return {
     settings: {
@@ -322,6 +425,7 @@ async function loadDb() {
     },
     players: playersRes.rows.map((r) => r.name),
     games: gamesRes.rows.map(rowToGame),
+    kokTypes: typesRes.rows.map(rowToKokType),
   };
 }
 
@@ -335,6 +439,22 @@ async function saveDb(db) {
     await client.query('DELETE FROM players');
     for (const name of db.players) {
       await client.query('INSERT INTO players (name) VALUES ($1)', [name]);
+    }
+    await client.query('DELETE FROM kok_types');
+    for (const t of db.kokTypes || []) {
+      await client.query(
+        `INSERT INTO kok_types (id, name, price_per_person, stock, active, created_at, updated_at)
+         VALUES ($1,$2,$3,$4,$5,$6,$7)`,
+        [
+          t.id,
+          t.name,
+          t.pricePerPerson,
+          parseStock(t.stock, 0),
+          t.active !== false,
+          t.createdAt || new Date().toISOString(),
+          t.updatedAt || new Date().toISOString(),
+        ]
+      );
     }
     await client.query('DELETE FROM games');
     for (const g of db.games) {
@@ -490,6 +610,7 @@ app.get('/api/bootstrap', async (_req, res, next) => {
     res.json({
       settings: db.settings,
       players: db.players,
+      kokTypes: db.kokTypes || [],
       games,
       debtSummary: Object.values(byName).sort((a, b) => b.total - a.total || a.name.localeCompare(b.name, 'id')),
     });
@@ -523,7 +644,7 @@ app.post('/api/games', requireAdmin, async (req, res, next) => {
 
     const db = await loadDb();
     const scores = parseScoresFromBody(body);
-    const koks = buildKoks(body, db.settings.defaultPricePerPerson);
+    const koks = buildKoks(body, db.settings.defaultPricePerPerson, db);
 
     const game = {
       id: uid(),
@@ -537,9 +658,10 @@ app.post('/api/games', requireAdmin, async (req, res, next) => {
     };
 
     rememberPlayers(db, parsed.players.map((p) => p.name));
+    applyKoksStockDiff(db, [], koks);
     db.games.unshift(game);
     await saveDb(db);
-    res.status(201).json({ game: enrichGame(game) });
+    res.status(201).json({ game: enrichGame(game), kokTypes: db.kokTypes });
   } catch (err) {
     next(err);
   }
@@ -553,6 +675,7 @@ app.patch('/api/games/:id', requireAdmin, async (req, res, next) => {
 
     const body = req.body || {};
     const game = normalizeStoredGame(db.games[idx]);
+    const oldKoks = (game.koks || []).slice();
 
     if (body.date) game.date = String(body.date);
     if (body.notes !== undefined) game.notes = String(body.notes || '').trim();
@@ -571,18 +694,16 @@ app.patch('/api/games/:id', requireAdmin, async (req, res, next) => {
     }
 
     if (Array.isArray(body.koks) && body.koks.length > 0) {
-      game.koks = body.koks.slice(0, 50).map((k) => ({
-        id: k.id || uid(),
-        pricePerPerson: Number.isFinite(Number(k.pricePerPerson))
-          ? Math.round(Number(k.pricePerPerson))
-          : db.settings.defaultPricePerPerson,
-      }));
+      game.koks = body.koks
+        .slice(0, 50)
+        .map((k) => normalizeKokEntry(k, db.settings.defaultPricePerPerson, db));
+      applyKoksStockDiff(db, oldKoks, game.koks);
     }
 
     game.updatedAt = new Date().toISOString();
     db.games[idx] = game;
     await saveDb(db);
-    res.json({ game: enrichGame(game) });
+    res.json({ game: enrichGame(game), kokTypes: db.kokTypes });
   } catch (err) {
     next(err);
   }
@@ -594,17 +715,13 @@ app.post('/api/games/:id/koks', requireAdmin, async (req, res, next) => {
     const idx = db.games.findIndex((g) => g.id === req.params.id);
     if (idx === -1) return res.status(404).json({ error: 'Game tidak ditemukan' });
 
-    const price = Number(req.body?.pricePerPerson);
-    const pricePerPerson = Number.isFinite(price)
-      ? Math.round(price)
-      : db.settings.defaultPricePerPerson;
-
-    const kok = { id: uid(), pricePerPerson };
+    const kok = normalizeKokEntry(req.body || {}, db.settings.defaultPricePerPerson, db);
     db.games[idx] = normalizeStoredGame(db.games[idx]);
     db.games[idx].koks.push(kok);
+    applyStockDelta(db, kok.typeId, -1);
     db.games[idx].updatedAt = new Date().toISOString();
     await saveDb(db);
-    res.status(201).json({ game: enrichGame(db.games[idx]), kok });
+    res.status(201).json({ game: enrichGame(db.games[idx]), kok, kokTypes: db.kokTypes });
   } catch (err) {
     next(err);
   }
@@ -620,13 +737,15 @@ app.delete('/api/games/:id/koks/:kokId', requireAdmin, async (req, res, next) =>
     if (game.koks.length <= 1) {
       return res.status(400).json({ error: 'Minimal 1 kok per game' });
     }
+    const removed = game.koks.find((k) => k.id === req.params.kokId);
     const before = game.koks.length;
     game.koks = game.koks.filter((k) => k.id !== req.params.kokId);
     if (game.koks.length === before) return res.status(404).json({ error: 'Kok tidak ditemukan' });
+    if (removed?.typeId) applyStockDelta(db, removed.typeId, 1);
     game.updatedAt = new Date().toISOString();
     db.games[idx] = game;
     await saveDb(db);
-    res.json({ game: enrichGame(game) });
+    res.json({ game: enrichGame(game), kokTypes: db.kokTypes });
   } catch (err) {
     next(err);
   }
@@ -642,15 +761,174 @@ app.patch('/api/games/:id/koks/:kokId', requireAdmin, async (req, res, next) => 
     const kok = game.koks.find((k) => k.id === req.params.kokId);
     if (!kok) return res.status(404).json({ error: 'Kok tidak ditemukan' });
 
+    const body = req.body || {};
+    const prevTypeId = kok.typeId || null;
+    if (body.typeId !== undefined || body.typeName !== undefined || body.pricePerPerson !== undefined) {
+      const merged = normalizeKokEntry(
+        {
+          id: kok.id,
+          typeId: body.typeId !== undefined ? body.typeId : kok.typeId,
+          typeName: body.typeName !== undefined ? body.typeName : kok.typeName,
+          pricePerPerson:
+            body.pricePerPerson !== undefined ? body.pricePerPerson : kok.pricePerPerson,
+        },
+        db.settings.defaultPricePerPerson,
+        db
+      );
+      Object.assign(kok, merged);
+    } else {
+      return res.status(400).json({ error: 'Tidak ada field yang diubah' });
+    }
+    if (!Number.isFinite(Number(kok.pricePerPerson)) || kok.pricePerPerson < 0) {
+      return res.status(400).json({ error: 'pricePerPerson harus angka >= 0' });
+    }
+    if (prevTypeId !== (kok.typeId || null)) {
+      applyStockDelta(db, prevTypeId, 1);
+      applyStockDelta(db, kok.typeId, -1);
+    }
+    game.updatedAt = new Date().toISOString();
+    db.games[idx] = game;
+    await saveDb(db);
+    res.json({ game: enrichGame(game), kokTypes: db.kokTypes });
+  } catch (err) {
+    next(err);
+  }
+});
+
+app.get('/api/kok-types', requireAdmin, async (_req, res, next) => {
+  try {
+    const db = await loadDb();
+    res.json({ kokTypes: db.kokTypes || [] });
+  } catch (err) {
+    next(err);
+  }
+});
+
+app.post('/api/kok-types', requireAdmin, async (req, res, next) => {
+  try {
+    const name = normalizeNameType(req.body?.name);
+    if (!name) return res.status(400).json({ error: 'Nama jenis kok wajib diisi' });
     const price = Number(req.body?.pricePerPerson);
     if (!Number.isFinite(price) || price < 0) {
       return res.status(400).json({ error: 'pricePerPerson harus angka >= 0' });
     }
-    kok.pricePerPerson = Math.round(price);
-    game.updatedAt = new Date().toISOString();
-    db.games[idx] = game;
+    if (req.body?.stock !== undefined && (!Number.isFinite(Number(req.body.stock)) || Number(req.body.stock) < 0)) {
+      return res.status(400).json({ error: 'stock harus angka >= 0' });
+    }
+
+    const db = await loadDb();
+    const dup = (db.kokTypes || []).some((t) => t.name.toLowerCase() === name.toLowerCase());
+    if (dup) return res.status(409).json({ error: 'Jenis kok dengan nama itu sudah ada' });
+
+    const now = new Date().toISOString();
+    const type = {
+      id: uid(),
+      name,
+      pricePerPerson: Math.round(price),
+      stock: parseStock(req.body?.stock, 0),
+      active: req.body?.active === false ? false : true,
+      createdAt: now,
+      updatedAt: now,
+    };
+    db.kokTypes = db.kokTypes || [];
+    db.kokTypes.push(type);
+    db.kokTypes.sort((a, b) => a.name.localeCompare(b.name, 'id'));
     await saveDb(db);
-    res.json({ game: enrichGame(game) });
+    res.status(201).json({ kokType: type, kokTypes: db.kokTypes });
+  } catch (err) {
+    next(err);
+  }
+});
+
+app.patch('/api/kok-types/:id', requireAdmin, async (req, res, next) => {
+  try {
+    const db = await loadDb();
+    const type = (db.kokTypes || []).find((t) => t.id === req.params.id);
+    if (!type) return res.status(404).json({ error: 'Jenis kok tidak ditemukan' });
+
+    if (req.body?.name !== undefined) {
+      const name = normalizeNameType(req.body.name);
+      if (!name) return res.status(400).json({ error: 'Nama jenis kok wajib diisi' });
+      const dup = db.kokTypes.some(
+        (t) => t.id !== type.id && t.name.toLowerCase() === name.toLowerCase()
+      );
+      if (dup) return res.status(409).json({ error: 'Jenis kok dengan nama itu sudah ada' });
+      type.name = name;
+    }
+    if (req.body?.pricePerPerson !== undefined) {
+      const price = Number(req.body.pricePerPerson);
+      if (!Number.isFinite(price) || price < 0) {
+        return res.status(400).json({ error: 'pricePerPerson harus angka >= 0' });
+      }
+      type.pricePerPerson = Math.round(price);
+    }
+    if (req.body?.stock !== undefined) {
+      const stock = Number(req.body.stock);
+      if (!Number.isFinite(stock) || stock < 0) {
+        return res.status(400).json({ error: 'stock harus angka >= 0' });
+      }
+      type.stock = Math.round(stock);
+    }
+    if (req.body?.active !== undefined) {
+      type.active = Boolean(req.body.active);
+    }
+    type.updatedAt = new Date().toISOString();
+    db.kokTypes.sort((a, b) => a.name.localeCompare(b.name, 'id'));
+    await saveDb(db);
+    res.json({ kokType: type, kokTypes: db.kokTypes });
+  } catch (err) {
+    next(err);
+  }
+});
+
+app.post('/api/kok-types/:id/stock', requireAdmin, async (req, res, next) => {
+  try {
+    const db = await loadDb();
+    const type = (db.kokTypes || []).find((t) => t.id === req.params.id);
+    if (!type) return res.status(404).json({ error: 'Jenis kok tidak ditemukan' });
+
+    const delta = Number(req.body?.delta);
+    if (!Number.isFinite(delta) || !Number.isInteger(delta) || delta === 0) {
+      return res.status(400).json({ error: 'delta harus integer non-zero (mis. +12 atau -1)' });
+    }
+    const nextStock = (Number(type.stock) || 0) + delta;
+    if (nextStock < 0) {
+      return res.status(400).json({ error: 'Stok tidak cukup' });
+    }
+    type.stock = nextStock;
+    type.updatedAt = new Date().toISOString();
+    await saveDb(db);
+    res.json({ kokType: type, kokTypes: db.kokTypes });
+  } catch (err) {
+    next(err);
+  }
+});
+
+app.delete('/api/kok-types/:id', requireAdmin, async (req, res, next) => {
+  try {
+    const db = await loadDb();
+    const before = (db.kokTypes || []).length;
+    db.kokTypes = (db.kokTypes || []).filter((t) => t.id !== req.params.id);
+    if (db.kokTypes.length === before) {
+      return res.status(404).json({ error: 'Jenis kok tidak ditemukan' });
+    }
+    await saveDb(db);
+    res.json({ ok: true, kokTypes: db.kokTypes });
+  } catch (err) {
+    next(err);
+  }
+});
+
+app.delete('/api/games/:id', requireAdmin, async (req, res, next) => {
+  try {
+    const db = await loadDb();
+    const idx = db.games.findIndex((g) => g.id === req.params.id);
+    if (idx === -1) return res.status(404).json({ error: 'Game tidak ditemukan' });
+    const game = normalizeStoredGame(db.games[idx]);
+    applyKoksStockDiff(db, game.koks, []);
+    db.games.splice(idx, 1);
+    await saveDb(db);
+    res.json({ ok: true, kokTypes: db.kokTypes });
   } catch (err) {
     next(err);
   }
@@ -698,19 +976,6 @@ app.post('/api/games/:id/mark-all-paid', requireAdmin, async (req, res, next) =>
   }
 });
 
-app.delete('/api/games/:id', requireAdmin, async (req, res, next) => {
-  try {
-    const db = await loadDb();
-    const before = db.games.length;
-    db.games = db.games.filter((g) => g.id !== req.params.id);
-    if (db.games.length === before) return res.status(404).json({ error: 'Game tidak ditemukan' });
-    await saveDb(db);
-    res.json({ ok: true });
-  } catch (err) {
-    next(err);
-  }
-});
-
 // Express 5: bare '*' is invalid path-to-regexp syntax
 app.get('/{*path}', (req, res) => {
   const file = req.path.startsWith('/admin') ? 'admin/index.html' : 'index.html';
@@ -724,6 +989,7 @@ app.use((err, _req, res, _next) => {
 
 async function main() {
   ensureDataDir();
+  await ensureSchema();
   await migrateLegacyJsonIfNeeded();
   app.listen(PORT, '127.0.0.1', () => {
     console.log(`kok-badminton on http://127.0.0.1:${PORT}`);
