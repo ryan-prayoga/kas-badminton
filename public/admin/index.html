@@ -7,10 +7,11 @@
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <title>Kok Badminton — Admin</title>
-  <link rel="stylesheet" href="/styles.css?v=11" />
-  <script src="/vendor/iconify-icon.js?v=11"></script>
-  <script src="/vendor/icons.js?v=11"></script>
-  <script src="/vendor/qrcode.js?v=11"></script>
+  <link rel="stylesheet" href="/styles.css?v=12" />
+  <script src="/vendor/iconify-icon.js?v=12"></script>
+  <script src="/vendor/icons.js?v=12"></script>
+  <script src="/vendor/qrcode.js?v=12"></script>
+  <script src="/vendor/jsqr.js?v=12"></script>
 </head>
 <body class="text-ink50">
 
@@ -259,9 +260,13 @@
 
       <label class="grid gap-1.5 border-t border-line pt-3">
         <span class="text-xs font-medium text-muted">QRIS statis merchant</span>
-        <textarea id="merchantQris" rows="3" placeholder="Tempel payload QRIS statis (string panjang mulai 00020101…)"
+        <button type="button" id="qrisUploadBtn" class="inline-flex items-center justify-center gap-1.5 rounded-xl border border-brand/40 bg-brand/10 px-3 py-2.5 text-sm font-bold text-brand transition active:scale-95">
+          <iconify-icon icon="mdi:qrcode" width="16"></iconify-icon> Upload / foto QRIS
+        </button>
+        <input type="file" id="qrisFile" accept="image/*" class="hidden" />
+        <textarea id="merchantQris" rows="3" placeholder="Atau tempel payload QRIS statis (string panjang mulai 00020101…)"
           class="w-full rounded-xl border border-line bg-ink px-3 py-2.5 text-xs font-mono outline-none transition focus:border-brand/60"></textarea>
-        <p class="text-xs text-soft">Dipakai buat generate QRIS dinamis per tagihan/cicilan. Decode dari QR cetak kamu lalu tempel di sini. Kosongkan untuk matikan QRIS.</p>
+        <p class="text-xs text-soft">Upload/foto QR statis kamu — nanti kode-nya kebaca otomatis. Atau tempel manual. Kosongkan untuk matikan QRIS.</p>
         <p id="qrisStatus" class="text-xs"></p>
       </label>
 
@@ -472,6 +477,6 @@
   <!-- ── Toast stack ── -->
   <div id="toastStack" class="pointer-events-none fixed inset-x-0 bottom-[calc(88px+var(--safe-b))] z-50 mx-auto flex w-full max-w-[720px] flex-col items-stretch gap-2 px-4"></div>
 
-  <script src="/admin/app.js?v=11"></script>
+  <script src="/admin/app.js?v=12"></script>
 </body>
 </html>

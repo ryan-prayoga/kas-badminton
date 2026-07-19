@@ -941,6 +941,53 @@ function submitPay(name, amount) {
     .catch(function (err) { toast(err.message, 'error'); });
 }
 
+// --- Decode QRIS dari foto/upload ---
+function setQrisStatus(msg, kind) {
+  var el = $('#qrisStatus');
+  if (!el) return;
+  el.textContent = msg;
+  el.className = 'text-xs ' + (kind === 'ok' ? 'text-ok' : kind === 'error' ? 'text-danger' : 'text-soft');
+}
+
+function decodeQrisImage(file) {
+  if (!window.jsQR) { setQrisStatus('Decoder QR belum siap, reload halaman.', 'error'); return; }
+  setQrisStatus('Membaca QR…', 'info');
+  var reader = new FileReader();
+  reader.onload = function () {
+    var img = new Image();
+    img.onload = function () {
+      var maxDim = 1200;
+      var scale = Math.min(1, maxDim / Math.max(img.width, img.height));
+      var w = Math.max(1, Math.round(img.width * scale));
+      var h = Math.max(1, Math.round(img.height * scale));
+      var canvas = document.createElement('canvas');
+      canvas.width = w;
+      canvas.height = h;
+      var ctx = canvas.getContext('2d');
+      ctx.drawImage(img, 0, 0, w, h);
+      var data;
+      try { data = ctx.getImageData(0, 0, w, h); } catch (e) { setQrisStatus('Gagal baca gambar.', 'error'); return; }
+      var code = null;
+      try { code = window.jsQR(data.data, w, h, { inversionAttempts: 'attemptBoth' }); } catch (e) {}
+      if (code && code.data) {
+        var payload = String(code.data).trim();
+        $('#merchantQris').value = payload;
+        if (/^0002/.test(payload)) {
+          setQrisStatus('✓ QR terbaca. Klik Simpan untuk aktifkan.', 'ok');
+        } else {
+          setQrisStatus('QR terbaca tapi bukan format QRIS. Cek lagi.', 'error');
+        }
+      } else {
+        setQrisStatus('QR gak kebaca. Coba foto lebih jelas / crop pas ke kotak QR.', 'error');
+      }
+    };
+    img.onerror = function () { setQrisStatus('Gagal buka gambar.', 'error'); };
+    img.src = reader.result;
+  };
+  reader.onerror = function () { setQrisStatus('Gagal baca file.', 'error'); };
+  reader.readAsDataURL(file);
+}
+
 // --- Beli slop ---
 var buyType = null;
 
@@ -1194,6 +1241,13 @@ function wire() {
     $('#settingsDialog').showModal();
   };
   $('#cancelSettings').onclick = function () { $('#settingsDialog').close(); };
+
+  $('#qrisUploadBtn').onclick = function () { $('#qrisFile').click(); };
+  $('#qrisFile').onchange = function (e) {
+    var file = e.target.files && e.target.files[0];
+    if (file) decodeQrisImage(file);
+    e.target.value = '';
+  };
 
   $('#settingsForm').onsubmit = function (e) {
     e.preventDefault();
