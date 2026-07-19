@@ -18,11 +18,48 @@ function escapeHtml(s) {
     .replace(/"/g, '&quot;');
 }
 
+function todayLocal() {
+  var d = new Date();
+  var off = d.getTimezoneOffset();
+  var local = new Date(d.getTime() - off * 60000);
+  return local.toISOString().slice(0, 10);
+}
+
+function relativeDay(iso) {
+  var m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(iso || ''));
+  if (!m) return '';
+  var target = Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
+  var t = /^(\d{4})-(\d{2})-(\d{2})/.exec(todayLocal());
+  var today = Date.UTC(Number(t[1]), Number(t[2]) - 1, Number(t[3]));
+  var diffDays = Math.round((today - target) / 86400000);
+  if (diffDays === 0) return 'Hari ini';
+  if (diffDays === 1) return 'Kemarin';
+  if (diffDays > 1 && diffDays < 7) return diffDays + ' hari lalu';
+  return '';
+}
+
 function fmtDate(iso) {
   var m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(iso || ''));
   if (!m) return escapeHtml(iso);
   var months = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'];
   return Number(m[3]) + ' ' + months[Number(m[2]) - 1] + ' ' + m[1];
+}
+
+function dateBadge(iso) {
+  var rel = relativeDay(iso);
+  return rel
+    ? '<span class="shrink-0 rounded-full bg-brand/10 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-brand">' + rel + '</span>'
+    : '';
+}
+
+function humanAgo(ms) {
+  var s = Math.floor(ms / 1000);
+  if (s < 10) return 'barusan';
+  if (s < 60) return s + ' detik lalu';
+  var m = Math.floor(s / 60);
+  if (m < 60) return m + ' menit lalu';
+  var h = Math.floor(m / 60);
+  return h + ' jam lalu';
 }
 
 function emptyState(icon, text) {
@@ -75,69 +112,57 @@ function playerChip(g, p) {
     ? 'border-ok/30 bg-ok/10 text-ok'
     : 'border-warn/30 bg-warn/10 text-warn';
   return (
-    '<div class="flex items-center justify-between gap-2 rounded-lg border ' + cls + ' px-2.5 py-2">' +
+    '<div class="flex min-w-0 items-center gap-2 rounded-lg border ' + cls + ' px-2.5 py-2">' +
+      '<iconify-icon icon="' + (p.paid ? 'mdi:check-circle' : 'mdi:clock-outline') + '" width="15" class="shrink-0"></iconify-icon>' +
       '<span class="min-w-0 truncate text-sm font-medium">' + escapeHtml(p.name) + '</span>' +
-      '<span class="flex shrink-0 items-center gap-1 font-mono text-xs">' +
-        '<iconify-icon icon="' + (p.paid ? 'mdi:check-circle' : 'mdi:clock-outline') + '" width="14"></iconify-icon>' +
-        fmt(g.cost.perPerson) +
-      '</span>' +
     '</div>'
   );
 }
 
-function matchSide(label, score, chips) {
+function pairGroup(score, showScoreRow, chips) {
   return (
-    '<div class="grid gap-2 rounded-xl border border-line bg-sunken p-2.5">' +
-      '<div class="flex items-center justify-between gap-2">' +
-        '<span class="text-[11px] font-bold uppercase tracking-wider text-muted">' + escapeHtml(label) + '</span>' +
-        '<span class="font-mono text-lg font-extrabold leading-none ' + (score ? 'text-ink50' : 'text-soft') + '">' + (score ? escapeHtml(score) : '—') + '</span>' +
-      '</div>' +
-      '<div class="grid gap-1.5">' + chips + '</div>' +
+    '<div class="grid min-w-0 gap-1.5">' +
+      (showScoreRow
+        ? '<div class="min-h-[1.25rem] text-center font-mono text-sm font-bold leading-5 text-ink50">' + escapeHtml(score) + '</div>'
+        : '') +
+      chips +
     '</div>'
   );
 }
 
-function gameCard(g, hideDate) {
+function gameCard(g) {
   var scoreA = (g.pairs && g.pairs.a && g.pairs.a.score) || (g.scores && g.scores.a) || '';
   var scoreB = (g.pairs && g.pairs.b && g.pairs.b.score) || (g.scores && g.scores.b) || '';
   var statusBadge = g.summary.allPaid
     ? '<span class="inline-flex items-center gap-1 rounded-full bg-ok/12 px-2 py-0.5 text-[11px] font-semibold text-ok"><iconify-icon icon="mdi:check-circle" width="13"></iconify-icon>Lunas</span>'
     : '<span class="inline-flex items-center gap-1 rounded-full bg-warn/12 px-2 py-0.5 text-[11px] font-semibold text-warn"><iconify-icon icon="mdi:alert-circle-outline" width="13"></iconify-icon>' + g.summary.unpaidCount + ' belum</span>';
 
-  var head = hideDate
-    ? '<div class="flex items-center gap-1.5 text-xs text-muted">' +
-        '<iconify-icon icon="game-icons:shuttlecock" width="13" class="text-soft"></iconify-icon>' +
-        g.cost.kokCount + ' kok · ' + fmt(g.cost.perPerson) + ' / orang · total ' + fmt(g.cost.total) +
-      '</div>'
-    : '<div class="flex items-center gap-1.5 font-semibold">' +
-        '<iconify-icon icon="mdi:calendar-blank-outline" width="16" class="text-soft"></iconify-icon>' +
-        fmtDate(g.date) +
-      '</div>' +
-      '<div class="mt-0.5 text-xs text-muted">' +
-        g.cost.kokCount + ' kok · ' + fmt(g.cost.perPerson) + ' / orang · total ' + fmt(g.cost.total) +
-      '</div>';
-
   return (
-    '<article class="rounded-xl2 border border-line bg-elevated p-3.5 shadow-card">' +
-      '<div class="mb-3 flex items-start justify-between gap-3">' +
-        '<div class="min-w-0">' + head + '</div>' +
-        '<div class="flex flex-col items-end gap-1 text-right">' +
-          statusBadge +
-          '<span class="font-mono text-xs text-soft">' + fmt(g.summary.paidTotal) + ' / ' + fmt(g.cost.total) + '</span>' +
+    '<div class="rounded-xl2 bg-elevated p-3.5">' +
+      '<div class="flex items-center justify-between gap-3">' +
+        '<div class="flex min-w-0 items-center gap-1.5 text-xs text-muted">' +
+          '<iconify-icon icon="game-icons:shuttlecock" width="13" class="shrink-0 text-soft"></iconify-icon>' +
+          '<span class="truncate">' + g.cost.kokCount + ' kok · ' + fmt(g.cost.perPerson) + '/org</span>' +
         '</div>' +
+        '<div class="shrink-0">' + statusBadge + '</div>' +
       '</div>' +
-      '<div class="grid items-stretch gap-2 sm:grid-cols-[1fr_auto_1fr]">' +
-        matchSide('Pair A', scoreA, playerChip(g, g.players[0]) + playerChip(g, g.players[1])) +
-        '<div class="grid place-items-center py-0.5 sm:py-0"><span class="grid h-7 w-7 place-items-center rounded-full border border-line bg-surface text-[10px] font-bold tracking-wider text-soft">VS</span></div>' +
-        matchSide('Pair B', scoreB, playerChip(g, g.players[2]) + playerChip(g, g.players[3])) +
-      '</div>' +
+      (function () {
+        var hasScore = !!(scoreA || scoreB);
+        return (
+          '<div class="mt-2.5 grid grid-cols-[1fr_auto_1fr] items-center gap-x-2 gap-y-1.5 sm:gap-x-2.5">' +
+            pairGroup(scoreA, hasScore, playerChip(g, g.players[0]) + playerChip(g, g.players[1])) +
+            '<div class="text-center text-[10px] font-bold uppercase tracking-wider text-soft">vs</div>' +
+            pairGroup(scoreB, hasScore, playerChip(g, g.players[2]) + playerChip(g, g.players[3])) +
+          '</div>'
+        );
+      })() +
       (g.notes
-        ? '<div class="mt-3 flex items-start gap-1.5 rounded-lg border border-line bg-sunken px-2.5 py-2 text-xs text-muted">' +
+        ? '<div class="mt-2.5 flex items-start gap-1.5 rounded-lg bg-sunken px-2.5 py-2 text-xs text-muted">' +
             '<iconify-icon icon="mdi:note-text-outline" width="14" class="mt-0.5 shrink-0 text-soft"></iconify-icon>' +
             '<span class="min-w-0">' + escapeHtml(g.notes) + '</span>' +
           '</div>'
         : '') +
-    '</article>'
+    '</div>'
   );
 }
 
@@ -160,11 +185,11 @@ function debtRow(g) {
   return (
     '<div class="px-3 py-2 odd:bg-white/[0.02]">' +
       '<div class="flex items-center justify-between gap-2">' +
-        '<span class="flex items-center gap-1.5 text-xs font-medium text-muted">' +
-          '<iconify-icon icon="mdi:calendar-blank-outline" width="13" class="text-soft"></iconify-icon>' +
-          fmtDate(g.date) +
+        '<span class="flex min-w-0 items-center gap-1.5 text-xs font-medium text-muted">' +
+          '<iconify-icon icon="mdi:calendar-blank-outline" width="13" class="shrink-0 text-soft"></iconify-icon>' +
+          '<span class="truncate">' + fmtDate(g.date) + '</span>' +
         '</span>' +
-        '<span class="font-mono text-sm font-semibold text-warn">' + fmt(g.total) + '</span>' +
+        '<span class="shrink-0 font-mono text-sm font-semibold text-warn">' + fmt(g.total) + '</span>' +
       '</div>' +
       '<div class="mt-1 flex items-center gap-3 text-[11px] text-soft">' +
         '<span class="flex items-center gap-1">' +
@@ -173,6 +198,7 @@ function debtRow(g) {
         '<span class="flex items-center gap-1">' +
           '<iconify-icon icon="game-icons:shuttlecock" width="12"></iconify-icon>' + g.koks + ' kok' +
         '</span>' +
+        dateBadge(g.date) +
       '</div>' +
     '</div>'
   );
@@ -250,8 +276,8 @@ function historyGroup(grp, open) {
       '<summary class="flex select-none items-center justify-between gap-3 p-3.5">' +
         '<div class="min-w-0">' +
           '<div class="flex items-center gap-1.5 font-semibold">' +
-            '<iconify-icon icon="mdi:calendar-blank-outline" width="16" class="text-soft"></iconify-icon>' +
-            fmtDate(grp.date) +
+            '<iconify-icon icon="mdi:calendar-blank-outline" width="16" class="text-soft shrink-0"></iconify-icon>' +
+            '<span class="truncate">' + fmtDate(grp.date) + '</span>' +
           '</div>' +
           '<div class="mt-0.5 flex items-center gap-1.5 text-xs text-muted">' +
             '<iconify-icon icon="mdi:badminton" width="13"></iconify-icon>' + grp.games.length + ' main · total ' + fmt(grp.total) +
@@ -263,7 +289,7 @@ function historyGroup(grp, open) {
         '</div>' +
       '</summary>' +
       '<div class="grid gap-3 border-t border-line p-3.5">' +
-        grp.games.map(function (g) { return gameCard(g, true); }).join('') +
+        grp.games.map(function (g) { return gameCard(g); }).join('') +
       '</div>' +
     '</details>'
   );
@@ -285,17 +311,39 @@ function renderGames(games) {
   list.innerHTML = groups.map(function (grp, i) { return historyGroup(grp, i === 0); }).join('');
 }
 
-fetch('/api/bootstrap')
-  .then(function (res) { return res.json(); })
-  .then(function (data) {
-    var games = data.games || [];
-    var debtSummary = data.debtSummary || [];
-    renderStats(games, debtSummary);
-    renderDebt(debtSummary);
-    renderGames(games);
-  })
-  .catch(function (err) {
-    console.error(err);
-    $('#gameList').innerHTML = emptyState('mdi:alert-circle-outline', 'Gagal load data.');
-    $('#debtList').innerHTML = emptyState('mdi:alert-circle-outline', 'Gagal load data.');
-  });
+var lastUpdatedAt = null;
+
+function updateLastUpdatedLabel() {
+  var el = $('#lastUpdated');
+  if (!el || !lastUpdatedAt) return;
+  el.textContent = 'Diperbarui ' + humanAgo(Date.now() - lastUpdatedAt);
+}
+
+function loadData() {
+  var btn = $('#refreshBtn');
+  if (btn) btn.classList.add('animate-spin');
+  return fetch('/api/bootstrap')
+    .then(function (res) { return res.json(); })
+    .then(function (data) {
+      var games = data.games || [];
+      var debtSummary = data.debtSummary || [];
+      renderStats(games, debtSummary);
+      renderDebt(debtSummary);
+      renderGames(games);
+      lastUpdatedAt = Date.now();
+      updateLastUpdatedLabel();
+    })
+    .catch(function (err) {
+      console.error(err);
+      $('#gameList').innerHTML = emptyState('mdi:alert-circle-outline', 'Gagal load data.');
+      $('#debtList').innerHTML = emptyState('mdi:alert-circle-outline', 'Gagal load data.');
+    })
+    .finally(function () {
+      if (btn) btn.classList.remove('animate-spin');
+    });
+}
+
+var refreshBtn = $('#refreshBtn');
+if (refreshBtn) refreshBtn.onclick = loadData;
+setInterval(updateLastUpdatedLabel, 30000);
+loadData();

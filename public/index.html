@@ -7,9 +7,9 @@
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <title>Kok Badminton</title>
-  <link rel="stylesheet" href="/styles.css?v=6" />
-  <script src="/vendor/iconify-icon.js?v=6"></script>
-  <script src="/vendor/icons.js?v=6"></script>
+  <link rel="stylesheet" href="/styles.css?v=7" />
+  <script src="/vendor/iconify-icon.js?v=7"></script>
+  <script src="/vendor/icons.js?v=7"></script>
 </head>
 <body class="text-ink50">
   <div class="mx-auto flex w-full max-w-[720px] flex-col gap-4 px-4 pb-[calc(40px+var(--safe-b))] pt-[calc(16px+var(--safe-t))]">
@@ -28,12 +28,18 @@
               <h1 class="text-2xl font-extrabold leading-tight tracking-tight">Kok Badminton</h1>
             </div>
           </div>
-          <a href="/admin" class="inline-flex shrink-0 items-center gap-1.5 rounded-xl border border-line bg-elevated px-3 py-2 text-sm font-medium text-muted transition active:scale-95 hover:text-ink50 hover:border-line2">
-            <iconify-icon icon="mdi:shield-account-outline" width="18"></iconify-icon>
-            Admin
-          </a>
+          <div class="flex shrink-0 items-center gap-1.5">
+            <button type="button" id="refreshBtn" title="Refresh" aria-label="Refresh" class="grid h-9 w-9 place-items-center rounded-xl border border-line bg-elevated text-muted transition active:scale-95 hover:text-ink50">
+              <iconify-icon icon="mdi:refresh" width="18"></iconify-icon>
+            </button>
+            <a href="/admin" class="inline-flex shrink-0 items-center gap-1.5 rounded-xl border border-line bg-elevated px-3 py-2 text-sm font-medium text-muted transition active:scale-95 hover:text-ink50 hover:border-line2">
+              <iconify-icon icon="mdi:shield-account-outline" width="18"></iconify-icon>
+              Admin
+            </a>
+          </div>
         </div>
         <p class="mt-3 text-sm text-muted">Lihat riwayat main &amp; siapa yang belum bayar.</p>
+        <p id="lastUpdated" class="mt-1 text-xs text-soft">Memuat…</p>
       </div>
     </header>
 
@@ -79,6 +85,6 @@
     </footer>
   </div>
 
-  <script src="/public.js?v=6"></script>
+  <script src="/public.js?v=7"></script>
 </body>
 </html>
