@@ -5,7 +5,8 @@
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
-    "dev": "node --watch server.js"
+    "dev": "node --watch server.js",
+    "build:css": "npx -y tailwindcss@3.4.17 -c tailwind.config.js -i src/input.css -o public/styles.css --minify"
   },
   "dependencies": {
     "cookie-parser": "^1.4.7",

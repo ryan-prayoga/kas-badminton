@@ -1,0 +1,71 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --safe-b: env(safe-area-inset-bottom, 0px);
+  --safe-t: env(safe-area-inset-top, 0px);
+}
+
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+
+html { -webkit-text-size-adjust: 100%; }
+
+body {
+  margin: 0;
+  min-height: 100dvh;
+  background:
+    radial-gradient(120% 60% at 50% -10%, rgba(163, 230, 53, 0.10), transparent 60%),
+    radial-gradient(90% 50% at 100% 0%, rgba(52, 211, 153, 0.06), transparent 55%),
+    #08090b;
+  background-attachment: fixed;
+  color: #f4f4f5;
+  font-family: 'Inter', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+iconify-icon {
+  display: inline-block;
+  vertical-align: -0.125em;
+}
+
+input, button, select, textarea { font-family: inherit; }
+input[type="date"], input[type="number"], input[type="text"] { color-scheme: dark; }
+
+/* Custom scrollbar */
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-thumb { background: #2a2d34; border-radius: 999px; border: 2px solid transparent; background-clip: content-box; }
+::-webkit-scrollbar-thumb:hover { background: #3a3e46; background-clip: content-box; }
+
+/* Collapsible cards (debt + history) */
+details.debt > summary,
+details.history > summary { list-style: none; cursor: pointer; }
+details.debt > summary::-webkit-details-marker,
+details.history > summary::-webkit-details-marker { display: none; }
+.debt-chevron { transition: transform 0.2s ease; }
+details.debt[open] .debt-chevron,
+details.history[open] .debt-chevron { transform: rotate(180deg); }
+details.debt[open] > summary .debt-count { color: #fbbf24; }
+
+/* Dialog */
+dialog {
+  border: none;
+  padding: 0;
+  background: transparent;
+  color: #f4f4f5;
+  max-height: calc(100dvh - 20px);
+  width: min(560px, calc(100vw - 20px));
+  margin: auto;
+  overflow: visible;
+}
+dialog::backdrop {
+  background: rgba(4, 5, 7, 0.78);
+  backdrop-filter: blur(4px);
+}
+dialog:focus, dialog form:focus { outline: none; }
+dialog[open] { animation: dlg-in 0.22s ease-out; }
+@keyframes dlg-in {
+  from { transform: translateY(14px) scale(0.98); opacity: 0; }
+  to { transform: translateY(0) scale(1); opacity: 1; }
+}
