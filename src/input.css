@@ -115,7 +115,7 @@ dialog {
   padding: 0;
   background: transparent;
   color: #f4f4f5;
-  max-height: calc(100dvh - 20px);
+  max-height: calc(100dvh - 20px - var(--safe-b));
   width: min(560px, calc(100vw - 20px));
   margin: auto;
   overflow: visible;

@@ -165,7 +165,7 @@
 
   <!-- ── Catat main dialog ── -->
   <dialog id="gameDialog">
-    <form id="gameForm" class="grid grid-cols-1 max-h-[calc(100dvh-20px)] gap-4 overflow-auto rounded-xl2 border border-line bg-surface p-4 shadow-card">
+    <form id="gameForm" class="grid grid-cols-1 max-h-[calc(100dvh-20px-var(--safe-b))] gap-4 overflow-auto rounded-xl2 border border-line bg-surface p-4 shadow-card">
       <div class="flex items-center gap-2">
         <iconify-icon icon="mdi:plus-circle-outline" width="20" class="text-brand"></iconify-icon>
         <h2 tabindex="-1" autofocus class="text-base font-bold tracking-tight outline-none">Catat main</h2>
@@ -230,7 +230,7 @@
           class="w-full rounded-xl border border-line bg-ink px-3 py-2.5 text-base outline-none transition focus:border-brand/60" />
       </label>
 
-      <div class="sticky bottom-0 -mx-4 -mb-4 flex items-center gap-2 border-t border-line bg-surface px-4 py-3">
+      <div class="sticky bottom-0 -mx-4 -mb-4 flex items-center gap-2 border-t border-line bg-surface px-4 pt-3 pb-[calc(0.75rem+var(--safe-b))]">
         <button type="button" id="cancelGameForm" class="rounded-xl border border-line bg-elevated px-3 py-2.5 text-sm font-medium transition active:scale-95">Batal</button>
         <div class="flex-1"></div>
         <button type="submit" class="inline-flex items-center gap-1.5 rounded-xl bg-brand px-4 py-2.5 text-sm font-bold text-ink transition active:scale-95 hover:bg-brand-soft">
@@ -242,7 +242,7 @@
 
   <!-- ── Pengaturan dialog ── -->
   <dialog id="settingsDialog">
-    <form id="settingsForm" class="grid grid-cols-1 max-h-[calc(100dvh-20px)] gap-4 overflow-auto rounded-xl2 border border-line bg-surface p-4 shadow-card">
+    <form id="settingsForm" class="grid grid-cols-1 max-h-[calc(100dvh-20px-var(--safe-b))] gap-4 overflow-auto rounded-xl2 border border-line bg-surface p-4 shadow-card">
       <div class="flex items-center gap-2">
         <iconify-icon icon="mdi:cog" width="20" class="text-brand"></iconify-icon>
         <h2 class="text-base font-bold tracking-tight">Pengaturan</h2>
@@ -270,7 +270,7 @@
         <p id="qrisStatus" class="text-xs"></p>
       </label>
 
-      <div class="sticky bottom-0 -mx-4 -mb-4 flex items-center gap-2 border-t border-line bg-surface px-4 py-3">
+      <div class="sticky bottom-0 -mx-4 -mb-4 flex items-center gap-2 border-t border-line bg-surface px-4 pt-3 pb-[calc(0.75rem+var(--safe-b))]">
         <button type="button" id="cancelSettings" class="rounded-xl border border-line bg-elevated px-3 py-2.5 text-sm font-medium transition active:scale-95">Tutup</button>
         <div class="flex-1"></div>
         <button type="submit" class="inline-flex items-center gap-1.5 rounded-xl bg-brand px-4 py-2.5 text-sm font-bold text-ink transition active:scale-95 hover:bg-brand-soft">
@@ -282,7 +282,7 @@
 
   <!-- ── Jenis kok dialog ── -->
   <dialog id="kokTypesDialog">
-    <div class="grid grid-cols-1 max-h-[calc(100dvh-20px)] w-[min(100vw-2rem,420px)] gap-4 overflow-auto rounded-xl2 border border-line bg-surface p-4 shadow-card">
+    <div class="grid grid-cols-1 max-h-[calc(100dvh-20px-var(--safe-b))] w-[min(100vw-2rem,420px)] gap-4 overflow-auto rounded-xl2 border border-line bg-surface p-4 shadow-card">
       <div class="flex items-center justify-between gap-2">
         <div class="flex items-center gap-2">
           <iconify-icon icon="game-icons:shuttlecock" width="20" class="text-brand"></iconify-icon>
@@ -339,7 +339,7 @@
 
   <!-- ── Edit dialog ── -->
   <dialog id="editDialog">
-    <form method="dialog" id="editForm" class="grid grid-cols-1 max-h-[calc(100dvh-20px)] gap-3 overflow-auto rounded-xl2 border border-line bg-surface p-4 shadow-card">
+    <form method="dialog" id="editForm" class="grid grid-cols-1 max-h-[calc(100dvh-20px-var(--safe-b))] gap-3 overflow-auto rounded-xl2 border border-line bg-surface p-4 shadow-card">
       <div class="flex items-center gap-2">
         <iconify-icon icon="mdi:pencil-outline" width="20" class="text-brand"></iconify-icon>
         <h2 tabindex="-1" autofocus class="text-base font-bold tracking-tight outline-none">Edit game</h2>
@@ -361,7 +361,7 @@
           class="w-full rounded-xl border border-line bg-ink px-3 py-2.5 text-base outline-none transition focus:border-brand/60" />
       </label>
 
-      <div class="sticky bottom-0 -mx-4 -mb-4 flex items-center gap-2 border-t border-line bg-surface px-4 py-3">
+      <div class="sticky bottom-0 -mx-4 -mb-4 flex items-center gap-2 border-t border-line bg-surface px-4 pt-3 pb-[calc(0.75rem+var(--safe-b))]">
         <button type="button" id="deleteGame" class="inline-flex items-center gap-1.5 rounded-xl border border-danger/40 bg-danger/10 px-3 py-2.5 text-sm font-medium text-danger transition active:scale-95">
           <iconify-icon icon="mdi:trash-can-outline" width="16"></iconify-icon> Hapus
         </button>
@@ -404,7 +404,7 @@
 
   <!-- ── QRIS dialog ── -->
   <dialog id="qrisDialog">
-    <div class="grid grid-cols-1 max-h-[calc(100dvh-20px)] w-[min(100vw-2rem,380px)] gap-3 overflow-auto rounded-xl2 border border-line bg-surface p-4 shadow-card">
+    <div class="grid grid-cols-1 max-h-[calc(100dvh-20px-var(--safe-b))] w-[min(100vw-2rem,380px)] gap-3 overflow-auto rounded-xl2 border border-line bg-surface p-4 shadow-card">
       <div class="flex items-center justify-between gap-2">
         <div class="flex items-center gap-2">
           <iconify-icon icon="mdi:qrcode" width="20" class="text-brand"></iconify-icon>
