@@ -242,16 +242,51 @@ function wireLock() {
   }
 }
 
-function ensureDatalist() {
-  var dl = $('#player-suggest');
-  if (!dl) {
-    dl = document.createElement('datalist');
-    dl.id = 'player-suggest';
-    document.body.appendChild(dl);
-  }
-  dl.innerHTML = state.players.map(function (p) {
-    return '<option value="' + escapeAttr(p) + '"></option>';
+function playerMatches(query) {
+  var q = String(query || '').trim().toLowerCase();
+  var list = state.players || [];
+  if (!q) return list.slice(0, 8);
+  return list.filter(function (p) {
+    return p.toLowerCase().indexOf(q) !== -1;
+  }).slice(0, 8);
+}
+
+function closeAllPlayerSuggests() {
+  $$('.player-suggest-list').forEach(function (el) { el.remove(); });
+}
+
+function showPlayerSuggest(input) {
+  closeAllPlayerSuggests();
+  var matches = playerMatches(input.value);
+  if (!matches.length) return;
+  var wrap = input.parentElement;
+  var box = document.createElement('div');
+  box.className = 'player-suggest-list absolute inset-x-0 top-full z-20 mt-1 max-h-48 overflow-auto rounded-xl border border-line bg-elevated shadow-card';
+  box.innerHTML = matches.map(function (name) {
+    return '<button type="button" class="block w-full truncate px-3 py-2 text-left text-sm text-ink50 hover:bg-surface active:bg-surface" data-name="' + escapeAttr(name) + '">' + escapeHtml(name) + '</button>';
   }).join('');
+  box.onmousedown = function (e) {
+    e.preventDefault();
+    var btn = e.target.closest('[data-name]');
+    if (!btn) return;
+    input.value = btn.getAttribute('data-name');
+    closeAllPlayerSuggests();
+  };
+  wrap.appendChild(box);
+}
+
+function wirePlayerAutocomplete(input) {
+  if (!input || input.dataset.autocompleteWired) return;
+  input.dataset.autocompleteWired = '1';
+  input.addEventListener('focus', function () { showPlayerSuggest(input); });
+  input.addEventListener('input', function () { showPlayerSuggest(input); });
+  input.addEventListener('blur', function () {
+    setTimeout(closeAllPlayerSuggests, 150);
+  });
+}
+
+function wireAllPlayerInputs(root) {
+  $$('input[data-role="player"]', root || document).forEach(wirePlayerAutocomplete);
 }
 
 var FIELD_CLS = 'w-full rounded-xl border border-line bg-ink px-3 py-2.5 text-base outline-none transition focus:border-brand/60';
@@ -276,8 +311,8 @@ function pairCardHtml(opts) {
         '</div>' +
       '</div>' +
       '<div class="grid gap-2 sm:grid-cols-2">' +
-        '<input type="text" name="' + namePrefix + i1 + '" list="player-suggest" value="' + escapeAttr(p1Name) + '" placeholder="Pemain 1" autocomplete="off" required maxlength="40" class="' + FIELD_CLS + '" />' +
-        '<input type="text" name="' + namePrefix + i2 + '" list="player-suggest" value="' + escapeAttr(p2Name) + '" placeholder="Pemain 2" autocomplete="off" required maxlength="40" class="' + FIELD_CLS + '" />' +
+        '<div class="relative"><input type="text" name="' + namePrefix + i1 + '" data-role="player" value="' + escapeAttr(p1Name) + '" placeholder="Pemain 1" autocomplete="off" required maxlength="40" class="' + FIELD_CLS + '" /></div>' +
+        '<div class="relative"><input type="text" name="' + namePrefix + i2 + '" data-role="player" value="' + escapeAttr(p2Name) + '" placeholder="Pemain 2" autocomplete="off" required maxlength="40" class="' + FIELD_CLS + '" /></div>' +
       '</div>' +
     '</div>'
   );
@@ -476,29 +511,29 @@ function renderKokTypeList() {
     var inactive = t.active === false;
     var stock = Number(t.stock) || 0;
     return (
-      '<div class="flex items-center gap-2 rounded-xl border border-line bg-elevated p-3' + (inactive ? ' opacity-60' : '') + '" data-id="' + escapeAttr(t.id) + '">' +
+      '<div class="flex items-center gap-1.5 rounded-xl border border-line bg-elevated p-3' + (inactive ? ' opacity-60' : '') + '" data-id="' + escapeAttr(t.id) + '">' +
         '<div class="min-w-0 flex-1">' +
           '<p class="truncate text-sm font-semibold text-ink50">' + escapeHtml(t.name) + '</p>' +
           '<p class="mt-0.5 font-mono text-xs text-muted">' + fmt(t.pricePerPerson) + ' / orang' +
             (inactive ? ' · nonaktif' : '') +
           '</p>' +
-          '<div class="mt-1.5 flex flex-wrap items-center gap-1.5">' +
-            '<span class="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold ' + stockBadgeClass(stock) + '">' +
+          '<div class="mt-1.5 flex flex-wrap items-center gap-1">' +
+            '<span class="inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[11px] font-semibold ' + stockBadgeClass(stock) + '">' +
               '<iconify-icon icon="mdi:package-variant" width="12"></iconify-icon>stok ' + stock +
             '</span>' +
-            '<button type="button" data-role="stock-plus" class="rounded-md border border-line bg-surface px-1.5 py-0.5 text-[11px] font-medium text-muted transition active:scale-95 hover:text-ink50" title="Tambah stok +1">+1</button>' +
-            '<button type="button" data-role="stock-plus12" class="rounded-md border border-line bg-surface px-1.5 py-0.5 text-[11px] font-medium text-muted transition active:scale-95 hover:text-ink50" title="Tambah 1 tube (+12)">+12</button>' +
-            '<button type="button" data-role="stock-minus" class="rounded-md border border-line bg-surface px-1.5 py-0.5 text-[11px] font-medium text-muted transition active:scale-95 hover:text-ink50" title="Kurangi stok -1">−1</button>' +
+            '<button type="button" data-role="stock-plus" class="rounded-md border border-line bg-surface px-1 py-0.5 text-[11px] font-medium text-muted transition active:scale-95 hover:text-ink50" title="Tambah stok +1">+1</button>' +
+            '<button type="button" data-role="stock-plus12" class="rounded-md border border-line bg-surface px-1 py-0.5 text-[11px] font-medium text-muted transition active:scale-95 hover:text-ink50" title="Tambah 1 tube (+12)">+12</button>' +
+            '<button type="button" data-role="stock-minus" class="rounded-md border border-line bg-surface px-1 py-0.5 text-[11px] font-medium text-muted transition active:scale-95 hover:text-ink50" title="Kurangi stok -1">−1</button>' +
           '</div>' +
         '</div>' +
-        '<button type="button" data-role="edit-type" class="grid h-9 w-9 place-items-center rounded-lg border border-line text-muted transition active:scale-95 hover:text-ink50" title="Edit">' +
-          '<iconify-icon icon="mdi:pencil-outline" width="16"></iconify-icon>' +
+        '<button type="button" data-role="edit-type" class="grid h-8 w-8 shrink-0 place-items-center rounded-lg border border-line text-muted transition active:scale-95 hover:text-ink50" title="Edit">' +
+          '<iconify-icon icon="mdi:pencil-outline" width="15"></iconify-icon>' +
         '</button>' +
-        '<button type="button" data-role="toggle-type" class="grid h-9 w-9 place-items-center rounded-lg border border-line text-muted transition active:scale-95 hover:text-ink50" title="' + (inactive ? 'Aktifkan' : 'Nonaktifkan') + '">' +
-          '<iconify-icon icon="' + (inactive ? 'mdi:eye-off-outline' : 'mdi:eye-outline') + '" width="16"></iconify-icon>' +
+        '<button type="button" data-role="toggle-type" class="grid h-8 w-8 shrink-0 place-items-center rounded-lg border border-line text-muted transition active:scale-95 hover:text-ink50" title="' + (inactive ? 'Aktifkan' : 'Nonaktifkan') + '">' +
+          '<iconify-icon icon="' + (inactive ? 'mdi:eye-off-outline' : 'mdi:eye-outline') + '" width="15"></iconify-icon>' +
         '</button>' +
-        '<button type="button" data-role="delete-type" class="grid h-9 w-9 place-items-center rounded-lg border border-line text-soft transition active:scale-95 hover:text-danger" title="Hapus">' +
-          '<iconify-icon icon="mdi:trash-can-outline" width="16"></iconify-icon>' +
+        '<button type="button" data-role="delete-type" class="grid h-8 w-8 shrink-0 place-items-center rounded-lg border border-line text-soft transition active:scale-95 hover:text-danger" title="Hapus">' +
+          '<iconify-icon icon="mdi:trash-can-outline" width="15"></iconify-icon>' +
         '</button>' +
       '</div>'
     );
@@ -711,12 +746,12 @@ function groupGamesByDate(games) {
 function historyGroup(grp, open) {
   var allPaid = grp.unpaidCount === 0;
   var statusBadge = allPaid
-    ? '<span class="inline-flex items-center gap-1 rounded-full bg-ok/12 px-2 py-0.5 text-[11px] font-semibold text-ok"><iconify-icon icon="mdi:check-circle" width="13"></iconify-icon>Lunas</span>'
-    : '<span class="inline-flex items-center gap-1 rounded-full bg-warn/12 px-2 py-0.5 text-[11px] font-semibold text-warn"><iconify-icon icon="mdi:alert-circle-outline" width="13"></iconify-icon>' + grp.unpaidCount + ' belum</span>';
+    ? '<span class="inline-flex items-center gap-1 whitespace-nowrap rounded-full bg-ok/12 px-1.5 py-0.5 text-[11px] font-semibold text-ok"><iconify-icon icon="mdi:check-circle" width="13"></iconify-icon>Lunas</span>'
+    : '<span class="inline-flex items-center gap-1 whitespace-nowrap rounded-full bg-warn/12 px-1.5 py-0.5 text-[11px] font-semibold text-warn"><iconify-icon icon="mdi:alert-circle-outline" width="13"></iconify-icon>' + grp.unpaidCount + ' belum</span>';
 
   return (
     '<details class="history overflow-hidden rounded-xl2 border border-line bg-surface shadow-card"' + (open ? ' open' : '') + '>' +
-      '<summary class="flex select-none items-center justify-between gap-3 p-3.5">' +
+      '<summary class="flex select-none items-center justify-between gap-2 p-3.5">' +
         '<div class="min-w-0">' +
           '<div class="flex items-center gap-1.5 font-semibold">' +
             '<iconify-icon icon="mdi:calendar-blank-outline" width="16" class="text-soft shrink-0"></iconify-icon>' +
@@ -726,9 +761,9 @@ function historyGroup(grp, open) {
             '<iconify-icon icon="mdi:badminton" width="13"></iconify-icon>' + grp.games.length + ' main · total ' + fmt(grp.total) +
           '</div>' +
         '</div>' +
-        '<div class="flex shrink-0 items-center gap-2">' +
+        '<div class="flex shrink-0 items-center gap-1.5">' +
           statusBadge +
-          '<iconify-icon icon="mdi:chevron-down" width="20" class="debt-chevron text-soft"></iconify-icon>' +
+          '<iconify-icon icon="mdi:chevron-down" width="20" class="debt-chevron text-soft shrink-0"></iconify-icon>' +
         '</div>' +
       '</summary>' +
       '<div class="grid gap-3 border-t border-line p-3.5">' +
@@ -763,7 +798,6 @@ function refresh() {
     state.debtSummary = data.debtSummary || [];
     var priceEl = $('#defaultPrice');
     if (priceEl) priceEl.value = data.settings.defaultPricePerPerson;
-    ensureDatalist();
     renderDebt();
     renderGames();
     if ($('#kokTypesDialog') && $('#kokTypesDialog').open) {
@@ -799,6 +833,7 @@ function openEdit(game) {
       namePrefix: 'editPlayer',
     }),
   ].join('');
+  wireAllPlayerInputs(root);
 
   renderEditKoks();
   $('#editDialog').showModal();
@@ -881,6 +916,7 @@ function wire() {
   state.formKoks = [defaultKokEntry()];
   renderFormKoks();
   bindFormKoks();
+  wireAllPlayerInputs($('#gameForm'));
 
   $('#fabAdd').onclick = function () {
     openGameDialog();

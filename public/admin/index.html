@@ -7,9 +7,9 @@
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <title>Kok Badminton — Admin</title>
-  <link rel="stylesheet" href="/styles.css?v=9" />
-  <script src="/vendor/iconify-icon.js?v=9"></script>
-  <script src="/vendor/icons.js?v=9"></script>
+  <link rel="stylesheet" href="/styles.css?v=10" />
+  <script src="/vendor/iconify-icon.js?v=10"></script>
+  <script src="/vendor/icons.js?v=10"></script>
 </head>
 <body class="text-ink50">
 
@@ -55,28 +55,28 @@
     <header class="relative overflow-hidden rounded-xl2 border border-line bg-surface shadow-card">
       <div class="pointer-events-none absolute -right-8 -top-10 h-32 w-32 rounded-full bg-brand/20 blur-3xl"></div>
       <div class="relative p-4 sm:p-5">
-        <div class="flex items-start justify-between gap-3">
-          <div class="flex items-center gap-3">
-            <div class="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-brand/15 text-brand ring-1 ring-brand/30">
-              <iconify-icon icon="mdi:badminton" width="24"></iconify-icon>
+        <div class="flex flex-wrap items-start justify-between gap-x-3 gap-y-2">
+          <div class="flex min-w-0 items-center gap-2.5 sm:gap-3">
+            <div class="grid h-10 w-10 shrink-0 place-items-center rounded-2xl bg-brand/15 text-brand ring-1 ring-brand/30 sm:h-11 sm:w-11">
+              <iconify-icon icon="mdi:badminton" width="22"></iconify-icon>
             </div>
-            <div>
+            <div class="min-w-0">
               <p class="text-[11px] font-semibold uppercase tracking-[0.16em] text-brand">Admin</p>
-              <h1 class="text-2xl font-extrabold leading-tight tracking-tight">Kok Badminton</h1>
+              <h1 class="truncate text-xl font-extrabold leading-tight tracking-tight sm:text-2xl">Kok Badminton</h1>
             </div>
           </div>
-          <div class="flex shrink-0 items-center gap-1.5">
-            <button type="button" id="kokTypesBtn" title="Jenis kok" class="grid h-9 w-9 place-items-center rounded-xl border border-line bg-elevated text-muted transition active:scale-95 hover:text-ink50">
-              <iconify-icon icon="game-icons:shuttlecock" width="18"></iconify-icon>
+          <div class="ml-auto flex shrink-0 items-center gap-1 sm:gap-1.5">
+            <button type="button" id="kokTypesBtn" title="Jenis kok" class="grid h-8 w-8 place-items-center rounded-xl border border-line bg-elevated text-muted transition active:scale-95 hover:text-ink50 sm:h-9 sm:w-9">
+              <iconify-icon icon="game-icons:shuttlecock" width="16"></iconify-icon>
             </button>
-            <button type="button" id="settingsBtn" title="Pengaturan" class="grid h-9 w-9 place-items-center rounded-xl border border-line bg-elevated text-muted transition active:scale-95 hover:text-ink50">
-              <iconify-icon icon="mdi:cog" width="18"></iconify-icon>
+            <button type="button" id="settingsBtn" title="Pengaturan" class="grid h-8 w-8 place-items-center rounded-xl border border-line bg-elevated text-muted transition active:scale-95 hover:text-ink50 sm:h-9 sm:w-9">
+              <iconify-icon icon="mdi:cog" width="16"></iconify-icon>
             </button>
-            <a href="/" title="Halaman publik" class="grid h-9 w-9 place-items-center rounded-xl border border-line bg-elevated text-muted transition active:scale-95 hover:text-ink50">
-              <iconify-icon icon="mdi:earth" width="18"></iconify-icon>
+            <a href="/" title="Halaman publik" class="grid h-8 w-8 place-items-center rounded-xl border border-line bg-elevated text-muted transition active:scale-95 hover:text-ink50 sm:h-9 sm:w-9">
+              <iconify-icon icon="mdi:earth" width="16"></iconify-icon>
             </a>
-            <button type="button" id="logoutBtn" title="Kunci" class="grid h-9 w-9 place-items-center rounded-xl border border-line bg-elevated text-muted transition active:scale-95 hover:text-danger">
-              <iconify-icon icon="mdi:lock-outline" width="18"></iconify-icon>
+            <button type="button" id="logoutBtn" title="Kunci" class="grid h-8 w-8 place-items-center rounded-xl border border-line bg-elevated text-muted transition active:scale-95 hover:text-danger sm:h-9 sm:w-9">
+              <iconify-icon icon="mdi:lock-outline" width="16"></iconify-icon>
             </button>
           </div>
         </div>
@@ -95,7 +95,7 @@
           <iconify-icon icon="mdi:chevron-down" width="18" class="debt-chevron text-soft"></iconify-icon>
         </div>
       </summary>
-      <div id="debtList" class="grid gap-3"></div>
+      <div id="debtList" class="grid grid-cols-1 gap-3"></div>
     </details>
 
     <!-- Riwayat -->
@@ -107,7 +107,7 @@
         </div>
         <p id="historyMeta" class="text-xs text-soft">—</p>
       </div>
-      <div id="gameList" class="grid gap-3"></div>
+      <div id="gameList" class="grid grid-cols-1 gap-3"></div>
     </section>
   </div>
 
@@ -119,10 +119,10 @@
 
   <!-- ── Catat main dialog ── -->
   <dialog id="gameDialog">
-    <form id="gameForm" class="grid max-h-[calc(100dvh-20px)] gap-4 overflow-auto rounded-xl2 border border-line bg-surface p-4 shadow-card">
+    <form id="gameForm" class="grid grid-cols-1 max-h-[calc(100dvh-20px)] gap-4 overflow-auto rounded-xl2 border border-line bg-surface p-4 shadow-card">
       <div class="flex items-center gap-2">
         <iconify-icon icon="mdi:plus-circle-outline" width="20" class="text-brand"></iconify-icon>
-        <h2 class="text-base font-bold tracking-tight">Catat main</h2>
+        <h2 tabindex="-1" autofocus class="text-base font-bold tracking-tight outline-none">Catat main</h2>
       </div>
 
       <label class="grid gap-1.5">
@@ -131,7 +131,7 @@
           class="w-full rounded-xl border border-line bg-ink px-3 py-3 text-base outline-none transition focus:border-brand/60" />
       </label>
 
-      <div id="pairInputs" class="grid gap-2.5">
+      <div id="pairInputs" class="grid grid-cols-1 gap-2.5">
         <!-- Pair A -->
         <div class="rounded-xl border border-line bg-elevated p-3" data-pair="a">
           <div class="mb-3 flex items-center justify-between gap-2">
@@ -143,10 +143,14 @@
             </div>
           </div>
           <div class="grid gap-2 sm:grid-cols-2">
-            <input type="text" name="player0" list="player-suggest" placeholder="Pemain 1" autocomplete="off" required maxlength="40"
-              class="w-full rounded-xl border border-line bg-ink px-3 py-2.5 text-base outline-none transition focus:border-brand/60" />
-            <input type="text" name="player1" list="player-suggest" placeholder="Pemain 2" autocomplete="off" required maxlength="40"
-              class="w-full rounded-xl border border-line bg-ink px-3 py-2.5 text-base outline-none transition focus:border-brand/60" />
+            <div class="relative">
+              <input type="text" name="player0" data-role="player" placeholder="Pemain 1" autocomplete="off" required maxlength="40"
+                class="w-full rounded-xl border border-line bg-ink px-3 py-2.5 text-base outline-none transition focus:border-brand/60" />
+            </div>
+            <div class="relative">
+              <input type="text" name="player1" data-role="player" placeholder="Pemain 2" autocomplete="off" required maxlength="40"
+                class="w-full rounded-xl border border-line bg-ink px-3 py-2.5 text-base outline-none transition focus:border-brand/60" />
+            </div>
           </div>
         </div>
 
@@ -163,10 +167,14 @@
             </div>
           </div>
           <div class="grid gap-2 sm:grid-cols-2">
-            <input type="text" name="player2" list="player-suggest" placeholder="Pemain 1" autocomplete="off" required maxlength="40"
-              class="w-full rounded-xl border border-line bg-ink px-3 py-2.5 text-base outline-none transition focus:border-brand/60" />
-            <input type="text" name="player3" list="player-suggest" placeholder="Pemain 2" autocomplete="off" required maxlength="40"
-              class="w-full rounded-xl border border-line bg-ink px-3 py-2.5 text-base outline-none transition focus:border-brand/60" />
+            <div class="relative">
+              <input type="text" name="player2" data-role="player" placeholder="Pemain 1" autocomplete="off" required maxlength="40"
+                class="w-full rounded-xl border border-line bg-ink px-3 py-2.5 text-base outline-none transition focus:border-brand/60" />
+            </div>
+            <div class="relative">
+              <input type="text" name="player3" data-role="player" placeholder="Pemain 2" autocomplete="off" required maxlength="40"
+                class="w-full rounded-xl border border-line bg-ink px-3 py-2.5 text-base outline-none transition focus:border-brand/60" />
+            </div>
           </div>
         </div>
       </div>
@@ -178,7 +186,7 @@
             <iconify-icon icon="mdi:plus" width="14"></iconify-icon> Kok
           </button>
         </div>
-        <div id="kokList" class="grid gap-2"></div>
+        <div id="kokList" class="grid grid-cols-1 gap-2"></div>
         <p class="text-xs text-soft" id="formCostHint">—</p>
       </div>
 
@@ -200,7 +208,7 @@
 
   <!-- ── Pengaturan dialog ── -->
   <dialog id="settingsDialog">
-    <form id="settingsForm" class="grid gap-4 rounded-xl2 border border-line bg-surface p-4 shadow-card">
+    <form id="settingsForm" class="grid grid-cols-1 gap-4 rounded-xl2 border border-line bg-surface p-4 shadow-card">
       <div class="flex items-center gap-2">
         <iconify-icon icon="mdi:cog" width="20" class="text-brand"></iconify-icon>
         <h2 class="text-base font-bold tracking-tight">Pengaturan</h2>
@@ -228,7 +236,7 @@
 
   <!-- ── Jenis kok dialog ── -->
   <dialog id="kokTypesDialog">
-    <div class="grid max-h-[calc(100dvh-20px)] w-[min(100vw-2rem,420px)] gap-4 overflow-auto rounded-xl2 border border-line bg-surface p-4 shadow-card">
+    <div class="grid grid-cols-1 max-h-[calc(100dvh-20px)] w-[min(100vw-2rem,420px)] gap-4 overflow-auto rounded-xl2 border border-line bg-surface p-4 shadow-card">
       <div class="flex items-center justify-between gap-2">
         <div class="flex items-center gap-2">
           <iconify-icon icon="game-icons:shuttlecock" width="20" class="text-brand"></iconify-icon>
@@ -240,7 +248,7 @@
       </div>
       <p class="text-xs text-soft">Katalog + stok. Saat catat main pilih jenis — stok otomatis berkurang, harga di-snapshot.</p>
 
-      <form id="kokTypeForm" class="grid gap-2 rounded-xl border border-line bg-elevated p-3">
+      <form id="kokTypeForm" class="grid grid-cols-1 gap-2 rounded-xl border border-line bg-elevated p-3">
         <input type="hidden" id="kokTypeEditId" value="" />
         <label class="grid gap-1">
           <span class="text-xs font-medium text-muted">Nama</span>
@@ -271,16 +279,16 @@
         </div>
       </form>
 
-      <div id="kokTypeList" class="grid gap-2"></div>
+      <div id="kokTypeList" class="grid grid-cols-1 gap-2"></div>
     </div>
   </dialog>
 
   <!-- ── Edit dialog ── -->
   <dialog id="editDialog">
-    <form method="dialog" id="editForm" class="grid max-h-[calc(100dvh-20px)] gap-3 overflow-auto rounded-xl2 border border-line bg-surface p-4 shadow-card">
+    <form method="dialog" id="editForm" class="grid grid-cols-1 max-h-[calc(100dvh-20px)] gap-3 overflow-auto rounded-xl2 border border-line bg-surface p-4 shadow-card">
       <div class="flex items-center gap-2">
         <iconify-icon icon="mdi:pencil-outline" width="20" class="text-brand"></iconify-icon>
-        <h2 class="text-base font-bold tracking-tight">Edit game</h2>
+        <h2 tabindex="-1" autofocus class="text-base font-bold tracking-tight outline-none">Edit game</h2>
       </div>
       <input type="hidden" id="editId" />
 
@@ -290,8 +298,8 @@
           class="w-full rounded-xl border border-line bg-ink px-3 py-3 text-base outline-none transition focus:border-brand/60" />
       </label>
 
-      <div class="grid gap-2.5" id="editPairs"></div>
-      <div id="editKoks" class="grid gap-2"></div>
+      <div class="grid grid-cols-1 gap-2.5" id="editPairs"></div>
+      <div id="editKoks" class="grid grid-cols-1 gap-2"></div>
 
       <label class="grid gap-1.5">
         <span class="text-xs font-medium text-muted">Catatan</span>
@@ -314,7 +322,7 @@
 
   <!-- ── Konfirmasi dialog (generik) ── -->
   <dialog id="confirmDialog">
-    <div class="grid max-w-[360px] gap-4 rounded-xl2 border border-line bg-surface p-4 shadow-card">
+    <div class="grid grid-cols-1 max-w-[360px] gap-4 rounded-xl2 border border-line bg-surface p-4 shadow-card">
       <div class="flex items-start gap-2.5">
         <iconify-icon icon="mdi:alert-circle-outline" width="22" class="mt-0.5 shrink-0 text-warn"></iconify-icon>
         <p id="confirmMessage" class="text-sm text-ink50">Yakin?</p>
@@ -329,7 +337,6 @@
   <!-- ── Toast stack ── -->
   <div id="toastStack" class="pointer-events-none fixed inset-x-0 bottom-[calc(16px+var(--safe-b))] z-50 mx-auto flex w-full max-w-[720px] flex-col items-stretch gap-2 px-4"></div>
 
-  <datalist id="player-suggest"></datalist>
-  <script src="/admin/app.js?v=9"></script>
+  <script src="/admin/app.js?v=10"></script>
 </body>
 </html>

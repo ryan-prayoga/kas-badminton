@@ -7,9 +7,9 @@
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <title>Kok Badminton</title>
-  <link rel="stylesheet" href="/styles.css?v=8" />
-  <script src="/vendor/iconify-icon.js?v=8"></script>
-  <script src="/vendor/icons.js?v=8"></script>
+  <link rel="stylesheet" href="/styles.css?v=10" />
+  <script src="/vendor/iconify-icon.js?v=10"></script>
+  <script src="/vendor/icons.js?v=10"></script>
 </head>
 <body class="text-ink50">
   <div class="mx-auto flex w-full max-w-[720px] flex-col gap-4 px-4 pb-[calc(40px+var(--safe-b))] pt-[calc(16px+var(--safe-t))]">
@@ -18,22 +18,22 @@
     <header class="relative overflow-hidden rounded-xl2 border border-line bg-surface shadow-card">
       <div class="pointer-events-none absolute -right-8 -top-10 h-32 w-32 rounded-full bg-brand/20 blur-3xl"></div>
       <div class="relative p-4 sm:p-5">
-        <div class="flex items-start justify-between gap-3">
-          <div class="flex items-center gap-3">
-            <div class="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-brand/15 text-brand ring-1 ring-brand/30">
-              <iconify-icon icon="mdi:badminton" width="24"></iconify-icon>
+        <div class="flex flex-wrap items-start justify-between gap-x-3 gap-y-2">
+          <div class="flex min-w-0 items-center gap-2.5 sm:gap-3">
+            <div class="grid h-10 w-10 shrink-0 place-items-center rounded-2xl bg-brand/15 text-brand ring-1 ring-brand/30 sm:h-11 sm:w-11">
+              <iconify-icon icon="mdi:badminton" width="22"></iconify-icon>
             </div>
-            <div>
+            <div class="min-w-0">
               <p class="text-[11px] font-semibold uppercase tracking-[0.16em] text-soft">Kas · Read-only</p>
-              <h1 class="text-2xl font-extrabold leading-tight tracking-tight">Kok Badminton</h1>
+              <h1 class="truncate text-xl font-extrabold leading-tight tracking-tight sm:text-2xl">Kok Badminton</h1>
             </div>
           </div>
-          <div class="flex shrink-0 items-center gap-1.5">
-            <button type="button" id="refreshBtn" title="Refresh" aria-label="Refresh" class="grid h-9 w-9 place-items-center rounded-xl border border-line bg-elevated text-muted transition active:scale-95 hover:text-ink50">
-              <iconify-icon icon="mdi:refresh" width="18"></iconify-icon>
+          <div class="ml-auto flex shrink-0 items-center gap-1.5">
+            <button type="button" id="refreshBtn" title="Refresh" aria-label="Refresh" class="grid h-8 w-8 place-items-center rounded-xl border border-line bg-elevated text-muted transition active:scale-95 hover:text-ink50 sm:h-9 sm:w-9">
+              <iconify-icon icon="mdi:refresh" width="16"></iconify-icon>
             </button>
-            <a href="/admin" class="inline-flex shrink-0 items-center gap-1.5 rounded-xl border border-line bg-elevated px-3 py-2 text-sm font-medium text-muted transition active:scale-95 hover:text-ink50 hover:border-line2">
-              <iconify-icon icon="mdi:shield-account-outline" width="18"></iconify-icon>
+            <a href="/admin" class="inline-flex shrink-0 items-center gap-1.5 rounded-xl border border-line bg-elevated px-2.5 py-2 text-sm font-medium text-muted transition active:scale-95 hover:text-ink50 hover:border-line2">
+              <iconify-icon icon="mdi:shield-account-outline" width="16"></iconify-icon>
               Admin
             </a>
           </div>
@@ -55,7 +55,7 @@
         </div>
         <p id="debtMeta" class="text-xs text-soft">—</p>
       </div>
-      <div id="debtList" class="grid gap-3">
+      <div id="debtList" class="grid grid-cols-1 gap-3">
         <div class="grid place-items-center gap-1 rounded-xl border border-dashed border-line bg-sunken py-6 text-soft">
           <iconify-icon icon="svg-spinners:180-ring" width="22"></iconify-icon>
           <span class="text-sm">Memuat…</span>
@@ -72,7 +72,7 @@
         </div>
         <p id="historyMeta" class="text-xs text-soft">—</p>
       </div>
-      <div id="gameList" class="grid gap-3">
+      <div id="gameList" class="grid grid-cols-1 gap-3">
         <div class="grid place-items-center gap-1 rounded-xl border border-dashed border-line bg-sunken py-6 text-soft">
           <iconify-icon icon="svg-spinners:180-ring" width="22"></iconify-icon>
           <span class="text-sm">Memuat…</span>
@@ -85,6 +85,6 @@
     </footer>
   </div>
 
-  <script src="/public.js?v=8"></script>
+  <script src="/public.js?v=10"></script>
 </body>
 </html>

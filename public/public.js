@@ -284,12 +284,12 @@ function groupGamesByDate(games) {
 function historyGroup(grp, open) {
   var allPaid = grp.unpaidCount === 0;
   var statusBadge = allPaid
-    ? '<span class="inline-flex items-center gap-1 rounded-full bg-ok/12 px-2 py-0.5 text-[11px] font-semibold text-ok"><iconify-icon icon="mdi:check-circle" width="13"></iconify-icon>Lunas</span>'
-    : '<span class="inline-flex items-center gap-1 rounded-full bg-warn/12 px-2 py-0.5 text-[11px] font-semibold text-warn"><iconify-icon icon="mdi:alert-circle-outline" width="13"></iconify-icon>' + grp.unpaidCount + ' belum</span>';
+    ? '<span class="inline-flex items-center gap-1 whitespace-nowrap rounded-full bg-ok/12 px-1.5 py-0.5 text-[11px] font-semibold text-ok"><iconify-icon icon="mdi:check-circle" width="13"></iconify-icon>Lunas</span>'
+    : '<span class="inline-flex items-center gap-1 whitespace-nowrap rounded-full bg-warn/12 px-1.5 py-0.5 text-[11px] font-semibold text-warn"><iconify-icon icon="mdi:alert-circle-outline" width="13"></iconify-icon>' + grp.unpaidCount + ' belum</span>';
 
   return (
     '<details class="history overflow-hidden rounded-xl2 border border-line bg-surface shadow-card"' + (open ? ' open' : '') + '>' +
-      '<summary class="flex select-none items-center justify-between gap-3 p-3.5">' +
+      '<summary class="flex select-none items-center justify-between gap-2 p-3.5">' +
         '<div class="min-w-0">' +
           '<div class="flex items-center gap-1.5 font-semibold">' +
             '<iconify-icon icon="mdi:calendar-blank-outline" width="16" class="text-soft shrink-0"></iconify-icon>' +
@@ -299,9 +299,9 @@ function historyGroup(grp, open) {
             '<iconify-icon icon="mdi:badminton" width="13"></iconify-icon>' + grp.games.length + ' main · total ' + fmt(grp.total) +
           '</div>' +
         '</div>' +
-        '<div class="flex shrink-0 items-center gap-2">' +
+        '<div class="flex shrink-0 items-center gap-1.5">' +
           statusBadge +
-          '<iconify-icon icon="mdi:chevron-down" width="20" class="debt-chevron text-soft"></iconify-icon>' +
+          '<iconify-icon icon="mdi:chevron-down" width="20" class="debt-chevron text-soft shrink-0"></iconify-icon>' +
         '</div>' +
       '</summary>' +
       '<div class="grid gap-3 border-t border-line p-3.5">' +
