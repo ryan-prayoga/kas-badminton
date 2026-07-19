@@ -130,6 +130,22 @@ function pairGroup(score, showScoreRow, chips) {
   );
 }
 
+function kokSummaryLabel(g) {
+  var names = [];
+  var seen = {};
+  (g.koks || []).forEach(function (k) {
+    var n = k && k.typeName ? String(k.typeName).trim() : '';
+    if (n && !seen[n]) {
+      seen[n] = true;
+      names.push(n);
+    }
+  });
+  var base = g.cost.kokCount + ' kok · ' + fmt(g.cost.perPerson) + '/org';
+  if (!names.length) return base;
+  if (names.length === 1) return base + ' · ' + names[0];
+  return base + ' · ' + names.length + ' jenis';
+}
+
 function gameCard(g) {
   var scoreA = (g.pairs && g.pairs.a && g.pairs.a.score) || (g.scores && g.scores.a) || '';
   var scoreB = (g.pairs && g.pairs.b && g.pairs.b.score) || (g.scores && g.scores.b) || '';
@@ -142,7 +158,7 @@ function gameCard(g) {
       '<div class="flex items-center justify-between gap-3">' +
         '<div class="flex min-w-0 items-center gap-1.5 text-xs text-muted">' +
           '<iconify-icon icon="game-icons:shuttlecock" width="13" class="shrink-0 text-soft"></iconify-icon>' +
-          '<span class="truncate">' + g.cost.kokCount + ' kok · ' + fmt(g.cost.perPerson) + '/org</span>' +
+          '<span class="truncate">' + escapeHtml(kokSummaryLabel(g)) + '</span>' +
         '</div>' +
         '<div class="shrink-0">' + statusBadge + '</div>' +
       '</div>' +

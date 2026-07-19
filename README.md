@@ -25,6 +25,8 @@ Butuh Postgres jalan (lokal atau tunnel ke VPS) dengan tabel `settings`, `player
 - 4 pemain = Pair A vs Pair B
 - Skor per pair
 - Multi-kok, harga per-kok di-snapshot (ganti default tidak ubah history)
+- Katalog jenis kok (nama + harga default + stok) di admin — pilih saat catat main
+- Stok otomatis berkurang saat dipakai di game, kembali saat kok/game dihapus
 - Toggle bayar per orang + ringkasan hutang
 
 ## Akses
