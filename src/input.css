@@ -51,6 +51,42 @@ details.history[open] .debt-chevron,
 details.panel[open] .debt-chevron { transform: rotate(180deg); }
 details.debt[open] > summary .debt-count { color: #fbbf24; }
 
+/* Bottom navbar */
+#bottomNav .navitem {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  padding: 9px 4px 7px;
+  color: #6b7280;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.1;
+  transition: color 0.15s ease, transform 0.1s ease;
+  -webkit-tap-highlight-color: transparent;
+}
+#bottomNav .navitem:active { transform: scale(0.94); }
+#bottomNav .navitem.is-active { color: #a3e635; }
+#bottomNav .navitem:focus-visible { outline: none; color: #a3e635; }
+
+/* Menu rows (tab Lainnya) */
+.menurow {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  width: 100%;
+  padding: 0.9rem 0.75rem;
+  border-radius: 0.75rem;
+  font-size: 0.95rem;
+  font-weight: 500;
+  transition: background 0.15s ease;
+  -webkit-tap-highlight-color: transparent;
+}
+.menurow:active { background: #1b1d22; transform: scale(0.99); }
+.menurow:hover { background: #1b1d22; }
+
 /* Dialog */
 dialog {
   border: none;

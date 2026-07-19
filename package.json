@@ -9,6 +9,7 @@
     "build:css": "npx -y tailwindcss@3.4.17 -c tailwind.config.js -i src/input.css -o public/styles.css --minify"
   },
   "dependencies": {
+    "@prasetya/qris": "^0.2.1",
     "cookie-parser": "^1.4.7",
     "cors": "^2.8.5",
     "dotenv": "^17.4.2",

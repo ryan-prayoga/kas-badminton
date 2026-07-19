@@ -1,5 +1,7 @@
 const state = {
   settings: { defaultPricePerPerson: 3000 },
+  qrisEnabled: false,
+  merchantQris: '',
   players: [],
   kokTypes: [],
   games: [],
@@ -82,7 +84,7 @@ function emptyState(icon, text) {
   );
 }
 
-// --- Toast + confirm dialog (replace alert()/confirm()) ---
+// --- Toast + confirm ---
 function toast(message, type) {
   type = type === 'success' ? 'success' : 'error';
   var stack = $('#toastStack');
@@ -169,6 +171,7 @@ function showLock(errMsg) {
   renderLockDots();
   $('#appRoot').hidden = true;
   $('#fabAdd').hidden = true;
+  $('#bottomNav').hidden = true;
   $('#lockScreen').hidden = false;
   var errEl = $('#lockError');
   if (errEl) errEl.textContent = errMsg || ' ';
@@ -183,7 +186,7 @@ function showLock(errMsg) {
 function showApp() {
   $('#lockScreen').hidden = true;
   $('#appRoot').hidden = false;
-  $('#fabAdd').hidden = false;
+  $('#bottomNav').hidden = false;
 }
 
 function submitPin() {
@@ -232,16 +235,18 @@ function wireLock() {
     }
   });
 
-  var logoutBtn = $('#logoutBtn');
-  if (logoutBtn) {
-    logoutBtn.onclick = function () {
-      api('/api/logout', { method: 'POST' }).finally(function () {
-        location.reload();
-      });
-    };
+  function doLogout() {
+    api('/api/logout', { method: 'POST' }).finally(function () {
+      location.reload();
+    });
   }
+  var logoutBtn = $('#logoutBtn');
+  if (logoutBtn) logoutBtn.onclick = doLogout;
+  var logoutBtn2 = $('#logoutBtn2');
+  if (logoutBtn2) logoutBtn2.onclick = doLogout;
 }
 
+// --- Player autocomplete ---
 function playerMatches(query) {
   var q = String(query || '').trim().toLowerCase();
   var list = state.players || [];
@@ -296,19 +301,14 @@ function pairCardHtml(opts) {
   var label = opts.label;
   var p1Name = opts.p1Name || '';
   var p2Name = opts.p2Name || '';
-  var score = opts.score || '';
   var namePrefix = opts.namePrefix || 'player';
   var i1 = pairKey === 'a' ? 0 : 2;
   var i2 = pairKey === 'a' ? 1 : 3;
   var badge = pairKey === 'a' ? 'bg-brand/10 text-brand' : 'bg-ok/10 text-ok';
   return (
     '<div class="rounded-xl border border-line bg-elevated p-3" data-pair="' + pairKey + '">' +
-      '<div class="mb-3 flex items-center justify-between gap-2">' +
+      '<div class="mb-3 flex items-center gap-2">' +
         '<span class="inline-flex items-center rounded-md ' + badge + ' px-2 py-1 text-xs font-bold uppercase tracking-wide">' + escapeHtml(label) + '</span>' +
-        '<div class="flex items-center gap-2">' +
-          '<span class="text-xs text-soft">Skor</span>' +
-          '<input type="text" inputmode="numeric" name="score' + pairKey.toUpperCase() + '" value="' + escapeAttr(score) + '" placeholder="21" maxlength="20" autocomplete="off" class="w-16 rounded-lg border border-line bg-ink px-2 py-2 text-center font-mono text-base outline-none transition focus:border-brand/60" />' +
-        '</div>' +
       '</div>' +
       '<div class="grid gap-2 sm:grid-cols-2">' +
         '<div class="relative"><input type="text" name="' + namePrefix + i1 + '" data-role="player" value="' + escapeAttr(p1Name) + '" placeholder="Pemain 1" autocomplete="off" required maxlength="40" class="' + FIELD_CLS + '" /></div>' +
@@ -324,29 +324,20 @@ function readPairsFrom(container, namePrefix) {
     var el = container.querySelector('input[name="' + namePrefix + i + '"]');
     return el ? el.value.trim() : '';
   });
-  var scoreAEl = container.querySelector('input[name="scoreA"]');
-  var scoreBEl = container.querySelector('input[name="scoreB"]');
   return {
-    pairs: {
-      a: [names[0], names[1]],
-      b: [names[2], names[3]],
-    },
-    scores: {
-      a: scoreAEl ? scoreAEl.value.trim() : '',
-      b: scoreBEl ? scoreBEl.value.trim() : '',
-    },
+    pairs: { a: [names[0], names[1]], b: [names[2], names[3]] },
     names: names,
   };
 }
 
+// --- Kok types ---
 function activeKokTypes() {
-  return (state.kokTypes || []).filter(function (t) {
-    return t.active !== false;
-  });
+  return (state.kokTypes || []).filter(function (t) { return t.active !== false; });
 }
 
 function defaultKokEntry() {
-  var types = activeKokTypes();
+  var types = activeKokTypes().filter(function (t) { return (Number(t.stock) || 0) > 0; });
+  if (!types.length) types = activeKokTypes();
   if (types.length) {
     return {
       typeId: types[0].id,
@@ -369,26 +360,20 @@ function typeOptionsHtml(selectedId, snapshotName) {
     '</option>';
   types.forEach(function (t) {
     var stock = Number(t.stock) || 0;
+    var out = stock <= 0 && selectedId !== t.id;
     opts +=
-      '<option value="' +
-      escapeAttr(t.id) +
-      '"' +
+      '<option value="' + escapeAttr(t.id) + '"' +
       (selectedId === t.id ? ' selected' : '') +
+      (out ? ' disabled' : '') +
       '>' +
-      escapeHtml(t.name) +
-      ' · ' +
-      fmt(t.pricePerPerson) +
-      ' · stok ' +
-      stock +
+      escapeHtml(t.name) + ' · ' + fmt(t.pricePerPerson) +
+      (stock <= 0 ? ' · habis' : ' · stok ' + stock) +
       '</option>';
   });
   if (selectedId && !types.some(function (t) { return t.id === selectedId; }) && snapshotName) {
     opts +=
-      '<option value="' +
-      escapeAttr(selectedId) +
-      '" selected>' +
-      escapeHtml(snapshotName) +
-      ' (lama)</option>';
+      '<option value="' + escapeAttr(selectedId) + '" selected>' +
+      escapeHtml(snapshotName) + ' (lama)</option>';
   }
   return opts;
 }
@@ -418,18 +403,12 @@ function kokRowHtml(i, kok, disableRemove) {
 function updateFormCostHint() {
   var el = $('#formCostHint');
   if (!el) return;
-  var totalPer = state.formKoks.reduce(function (s, k) {
-    return s + Number(k.pricePerPerson || 0);
-  }, 0);
+  var totalPer = state.formKoks.reduce(function (s, k) { return s + Number(k.pricePerPerson || 0); }, 0);
   el.textContent = state.formKoks.length + ' kok · ' + fmt(totalPer) + ' / orang · total ' + fmt(totalPer * 4);
 }
 
 function applyTypeToKok(kok, typeId) {
-  if (!typeId) {
-    kok.typeId = null;
-    kok.typeName = null;
-    return;
-  }
+  if (!typeId) { kok.typeId = null; kok.typeName = null; return; }
   var t = (state.kokTypes || []).filter(function (x) { return x.id === typeId; })[0];
   if (t) {
     kok.typeId = t.id;
@@ -488,9 +467,7 @@ function resetKokTypeForm() {
   if (stockEl) stockEl.value = 0;
   $('#kokTypeFormCancel').hidden = true;
   var submit = $('#kokTypeFormSubmit');
-  if (submit) {
-    submit.innerHTML = '<iconify-icon icon="mdi:plus" width="16"></iconify-icon> Tambah';
-  }
+  if (submit) submit.innerHTML = '<iconify-icon icon="mdi:plus" width="16"></iconify-icon> Tambah';
 }
 
 function stockBadgeClass(stock) {
@@ -541,9 +518,7 @@ function renderKokTypeList() {
 }
 
 function syncKokTypesFromResponse(data) {
-  if (data && Array.isArray(data.kokTypes)) {
-    state.kokTypes = data.kokTypes;
-  }
+  if (data && Array.isArray(data.kokTypes)) state.kokTypes = data.kokTypes;
 }
 
 function openKokTypesDialog() {
@@ -552,14 +527,12 @@ function openKokTypesDialog() {
   $('#kokTypesDialog').showModal();
 }
 
+// --- Belum bayar ---
 function groupDebtItems(items) {
   var map = {};
   var order = [];
   (items || []).forEach(function (it) {
-    if (!map[it.date]) {
-      map[it.date] = { date: it.date, total: 0, count: 0, koks: 0 };
-      order.push(it.date);
-    }
+    if (!map[it.date]) { map[it.date] = { date: it.date, total: 0, count: 0, koks: 0 }; order.push(it.date); }
     map[it.date].total += Number(it.amount) || 0;
     map[it.date].count += 1;
     map[it.date].koks += Number(it.kokCount) || 0;
@@ -578,12 +551,8 @@ function debtRow(g) {
         '<span class="shrink-0 font-mono text-sm font-semibold text-warn">' + fmt(g.total) + '</span>' +
       '</div>' +
       '<div class="mt-1 flex items-center gap-3 text-[11px] text-soft">' +
-        '<span class="flex items-center gap-1">' +
-          '<iconify-icon icon="mdi:badminton" width="13"></iconify-icon>' + g.count + ' main' +
-        '</span>' +
-        '<span class="flex items-center gap-1">' +
-          '<iconify-icon icon="game-icons:shuttlecock" width="12"></iconify-icon>' + g.koks + ' kok' +
-        '</span>' +
+        '<span class="flex items-center gap-1"><iconify-icon icon="mdi:badminton" width="13"></iconify-icon>' + g.count + ' main</span>' +
+        '<span class="flex items-center gap-1"><iconify-icon icon="game-icons:shuttlecock" width="12"></iconify-icon>' + g.koks + ' kok</span>' +
         dateBadge(g.date) +
       '</div>' +
     '</div>'
@@ -592,6 +561,12 @@ function debtRow(g) {
 
 function debtCard(d) {
   var grouped = groupDebtItems(d.items);
+  var carryLine = d.carry > 0
+    ? '<div class="mt-0.5 text-[11px] text-ok">dicicil ' + fmt(d.carry) + ' dari ' + fmt(d.owedGross) + '</div>'
+    : '';
+  var qrisBtn = state.qrisEnabled
+    ? '<button type="button" data-action="qris" data-name="' + escapeAttr(d.name) + '" data-amount="' + d.total + '" class="inline-flex items-center justify-center gap-1.5 rounded-xl border border-line bg-elevated px-3 py-2.5 text-sm font-medium transition active:scale-95"><iconify-icon icon="mdi:qrcode" width="16"></iconify-icon> QRIS</button>'
+    : '';
   return (
     '<details class="debt rounded-xl2 border border-warn/25 bg-warn/[0.06] p-3.5">' +
       '<summary class="flex select-none items-center justify-between gap-3">' +
@@ -602,6 +577,7 @@ function debtCard(d) {
           '<div class="min-w-0">' +
             '<div class="truncate font-semibold">' + escapeHtml(d.name) + '</div>' +
             '<div class="debt-count text-xs text-muted">' + d.items.length + ' game belum lunas</div>' +
+            carryLine +
           '</div>' +
         '</div>' +
         '<div class="flex shrink-0 items-center gap-2">' +
@@ -612,6 +588,12 @@ function debtCard(d) {
       '<div class="mt-3 grid gap-px overflow-hidden rounded-lg border border-warn/15 bg-sunken">' +
         grouped.map(debtRow).join('') +
       '</div>' +
+      '<div class="mt-3 grid grid-cols-2 gap-2">' +
+        '<button type="button" data-action="pay" data-name="' + escapeAttr(d.name) + '" data-amount="' + d.total + '" class="inline-flex items-center justify-center gap-1.5 rounded-xl bg-brand px-3 py-2.5 text-sm font-bold text-ink transition active:scale-95 hover:bg-brand-soft"><iconify-icon icon="mdi:cash-plus" width="16"></iconify-icon> Bayar sebagian</button>' +
+        '<button type="button" data-action="settle" data-name="' + escapeAttr(d.name) + '" class="inline-flex items-center justify-center gap-1.5 rounded-xl border border-ok/40 bg-ok/10 px-3 py-2.5 text-sm font-medium text-ok transition active:scale-95"><iconify-icon icon="mdi:check-all" width="16"></iconify-icon> Lunasin semua</button>' +
+        qrisBtn +
+        '<button type="button" data-action="share" data-name="' + escapeAttr(d.name) + '" class="inline-flex items-center justify-center gap-1.5 rounded-xl border border-line bg-elevated px-3 py-2.5 text-sm font-medium transition active:scale-95"><iconify-icon icon="mdi:share-variant-outline" width="16"></iconify-icon> Share</button>' +
+      '</div>' +
     '</details>'
   );
 }
@@ -620,26 +602,22 @@ function renderDebt() {
   var list = $('#debtList');
   var meta = $('#debtMeta');
   if (!list || !meta) return;
-
   var total = state.debtSummary.reduce(function (s, d) { return s + d.total; }, 0);
   meta.textContent = state.debtSummary.length
     ? state.debtSummary.length + ' orang · ' + fmt(total)
     : 'Semua lunas';
-
   if (!state.debtSummary.length) {
     list.innerHTML = emptyState('mdi:emoticon-happy-outline', 'Semua sudah bayar 🎉');
     return;
   }
-
   list.innerHTML = state.debtSummary.map(debtCard).join('');
 }
 
+// --- Riwayat cards ---
 function playerChip(g, p, index) {
   if (!p) p = { name: '—', paid: false };
   var paid = !!p.paid;
-  var cls = paid
-    ? 'border-ok/30 bg-ok/10 text-ok'
-    : 'border-warn/30 bg-warn/10 text-warn';
+  var cls = paid ? 'border-ok/30 bg-ok/10 text-ok' : 'border-warn/30 bg-warn/10 text-warn';
   return (
     '<button type="button" data-action="toggle-paid" data-id="' + g.id + '" data-index="' + index + '" class="flex w-full min-w-0 items-center gap-2 rounded-lg border ' + cls + ' px-2.5 py-3 text-left transition active:scale-[0.98]">' +
       '<iconify-icon icon="' + (paid ? 'mdi:check-circle' : 'mdi:clock-outline') + '" width="18" class="shrink-0"></iconify-icon>' +
@@ -648,15 +626,8 @@ function playerChip(g, p, index) {
   );
 }
 
-function pairGroup(score, showScoreRow, chips) {
-  return (
-    '<div class="grid min-w-0 gap-1.5">' +
-      (showScoreRow
-        ? '<div class="min-h-[1.25rem] text-center font-mono text-sm font-bold leading-5 text-ink50">' + escapeHtml(score) + '</div>'
-        : '') +
-      chips +
-    '</div>'
-  );
+function pairGroup(chips) {
+  return '<div class="grid min-w-0 gap-1.5">' + chips + '</div>';
 }
 
 function kokSummaryLabel(g) {
@@ -664,10 +635,7 @@ function kokSummaryLabel(g) {
   var seen = {};
   (g.koks || []).forEach(function (k) {
     var n = k && k.typeName ? String(k.typeName).trim() : '';
-    if (n && !seen[n]) {
-      seen[n] = true;
-      names.push(n);
-    }
+    if (n && !seen[n]) { seen[n] = true; names.push(n); }
   });
   var base = g.cost.kokCount + ' kok · ' + fmt(g.cost.perPerson) + '/org';
   if (!names.length) return base;
@@ -676,8 +644,6 @@ function kokSummaryLabel(g) {
 }
 
 function adminGameCard(g) {
-  var scoreA = (g.pairs && g.pairs.a && g.pairs.a.score) || (g.scores && g.scores.a) || '';
-  var scoreB = (g.pairs && g.pairs.b && g.pairs.b.score) || (g.scores && g.scores.b) || '';
   var statusBadge = g.summary.allPaid
     ? '<span class="inline-flex items-center gap-1 rounded-full bg-ok/12 px-2 py-0.5 text-[11px] font-semibold text-ok"><iconify-icon icon="mdi:check-circle" width="13"></iconify-icon>Lunas</span>'
     : '<span class="inline-flex items-center gap-1 rounded-full bg-warn/12 px-2 py-0.5 text-[11px] font-semibold text-warn"><iconify-icon icon="mdi:alert-circle-outline" width="13"></iconify-icon>' + g.summary.unpaidCount + ' belum</span>';
@@ -695,16 +661,11 @@ function adminGameCard(g) {
         '</div>' +
         '<div class="shrink-0">' + statusBadge + '</div>' +
       '</div>' +
-      (function () {
-        var hasScore = !!(scoreA || scoreB);
-        return (
-          '<div class="mt-2.5 grid grid-cols-[1fr_auto_1fr] items-center gap-x-2 gap-y-1.5 sm:gap-x-2.5">' +
-            pairGroup(scoreA, hasScore, playerChip(g, g.players[0], 0) + playerChip(g, g.players[1], 1)) +
-            '<div class="text-center text-[10px] font-bold uppercase tracking-wider text-soft">vs</div>' +
-            pairGroup(scoreB, hasScore, playerChip(g, g.players[2], 2) + playerChip(g, g.players[3], 3)) +
-          '</div>'
-        );
-      })() +
+      '<div class="mt-2.5 grid grid-cols-[1fr_auto_1fr] items-center gap-x-2 gap-y-1.5 sm:gap-x-2.5">' +
+        pairGroup(playerChip(g, g.players[0], 0) + playerChip(g, g.players[1], 1)) +
+        '<div class="text-center text-[10px] font-bold uppercase tracking-wider text-soft">vs</div>' +
+        pairGroup(playerChip(g, g.players[2], 2) + playerChip(g, g.players[3], 3)) +
+      '</div>' +
       (g.notes
         ? '<div class="mt-2.5 flex items-start gap-1.5 rounded-lg bg-sunken px-2.5 py-2 text-xs text-muted">' +
             '<iconify-icon icon="mdi:note-text-outline" width="14" class="mt-0.5 shrink-0 text-soft"></iconify-icon>' +
@@ -731,10 +692,7 @@ function groupGamesByDate(games) {
   var map = {};
   var order = [];
   games.forEach(function (g) {
-    if (!map[g.date]) {
-      map[g.date] = { date: g.date, games: [], total: 0, unpaidCount: 0 };
-      order.push(g.date);
-    }
+    if (!map[g.date]) { map[g.date] = { date: g.date, games: [], total: 0, unpaidCount: 0 }; order.push(g.date); }
     var grp = map[g.date];
     grp.games.push(g);
     grp.total += g.cost.total;
@@ -750,7 +708,7 @@ function historyGroup(grp, open) {
     : '<span class="inline-flex items-center gap-1 whitespace-nowrap rounded-full bg-warn/12 px-1.5 py-0.5 text-[11px] font-semibold text-warn"><iconify-icon icon="mdi:alert-circle-outline" width="13"></iconify-icon>' + grp.unpaidCount + ' belum</span>';
 
   return (
-    '<details class="history overflow-hidden rounded-xl2 border border-line bg-surface shadow-card"' + (open ? ' open' : '') + '>' +
+    '<details class="history overflow-hidden rounded-xl2 border border-line bg-surface shadow-card" data-date="' + escapeAttr(grp.date) + '"' + (open ? ' open' : '') + '>' +
       '<summary class="flex select-none items-center justify-between gap-2 p-3.5">' +
         '<div class="min-w-0">' +
           '<div class="flex items-center gap-1.5 font-semibold">' +
@@ -777,32 +735,257 @@ function renderGames() {
   var list = $('#gameList');
   var meta = $('#historyMeta');
   if (!list || !meta) return;
-
   meta.textContent = state.games.length ? state.games.length + ' game' : 'Kosong';
-
   if (!state.games.length) {
     list.innerHTML = emptyState('mdi:badminton', 'Belum ada catatan.');
     return;
   }
-
+  var openDates = {};
+  $$('#gameList details.history[open]').forEach(function (el) {
+    openDates[el.getAttribute('data-date')] = true;
+  });
+  var hadAny = Object.keys(openDates).length > 0;
   var groups = groupGamesByDate(state.games);
-  list.innerHTML = groups.map(function (grp, i) { return historyGroup(grp, i === 0); }).join('');
+  list.innerHTML = groups.map(function (grp, i) {
+    var open = hadAny ? !!openDates[grp.date] : i === 0;
+    return historyGroup(grp, open);
+  }).join('');
+}
+
+// --- Statistik ---
+function statCard(opts) {
+  return (
+    '<div class="rounded-xl2 border border-line bg-surface shadow-card p-3.5 animate-rise">' +
+      '<div class="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-[0.12em] text-soft">' +
+        '<iconify-icon icon="' + opts.icon + '" width="15" class="' + opts.iconClass + '"></iconify-icon>' +
+        escapeHtml(opts.label) +
+      '</div>' +
+      '<div class="mt-1.5 font-mono text-xl font-bold tracking-tight ' + (opts.valueClass || '') + '">' + opts.value + '</div>' +
+      (opts.sub ? '<div class="mt-0.5 text-xs text-soft">' + escapeHtml(opts.sub) + '</div>' : '') +
+    '</div>'
+  );
+}
+
+function renderStats() {
+  var strip = $('#statStrip');
+  if (!strip) return;
+  var games = state.games;
+  var totalDebt = state.debtSummary.reduce(function (s, d) { return s + d.total; }, 0);
+  var totalKas = games.reduce(function (s, g) { return s + (g.cost ? g.cost.total : 0); }, 0);
+  var totalKok = games.reduce(function (s, g) { return s + (g.cost ? g.cost.kokCount : 0); }, 0);
+  strip.innerHTML =
+    statCard({ icon: 'mdi:cash-multiple', iconClass: 'text-warn', label: 'Belum bayar', value: fmt(totalDebt), valueClass: totalDebt ? 'text-warn' : 'text-ok', sub: state.debtSummary.length ? state.debtSummary.length + ' orang' : 'Semua lunas' }) +
+    statCard({ icon: 'mdi:badminton', iconClass: 'text-brand', label: 'Total main', value: String(games.length), sub: games.length ? 'game tercatat' : 'belum ada' }) +
+    statCard({ icon: 'mdi:cash-register', iconClass: 'text-ok', label: 'Total kas', value: fmt(totalKas), sub: 'akumulasi biaya' }) +
+    statCard({ icon: 'game-icons:shuttlecock', iconClass: 'text-brand', label: 'Kok terpakai', value: String(totalKok), sub: 'total kok' });
+}
+
+function renderStatPlayers() {
+  var list = $('#statPlayers');
+  if (!list) return;
+  var map = {};
+  state.games.forEach(function (g) {
+    (g.players || []).forEach(function (p) {
+      if (!p.name) return;
+      if (!map[p.name]) map[p.name] = { name: p.name, main: 0, keluar: 0, nunggak: 0 };
+      var s = map[p.name];
+      s.main += 1;
+      s.keluar += g.cost.perPerson;
+      if (!p.paid) s.nunggak += g.cost.perPerson;
+    });
+  });
+  var rows = Object.keys(map).map(function (k) { return map[k]; }).sort(function (a, b) {
+    return b.nunggak - a.nunggak || b.main - a.main || a.name.localeCompare(b.name, 'id');
+  });
+  if (!rows.length) { list.innerHTML = emptyState('mdi:account-off-outline', 'Belum ada pemain.'); return; }
+  list.innerHTML = rows.map(function (s) {
+    return (
+      '<div class="flex items-center gap-3 rounded-xl border border-line bg-elevated p-3">' +
+        '<div class="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-brand/15 font-bold text-brand">' + escapeHtml((s.name || '?').slice(0, 1).toUpperCase()) + '</div>' +
+        '<div class="min-w-0 flex-1">' +
+          '<div class="truncate font-semibold">' + escapeHtml(s.name) + '</div>' +
+          '<div class="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[11px] text-soft">' +
+            '<span>' + s.main + ' main</span><span>keluar ' + fmt(s.keluar) + '</span>' +
+          '</div>' +
+        '</div>' +
+        '<div class="shrink-0 text-right">' +
+          (s.nunggak > 0
+            ? '<div class="font-mono text-sm font-bold text-warn">' + fmt(s.nunggak) + '</div><div class="text-[10px] text-soft">nunggak</div>'
+            : '<div class="font-mono text-sm font-bold text-ok">Lunas</div>') +
+        '</div>' +
+      '</div>'
+    );
+  }).join('');
+}
+
+function renderAll() {
+  renderDebt();
+  renderGames();
+  renderStats();
+  renderStatPlayers();
+  if ($('#kokTypesDialog') && $('#kokTypesDialog').open) renderKokTypeList();
+}
+
+function applyServerState(data) {
+  if (!data) return;
+  if (data.settings) {
+    state.settings = { defaultPricePerPerson: data.settings.defaultPricePerPerson };
+    state.qrisEnabled = !!data.settings.qrisEnabled;
+    if (data.settings.merchantQris !== undefined) state.merchantQris = data.settings.merchantQris;
+    var priceEl = $('#defaultPrice');
+    if (priceEl) priceEl.value = data.settings.defaultPricePerPerson;
+  }
+  if (data.players) state.players = data.players;
+  if (data.kokTypes) state.kokTypes = data.kokTypes;
+  if (data.games) state.games = data.games;
+  if (data.debtSummary) state.debtSummary = data.debtSummary;
+  renderAll();
 }
 
 function refresh() {
-  return api('/api/bootstrap').then(function (data) {
-    state.settings = data.settings;
-    state.players = data.players || [];
-    state.kokTypes = data.kokTypes || [];
-    state.games = data.games || [];
-    state.debtSummary = data.debtSummary || [];
-    var priceEl = $('#defaultPrice');
-    if (priceEl) priceEl.value = data.settings.defaultPricePerPerson;
-    renderDebt();
-    renderGames();
-    if ($('#kokTypesDialog') && $('#kokTypesDialog').open) {
-      renderKokTypeList();
-    }
+  return api('/api/bootstrap').then(applyServerState);
+}
+
+// --- Share / QRIS ---
+function doShare(text) {
+  if (navigator.share) { navigator.share({ text: text }).catch(function () {}); return; }
+  window.open('https://wa.me/?text=' + encodeURIComponent(text), '_blank');
+}
+
+function copyText(text) {
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(text).then(function () { toast('Disalin.', 'success'); }, function () { toast('Gagal salin.', 'error'); });
+  } else {
+    toast('Clipboard tidak didukung.', 'error');
+  }
+}
+
+function debtShareText(d) {
+  var lines = ['Tagihan kok badminton — ' + d.name, 'Sisa: ' + fmt(d.total)];
+  if (d.carry > 0) lines.push('(sudah dicicil ' + fmt(d.carry) + ' dari ' + fmt(d.owedGross) + ')');
+  groupDebtItems(d.items).forEach(function (g) {
+    lines.push('• ' + fmtDate(g.date) + ' — ' + fmt(g.total) + ' (' + g.count + ' main)');
+  });
+  if (state.qrisEnabled) lines.push('Bisa bayar QRIS, buka: ' + location.origin);
+  return lines.join('\n');
+}
+
+function shareAllText() {
+  if (!state.debtSummary.length) return 'Semua sudah lunas 🎉';
+  var total = state.debtSummary.reduce(function (s, d) { return s + d.total; }, 0);
+  var lines = ['Rekap tagihan kok badminton', 'Total belum bayar: ' + fmt(total), ''];
+  state.debtSummary.forEach(function (d) { lines.push('• ' + d.name + ': ' + fmt(d.total)); });
+  if (state.qrisEnabled) lines.push('', 'Bayar QRIS: ' + location.origin);
+  return lines.join('\n');
+}
+
+var qrisPayload = '';
+var qrisName = '';
+
+function renderQr(container, text) {
+  container.innerHTML = '';
+  try {
+    var qr = qrcode(0, 'M');
+    qr.addData(text);
+    qr.make();
+    container.innerHTML = qr.createSvgTag({ cellSize: 6, margin: 1, scalable: true });
+    var svg = container.querySelector('svg');
+    if (svg) { svg.style.width = '100%'; svg.style.height = 'auto'; svg.style.maxWidth = '260px'; }
+  } catch (e) {
+    container.innerHTML = '<span class="text-sm text-danger">Gagal render QR</span>';
+  }
+}
+
+function openQris(name, amount) {
+  qrisPayload = '';
+  qrisName = name || '';
+  $('#qrisWho').textContent = name ? 'Untuk: ' + name : 'Pembayaran';
+  $('#qrisAmount').value = amount > 0 ? amount : '';
+  $('#qrisCanvas').innerHTML = '<span class="text-sm text-soft">Isi nominal lalu "Buat QR"</span>';
+  $('#qrisDialog').showModal();
+  if (amount > 0) generateQris();
+}
+
+function generateQris() {
+  var amount = Math.round(Number($('#qrisAmount').value) || 0);
+  if (!(amount > 0)) { toast('Nominal harus > 0', 'error'); return; }
+  var canvas = $('#qrisCanvas');
+  canvas.innerHTML = '<iconify-icon icon="svg-spinners:180-ring" width="24" class="text-soft"></iconify-icon>';
+  api('/api/qris', { method: 'POST', body: JSON.stringify({ amount: amount }) })
+    .then(function (data) {
+      qrisPayload = data.payload;
+      renderQr(canvas, data.payload);
+      $('#qrisHint').textContent = 'Nominal ' + fmt(data.amount) + ' · scan pakai app apapun yang support QRIS.';
+    })
+    .catch(function (err) {
+      canvas.innerHTML = '<span class="text-sm text-danger">' + escapeHtml(err.message) + '</span>';
+    });
+}
+
+// --- Bayar sebagian ---
+function openPay(name, amount) {
+  $('#payName').value = name;
+  $('#payWho').textContent = name + ' · sisa ' + fmt(amount);
+  $('#payAmount').value = amount > 0 ? amount : '';
+  $('#payDialog').showModal();
+}
+
+function submitPay(name, amount) {
+  return api('/api/players/pay', { method: 'POST', body: JSON.stringify({ name: name, amount: amount }) })
+    .then(function (data) { applyServerState(data); toast('Pembayaran dicatat.', 'success'); })
+    .catch(function (err) { toast(err.message, 'error'); });
+}
+
+// --- Tabs ---
+function updateFabVisibility() {
+  var tab = document.body.getAttribute('data-tab') || 'riwayat';
+  $('#fabAdd').hidden = !(tab === 'riwayat' || tab === 'bayar');
+}
+
+function switchTab(name) {
+  document.body.setAttribute('data-tab', name);
+  $$('[data-panel]').forEach(function (el) { el.hidden = el.getAttribute('data-panel') !== name; });
+  $$('#bottomNav .navitem').forEach(function (b) {
+    b.classList.toggle('is-active', b.getAttribute('data-tab') === name);
+  });
+  updateFabVisibility();
+  try { sessionStorage.setItem('kok-admin-tab', name); } catch (e) {}
+  window.scrollTo(0, 0);
+}
+
+function wireTabs() {
+  $('#bottomNav').onclick = function (e) {
+    var btn = e.target.closest('.navitem');
+    if (!btn) return;
+    switchTab(btn.getAttribute('data-tab'));
+  };
+  var saved = 'riwayat';
+  try { saved = sessionStorage.getItem('kok-admin-tab') || 'riwayat'; } catch (e) {}
+  switchTab(saved);
+}
+
+// --- Form helpers ---
+function clearFormPairs() {
+  [0, 1, 2, 3].forEach(function (i) {
+    var el = $('#gameForm input[name="player' + i + '"]');
+    if (el) el.value = '';
+  });
+}
+
+function openGameDialog() {
+  var dateEl = $('#date');
+  if (dateEl && !dateEl.value) dateEl.value = todayLocal();
+  $('#gameDialog').showModal();
+}
+
+function payloadKoks(list) {
+  return (list || []).map(function (k) {
+    return {
+      id: k.id || undefined,
+      typeId: k.typeId || null,
+      typeName: k.typeName || null,
+      pricePerPerson: Number(k.pricePerPerson) || 0,
+    };
   });
 }
 
@@ -812,26 +995,11 @@ function openEdit(game) {
   $('#editDate').value = game.date;
   $('#editNotes').value = game.notes || '';
 
-  var scores = game.scores || {};
   var root = $('#editPairs');
   root.innerHTML = [
-    pairCardHtml({
-      pairKey: 'a',
-      label: 'Pair A',
-      p1Name: game.players[0] && game.players[0].name,
-      p2Name: game.players[1] && game.players[1].name,
-      score: scores.a || (game.pairs && game.pairs.a && game.pairs.a.score) || '',
-      namePrefix: 'editPlayer',
-    }),
+    pairCardHtml({ pairKey: 'a', label: 'Pair A', p1Name: game.players[0] && game.players[0].name, p2Name: game.players[1] && game.players[1].name, namePrefix: 'editPlayer' }),
     '<div class="grid place-items-center"><span class="grid h-7 w-7 place-items-center rounded-full border border-line bg-surface text-[10px] font-bold tracking-wider text-soft">VS</span></div>',
-    pairCardHtml({
-      pairKey: 'b',
-      label: 'Pair B',
-      p1Name: game.players[2] && game.players[2].name,
-      p2Name: game.players[3] && game.players[3].name,
-      score: scores.b || (game.pairs && game.pairs.b && game.pairs.b.score) || '',
-      namePrefix: 'editPlayer',
-    }),
+    pairCardHtml({ pairKey: 'b', label: 'Pair B', p1Name: game.players[2] && game.players[2].name, p2Name: game.players[3] && game.players[3].name, namePrefix: 'editPlayer' }),
   ].join('');
   wireAllPlayerInputs(root);
 
@@ -866,7 +1034,6 @@ function renderEditKoks() {
     state.edit.koks.splice(Number(row.getAttribute('data-i')), 1);
     renderEditKoks();
   };
-
   list.onchange = function (e) {
     if (!e.target || e.target.getAttribute('data-role') !== 'type') return;
     var row = e.target.closest('[data-i]');
@@ -875,7 +1042,6 @@ function renderEditKoks() {
     applyTypeToKok(state.edit.koks[i], e.target.value || null);
     renderEditKoks();
   };
-
   list.oninput = function (e) {
     if (!e.target || e.target.getAttribute('data-role') !== 'price') return;
     var row = e.target.closest('[data-i]');
@@ -884,64 +1050,20 @@ function renderEditKoks() {
   };
 }
 
-function clearFormPairs() {
-  [0, 1, 2, 3].forEach(function (i) {
-    var el = $('#gameForm input[name="player' + i + '"]');
-    if (el) el.value = '';
-  });
-  var sa = $('#gameForm input[name="scoreA"]');
-  var sb = $('#gameForm input[name="scoreB"]');
-  if (sa) sa.value = '';
-  if (sb) sb.value = '';
-}
-
-function openGameDialog() {
-  var dateEl = $('#date');
-  if (dateEl && !dateEl.value) dateEl.value = todayLocal();
-  $('#gameDialog').showModal();
-}
-
-function payloadKoks(list) {
-  return (list || []).map(function (k) {
-    return {
-      id: k.id || undefined,
-      typeId: k.typeId || null,
-      typeName: k.typeName || null,
-      pricePerPerson: Number(k.pricePerPerson) || 0,
-    };
-  });
-}
-
 function wire() {
   state.formKoks = [defaultKokEntry()];
   renderFormKoks();
   bindFormKoks();
   wireAllPlayerInputs($('#gameForm'));
+  wireTabs();
 
-  $('#fabAdd').onclick = function () {
-    openGameDialog();
-  };
+  $('#fabAdd').onclick = openGameDialog;
+  $('#cancelGameForm').onclick = function () { $('#gameDialog').close(); };
+  $('#addKok').onclick = function () { state.formKoks.push(defaultKokEntry()); renderFormKoks(); };
 
-  $('#cancelGameForm').onclick = function () {
-    $('#gameDialog').close();
-  };
-
-  $('#addKok').onclick = function () {
-    state.formKoks.push(defaultKokEntry());
-    renderFormKoks();
-  };
-
-  $('#kokTypesBtn').onclick = function () {
-    openKokTypesDialog();
-  };
-
-  $('#closeKokTypes').onclick = function () {
-    $('#kokTypesDialog').close();
-  };
-
-  $('#kokTypeFormCancel').onclick = function () {
-    resetKokTypeForm();
-  };
+  $('#kokTypesBtn').onclick = openKokTypesDialog;
+  $('#closeKokTypes').onclick = function () { $('#kokTypesDialog').close(); };
+  $('#kokTypeFormCancel').onclick = resetKokTypeForm;
 
   $('#kokTypeForm').onsubmit = function (e) {
     e.preventDefault();
@@ -954,18 +1076,14 @@ function wire() {
     var req = editId
       ? api('/api/kok-types/' + editId, { method: 'PATCH', body: JSON.stringify(body) })
       : api('/api/kok-types', { method: 'POST', body: JSON.stringify(body) });
-    req
-      .then(function (data) {
-        syncKokTypesFromResponse(data);
-        resetKokTypeForm();
-        renderKokTypeList();
-        renderFormKoks();
-        if (state.edit) renderEditKoks();
-        toast(editId ? 'Jenis kok diupdate.' : 'Jenis kok ditambah.', 'success');
-      })
-      .catch(function (err) {
-        toast(err.message, 'error');
-      });
+    req.then(function (data) {
+      syncKokTypesFromResponse(data);
+      resetKokTypeForm();
+      renderKokTypeList();
+      renderFormKoks();
+      if (state.edit) renderEditKoks();
+      toast(editId ? 'Jenis kok diupdate.' : 'Jenis kok ditambah.', 'success');
+    }).catch(function (err) { toast(err.message, 'error'); });
   };
 
   $('#kokTypeList').onclick = function (e) {
@@ -984,46 +1102,33 @@ function wire() {
       $('#kokTypePrice').value = type.pricePerPerson;
       $('#kokTypeStock').value = Number(type.stock) || 0;
       $('#kokTypeFormCancel').hidden = false;
-      $('#kokTypeFormSubmit').innerHTML =
-        '<iconify-icon icon="mdi:content-save-outline" width="16"></iconify-icon> Simpan';
+      $('#kokTypeFormSubmit').innerHTML = '<iconify-icon icon="mdi:content-save-outline" width="16"></iconify-icon> Simpan';
       $('#kokTypeName').focus();
       return;
     }
 
     if (role === 'stock-plus' || role === 'stock-plus12' || role === 'stock-minus') {
       var delta = role === 'stock-plus' ? 1 : role === 'stock-plus12' ? 12 : -1;
-      api('/api/kok-types/' + id + '/stock', {
-        method: 'POST',
-        body: JSON.stringify({ delta: delta }),
-      })
+      api('/api/kok-types/' + id + '/stock', { method: 'POST', body: JSON.stringify({ delta: delta }) })
         .then(function (data) {
           syncKokTypesFromResponse(data);
           renderKokTypeList();
           renderFormKoks();
           if (state.edit) renderEditKoks();
           toast('Stok diupdate.', 'success');
-        })
-        .catch(function (err) {
-          toast(err.message, 'error');
-        });
+        }).catch(function (err) { toast(err.message, 'error'); });
       return;
     }
 
     if (role === 'toggle-type') {
-      api('/api/kok-types/' + id, {
-        method: 'PATCH',
-        body: JSON.stringify({ active: type.active === false }),
-      })
+      api('/api/kok-types/' + id, { method: 'PATCH', body: JSON.stringify({ active: type.active === false }) })
         .then(function (data) {
           syncKokTypesFromResponse(data);
           renderKokTypeList();
           renderFormKoks();
           if (state.edit) renderEditKoks();
           toast(type.active === false ? 'Jenis diaktifkan.' : 'Jenis dinonaktifkan.', 'success');
-        })
-        .catch(function (err) {
-          toast(err.message, 'error');
-        });
+        }).catch(function (err) { toast(err.message, 'error'); });
       return;
     }
 
@@ -1038,38 +1143,45 @@ function wire() {
             renderFormKoks();
             if (state.edit) renderEditKoks();
             toast('Jenis kok dihapus.', 'success');
-          })
-          .catch(function (err) {
-            toast(err.message, 'error');
-          });
+          }).catch(function (err) { toast(err.message, 'error'); });
       });
     }
   };
 
+  // Settings
   $('#settingsBtn').onclick = function () {
     $('#defaultPrice').value = state.settings.defaultPricePerPerson;
+    $('#merchantQris').value = state.merchantQris || '';
+    var st = $('#qrisStatus');
+    if (st) {
+      st.textContent = state.qrisEnabled ? '✓ QRIS aktif' : 'QRIS belum diatur';
+      st.className = 'text-xs ' + (state.qrisEnabled ? 'text-ok' : 'text-soft');
+    }
     $('#settingsDialog').showModal();
   };
-
-  $('#cancelSettings').onclick = function () {
-    $('#settingsDialog').close();
-  };
+  $('#cancelSettings').onclick = function () { $('#settingsDialog').close(); };
 
   $('#settingsForm').onsubmit = function (e) {
     e.preventDefault();
-    var defaultPricePerPerson = Number($('#defaultPrice').value);
     api('/api/settings', {
       method: 'PUT',
-      body: JSON.stringify({ defaultPricePerPerson: defaultPricePerPerson }),
+      body: JSON.stringify({
+        defaultPricePerPerson: Number($('#defaultPrice').value),
+        merchantQris: $('#merchantQris').value,
+      }),
     }).then(function (data) {
-      state.settings = data.settings;
+      if (data.settings) {
+        state.settings = { defaultPricePerPerson: data.settings.defaultPricePerPerson };
+        state.qrisEnabled = !!data.settings.qrisEnabled;
+        state.merchantQris = data.settings.merchantQris || '';
+      }
+      renderDebt();
       $('#settingsDialog').close();
-      toast('Default harga disimpan.', 'success');
-    }).catch(function (err) {
-      toast(err.message, 'error');
-    });
+      toast('Pengaturan disimpan.', 'success');
+    }).catch(function (err) { toast(err.message, 'error'); });
   };
 
+  // Catat main
   $('#gameForm').onsubmit = function (e) {
     e.preventDefault();
     var parsed = readPairsFrom($('#gameForm'));
@@ -1079,22 +1191,20 @@ function wire() {
         date: $('#date').value,
         notes: $('#notes').value,
         pairs: parsed.pairs,
-        scores: parsed.scores,
         koks: payloadKoks(state.formKoks),
       }),
-    }).then(function () {
+    }).then(function (data) {
       $('#gameDialog').close();
       $('#notes').value = '';
       clearFormPairs();
       state.formKoks = [defaultKokEntry()];
       renderFormKoks();
+      applyServerState(data);
       toast('Game tersimpan.', 'success');
-      return refresh();
-    }).catch(function (err) {
-      toast(err.message, 'error');
-    });
+    }).catch(function (err) { toast(err.message, 'error'); });
   };
 
+  // Riwayat card actions
   $('#gameList').onclick = function (e) {
     var btn = e.target.closest('button[data-action]');
     if (!btn) return;
@@ -1106,86 +1216,97 @@ function wire() {
       var game = state.games.filter(function (g) { return g.id === id; })[0];
       var index = Number(btn.getAttribute('data-index'));
       var paid = !(game.players[index] && game.players[index].paid);
-      p = api('/api/games/' + id + '/players/' + index + '/paid', {
-        method: 'PATCH',
-        body: JSON.stringify({ paid: paid }),
-      });
+      p = api('/api/games/' + id + '/players/' + index + '/paid', { method: 'PATCH', body: JSON.stringify({ paid: paid }) });
     } else if (action === 'mark-all') {
-      p = api('/api/games/' + id + '/mark-all-paid', {
-        method: 'POST',
-        body: JSON.stringify({ paid: btn.getAttribute('data-paid') === 'true' }),
-      });
+      p = api('/api/games/' + id + '/mark-all-paid', { method: 'POST', body: JSON.stringify({ paid: btn.getAttribute('data-paid') === 'true' }) });
     } else if (action === 'add-kok') {
       var entry = defaultKokEntry();
-      p = api('/api/games/' + id + '/koks', {
-        method: 'POST',
-        body: JSON.stringify({
-          typeId: entry.typeId,
-          typeName: entry.typeName,
-          pricePerPerson: entry.pricePerPerson,
-        }),
-      });
+      p = api('/api/games/' + id + '/koks', { method: 'POST', body: JSON.stringify({ typeId: entry.typeId, typeName: entry.typeName, pricePerPerson: entry.pricePerPerson }) });
     } else if (action === 'edit') {
       openEdit(state.games.filter(function (g) { return g.id === id; })[0]);
       return;
     }
 
-    if (p) {
-      p.then(function (data) {
-        syncKokTypesFromResponse(data);
-        return refresh();
-      }).catch(function (err) {
-        toast(err.message, 'error');
+    if (p) p.then(applyServerState).catch(function (err) { toast(err.message, 'error'); });
+  };
+
+  // Belum bayar card actions
+  $('#debtList').onclick = function (e) {
+    var btn = e.target.closest('button[data-action]');
+    if (!btn) return;
+    e.preventDefault();
+    var action = btn.getAttribute('data-action');
+    var name = btn.getAttribute('data-name');
+    var d = state.debtSummary.filter(function (x) { return x.name === name; })[0];
+
+    if (action === 'pay') openPay(name, Number(btn.getAttribute('data-amount')) || 0);
+    else if (action === 'qris') openQris(name, Number(btn.getAttribute('data-amount')) || 0);
+    else if (action === 'share' && d) doShare(debtShareText(d));
+    else if (action === 'settle') {
+      askConfirm('Lunasin SEMUA tagihan ' + name + '? Semua game-nya ditandai bayar.').then(function (ok) {
+        if (!ok) return;
+        api('/api/players/settle', { method: 'POST', body: JSON.stringify({ name: name }) })
+          .then(function (data) { applyServerState(data); toast('Semua tagihan ' + name + ' lunas.', 'success'); })
+          .catch(function (err) { toast(err.message, 'error'); });
       });
     }
   };
+  $('#shareAllBtn').onclick = function () { doShare(shareAllText()); };
 
-  $('#cancelEdit').onclick = function () {
-    $('#editDialog').close();
+  // Pay dialog
+  $('#cancelPay').onclick = function () { $('#payDialog').close(); };
+  $('#payForm').onsubmit = function (e) {
+    e.preventDefault();
+    var name = $('#payName').value;
+    var amount = Math.round(Number($('#payAmount').value) || 0);
+    if (!(amount > 0)) { toast('Nominal harus > 0', 'error'); return; }
+    submitPay(name, amount).then(function () { $('#payDialog').close(); });
   };
 
+  // QRIS dialog
+  $('#qrisGen').onclick = generateQris;
+  $('[data-close-qris]').onclick = function () { $('#qrisDialog').close(); };
+  $('#qrisCopy').onclick = function () {
+    if (!qrisPayload) { toast('Buat QR dulu.', 'error'); return; }
+    copyText(qrisPayload);
+  };
+  $('#qrisShare').onclick = function () {
+    var amount = Math.round(Number($('#qrisAmount').value) || 0);
+    doShare('Bayar kok badminton ' + fmt(amount) + ' via QRIS. Buka: ' + location.origin);
+  };
+  $('#qrisPaid').onclick = function () {
+    var amount = Math.round(Number($('#qrisAmount').value) || 0);
+    if (!qrisName || !(amount > 0)) { toast('Isi nominal dulu.', 'error'); return; }
+    submitPay(qrisName, amount).then(function () { $('#qrisDialog').close(); });
+  };
+
+  // Edit dialog
+  $('#cancelEdit').onclick = function () { $('#editDialog').close(); };
   $('#deleteGame').onclick = function () {
     askConfirm('Hapus game ini? Data tidak bisa dikembalikan.').then(function (ok) {
       if (!ok) return;
       api('/api/games/' + $('#editId').value, { method: 'DELETE' })
-        .then(function () {
-          $('#editDialog').close();
-          toast('Game dihapus.', 'success');
-          return refresh();
-        })
+        .then(function (data) { $('#editDialog').close(); applyServerState(data); toast('Game dihapus.', 'success'); })
         .catch(function (err) { toast(err.message, 'error'); });
     });
   };
-
   $('#editForm').onsubmit = function (e) {
     e.preventDefault();
     var id = $('#editId').value;
     var parsed = readPairsFrom($('#editForm'), 'editPlayer');
     var players = parsed.names.map(function (name, idx) {
-      return {
-        name: name,
-        paid: !!(state.edit.players[idx] && state.edit.players[idx].paid),
-      };
+      return { name: name, paid: !!(state.edit.players[idx] && state.edit.players[idx].paid) };
     });
     api('/api/games/' + id, {
       method: 'PATCH',
       body: JSON.stringify({
         date: $('#editDate').value,
         notes: $('#editNotes').value,
-        pairs: {
-          a: players.slice(0, 2),
-          b: players.slice(2, 4),
-        },
-        scores: parsed.scores,
+        pairs: { a: players.slice(0, 2), b: players.slice(2, 4) },
         koks: payloadKoks(state.edit.koks),
       }),
-    }).then(function () {
-      $('#editDialog').close();
-      toast('Perubahan disimpan.', 'success');
-      return refresh();
-    }).catch(function (err) {
-      toast(err.message, 'error');
-    });
+    }).then(function (data) { $('#editDialog').close(); applyServerState(data); toast('Perubahan disimpan.', 'success'); })
+      .catch(function (err) { toast(err.message, 'error'); });
   };
 }
 
@@ -1220,14 +1341,8 @@ function startApp() {
   fetch('/api/me')
     .then(function (r) { return r.json(); })
     .then(function (d) {
-      if (d.isAdmin) {
-        showApp();
-        startApp();
-      } else {
-        showLock();
-      }
+      if (d.isAdmin) { showApp(); startApp(); }
+      else showLock();
     })
-    .catch(function () {
-      showLock();
-    });
+    .catch(function () { showLock(); });
 })();

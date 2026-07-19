@@ -23,11 +23,19 @@ Butuh Postgres jalan (lokal atau tunnel ke VPS) dengan tabel `settings`, `player
 
 ## Fitur
 - 4 pemain = Pair A vs Pair B
-- Skor per pair
 - Multi-kok, harga per-kok di-snapshot (ganti default tidak ubah history)
 - Katalog jenis kok (nama + harga default + stok) di admin — pilih saat catat main
-- Stok otomatis berkurang saat dipakai di game, kembali saat kok/game dihapus
+- Stok otomatis berkurang saat dipakai di game, kembali saat kok/game dihapus. Stok 0 diblokir (client + server)
 - Toggle bayar per orang + ringkasan hutang
+- Navigasi bottom navbar (Riwayat · Belum bayar · Statistik [· Lainnya di admin])
+- Cicilan / bayar sebagian per orang (ledger `payments` + `player_carry`, greedy auto-settle game terlama dulu)
+- Lunasin semua tagihan per orang sekali klik
+- Share/copy rekap tagihan ke WhatsApp
+- Statistik pemain (total main, keluar, nunggak)
+- Bayar QRIS: QRIS statis merchant → dynamic QRIS per nominal (via `@prasetya/qris`, nominal bebas termasuk cicilan)
+
+## QRIS
+Set QRIS statis merchant di **admin → Lainnya → Pengaturan & QRIS** (tempel payload string, decode dari QR cetak). Sekali diset, tombol "Bayar QRIS" muncul di kartu tagihan (publik + admin) → generate QR dinamis dengan nominal (sisa penuh atau cicilan). Pembayaran QRIS langsung ke merchant — app tidak dapat notif otomatis, jadi admin catat cicilan/lunas manual setelah dana masuk.
 
 ## Akses
 - `/` — publik, read-only: riwayat + belum bayar.

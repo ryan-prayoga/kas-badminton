@@ -6,6 +6,7 @@ const { Pool } = require('pg');
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
+const { convertQRIS, validateQRIS } = require('@prasetya/qris');
 
 const app = express();
 const PORT = Number(process.env.PORT) || 8200;
@@ -102,12 +103,7 @@ function normalizeName(name) {
   return String(name || '').trim().replace(/\s+/g, ' ');
 }
 
-function cleanScore(value) {
-  if (value === null || value === undefined) return '';
-  return String(value).trim().slice(0, 20);
-}
-
-/** Migrate old flat score/players shape → pairs + scores */
+/** Normalisasi bentuk pemain (skor sudah tidak dipakai) */
 function normalizeStoredGame(game) {
   if (!game || typeof game !== 'object') return game;
 
@@ -118,33 +114,10 @@ function normalizeStoredGame(game) {
     paid: Boolean(typeof p === 'object' && p ? p.paid : false),
   }));
 
-  let scores = game.scores;
-  if (!scores || typeof scores !== 'object') {
-    // old single score string like "21-19" or free text
-    const legacy = cleanScore(game.score);
-    let a = '';
-    let b = '';
-    if (legacy) {
-      const m = legacy.match(/^(\d+)\s*[-:]\s*(\d+)/);
-      if (m) {
-        a = m[1];
-        b = m[2];
-      } else {
-        a = legacy;
-      }
-    }
-    scores = { a, b };
-  } else {
-    scores = { a: cleanScore(scores.a), b: cleanScore(scores.b) };
-  }
-
-  return {
-    ...game,
-    players,
-    scores,
-    // keep legacy score field for display fallback only
-    score: game.score || '',
-  };
+  const rest = { ...game };
+  delete rest.scores;
+  delete rest.score;
+  return { ...rest, players };
 }
 
 function gameCost(game) {
@@ -157,14 +130,6 @@ function gameCost(game) {
   };
 }
 
-function scoreLabel(scores) {
-  const a = cleanScore(scores?.a);
-  const b = cleanScore(scores?.b);
-  if (!a && !b) return '';
-  if (a && b) return `${a}-${b}`;
-  return a || b;
-}
-
 function enrichGame(game) {
   const g = normalizeStoredGame(game);
   const cost = gameCost(g);
@@ -175,14 +140,13 @@ function enrichGame(game) {
   const paidCount = players.filter((p) => p.paid).length;
   const paidTotal = players.filter((p) => p.paid).reduce((s) => s + cost.perPerson, 0);
   const pairs = {
-    a: { players: [players[0], players[1]], score: cleanScore(g.scores?.a) },
-    b: { players: [players[2], players[3]], score: cleanScore(g.scores?.b) },
+    a: { players: [players[0], players[1]] },
+    b: { players: [players[2], players[3]] },
   };
   return {
     ...g,
     players,
     pairs,
-    scoreLabel: scoreLabel(g.scores),
     cost,
     summary: {
       paidCount,
@@ -243,21 +207,6 @@ function parsePlayersFromBody(body, existing) {
   }
 
   return { error: 'Harus isi 4 nama pemain (2 pasangan)' };
-}
-
-function parseScoresFromBody(body) {
-  if (body.scores && typeof body.scores === 'object') {
-    return {
-      a: cleanScore(body.scores.a),
-      b: cleanScore(body.scores.b),
-    };
-  }
-  // legacy single score "21-19"
-  const legacy = cleanScore(body.score);
-  if (!legacy) return { a: '', b: '' };
-  const m = legacy.match(/^(\d+)\s*[-:]\s*(\d+)/);
-  if (m) return { a: m[1], b: m[2] };
-  return { a: legacy, b: '' };
 }
 
 function validatePlayers(players) {
@@ -334,7 +283,6 @@ function rowToGame(r) {
     id: r.id,
     date: r.date,
     players: r.players,
-    scores: r.scores,
     koks: r.koks,
     notes: r.notes,
     createdAt: r.created_at.toISOString(),
@@ -388,6 +336,78 @@ function applyKoksStockDiff(db, oldKoks, newKoks) {
   }
 }
 
+/** Cek stok cukup buat selisih oldKoks→newKoks. Balik pesan error atau null. */
+function stockDiffError(db, oldKoks, newKoks) {
+  const oldMap = countKoksByType(oldKoks);
+  const newMap = countKoksByType(newKoks);
+  for (const id of newMap.keys()) {
+    const need = (newMap.get(id) || 0) - (oldMap.get(id) || 0);
+    if (need <= 0) continue;
+    const type = (db.kokTypes || []).find((t) => t.id === id);
+    if (!type) continue;
+    const avail = Math.max(0, Number(type.stock) || 0);
+    if (need > avail) {
+      return `Stok ${type.name} tidak cukup (butuh ${need}, sisa ${avail})`;
+    }
+  }
+  return null;
+}
+
+async function recordPayment(name, amount) {
+  const amt = Math.round(Number(amount) || 0);
+  if (amt <= 0) return;
+  await pool.query('INSERT INTO payments (id, name, amount) VALUES ($1, $2, $3)', [uid(), name, amt]);
+}
+
+/** Ringkasan hutang per orang: sisa = max(0, owedGross − carry). */
+function buildDebtSummary(games, carryMap) {
+  const byName = {};
+  for (const g of games) {
+    for (const p of g.players) {
+      if (p.paid || !p.name) continue;
+      if (!byName[p.name]) byName[p.name] = { name: p.name, owedGross: 0, items: [] };
+      byName[p.name].owedGross += g.cost.perPerson;
+      byName[p.name].items.push({
+        gameId: g.id,
+        date: g.date,
+        name: p.name,
+        amount: g.cost.perPerson,
+        kokCount: g.cost.kokCount,
+      });
+    }
+  }
+  return Object.values(byName)
+    .map((e) => {
+      const carry = Math.max(0, Number(carryMap?.[e.name]) || 0);
+      return { ...e, carry, total: Math.max(0, e.owedGross - carry) };
+    })
+    .sort((a, b) => b.total - a.total || a.name.localeCompare(b.name, 'id'));
+}
+
+/** Payload lengkap (dipakai bootstrap + endpoint mutasi). */
+function summarize(db, isAdmin) {
+  const games = db.games
+    .slice()
+    .sort(
+      (a, b) =>
+        String(b.date).localeCompare(String(a.date)) ||
+        String(b.createdAt).localeCompare(String(a.createdAt))
+    )
+    .map(enrichGame);
+  const settings = {
+    defaultPricePerPerson: db.settings.defaultPricePerPerson,
+    qrisEnabled: Boolean(db.settings.merchantQris),
+  };
+  if (isAdmin) settings.merchantQris = db.settings.merchantQris || '';
+  return {
+    settings,
+    players: db.players,
+    kokTypes: db.kokTypes || [],
+    games,
+    debtSummary: buildDebtSummary(games, db.carry || {}),
+  };
+}
+
 async function ensureSchema() {
   await pool.query(`
     CREATE TABLE IF NOT EXISTS kok_types (
@@ -408,24 +428,49 @@ async function ensureSchema() {
     CREATE UNIQUE INDEX IF NOT EXISTS kok_types_name_lower_uidx
     ON kok_types (lower(name))
   `);
+  // Kolom QRIS statis merchant (settings dibuat manual; ALTER additive aman)
+  await pool.query(`ALTER TABLE settings ADD COLUMN IF NOT EXISTS merchant_qris TEXT`);
+  // Ledger cicilan (tabel yang kita kontrol penuh)
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS payments (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      amount INT NOT NULL,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `);
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS player_carry (
+      name TEXT PRIMARY KEY,
+      carry INT NOT NULL DEFAULT 0
+    )
+  `);
 }
 
 async function loadDb() {
-  const [settingsRes, playersRes, gamesRes, typesRes] = await Promise.all([
-    pool.query('SELECT default_price_per_person FROM settings WHERE id = 1'),
+  const [settingsRes, playersRes, gamesRes, typesRes, carryRes] = await Promise.all([
+    pool.query('SELECT default_price_per_person, merchant_qris FROM settings WHERE id = 1'),
     pool.query('SELECT name FROM players ORDER BY name'),
-    pool.query('SELECT id, date, players, scores, koks, notes, created_at, updated_at FROM games'),
+    pool.query('SELECT id, date, players, koks, notes, created_at, updated_at FROM games'),
     pool.query(
       'SELECT id, name, price_per_person, stock, active, created_at, updated_at FROM kok_types ORDER BY lower(name)'
     ),
+    pool.query('SELECT name, carry FROM player_carry'),
   ]);
+  const carry = {};
+  for (const r of carryRes.rows) {
+    const c = Math.max(0, Math.round(Number(r.carry) || 0));
+    if (c > 0) carry[r.name] = c;
+  }
   return {
     settings: {
       defaultPricePerPerson: Number(settingsRes.rows[0]?.default_price_per_person) || 3000,
+      merchantQris: settingsRes.rows[0]?.merchant_qris || '',
     },
     players: playersRes.rows.map((r) => r.name),
     games: gamesRes.rows.map(rowToGame),
     kokTypes: typesRes.rows.map(rowToKokType),
+    carry,
   };
 }
 
@@ -433,9 +478,17 @@ async function saveDb(db) {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
-    await client.query('UPDATE settings SET default_price_per_person = $1 WHERE id = 1', [
-      db.settings.defaultPricePerPerson,
-    ]);
+    await client.query(
+      'UPDATE settings SET default_price_per_person = $1, merchant_qris = $2 WHERE id = 1',
+      [db.settings.defaultPricePerPerson, db.settings.merchantQris || null]
+    );
+    await client.query('DELETE FROM player_carry');
+    for (const [name, carry] of Object.entries(db.carry || {})) {
+      const c = Math.max(0, Math.round(Number(carry) || 0));
+      if (c > 0) {
+        await client.query('INSERT INTO player_carry (name, carry) VALUES ($1, $2)', [name, c]);
+      }
+    }
     await client.query('DELETE FROM players');
     for (const name of db.players) {
       await client.query('INSERT INTO players (name) VALUES ($1)', [name]);
@@ -465,7 +518,7 @@ async function saveDb(db) {
           g.id,
           g.date,
           JSON.stringify(g.players),
-          JSON.stringify(g.scores),
+          '{}',
           JSON.stringify(g.koks),
           g.notes,
           g.createdAt,
@@ -513,7 +566,7 @@ async function migrateLegacyJsonIfNeeded() {
           g.id,
           g.date,
           JSON.stringify(g.players),
-          JSON.stringify(g.scores),
+          '{}',
           JSON.stringify(g.koks),
           g.notes,
           g.createdAt || new Date().toISOString(),
@@ -576,44 +629,11 @@ app.post('/api/logout', (req, res) => {
   res.json({ ok: true });
 });
 
-app.get('/api/bootstrap', async (_req, res, next) => {
+app.get('/api/bootstrap', async (req, res, next) => {
   try {
     const db = await loadDb();
-    const games = db.games
-      .slice()
-      .sort((a, b) => String(b.date).localeCompare(String(a.date)) || String(b.createdAt).localeCompare(String(a.createdAt)))
-      .map(enrichGame);
-
-    const unpaid = [];
-    for (const g of games) {
-      for (const p of g.players) {
-        if (!p.paid) {
-          unpaid.push({
-            gameId: g.id,
-            date: g.date,
-            name: p.name,
-            amount: g.cost.perPerson,
-            kokCount: g.cost.kokCount,
-            score: g.scoreLabel || null,
-          });
-        }
-      }
-    }
-
-    const byName = {};
-    for (const u of unpaid) {
-      if (!byName[u.name]) byName[u.name] = { name: u.name, total: 0, items: [] };
-      byName[u.name].total += u.amount;
-      byName[u.name].items.push(u);
-    }
-
-    res.json({
-      settings: db.settings,
-      players: db.players,
-      kokTypes: db.kokTypes || [],
-      games,
-      debtSummary: Object.values(byName).sort((a, b) => b.total - a.total || a.name.localeCompare(b.name, 'id')),
-    });
+    const isAdmin = isValidSession(req.cookies?.[SESSION_COOKIE]);
+    res.json(summarize(db, isAdmin));
   } catch (err) {
     next(err);
   }
@@ -621,14 +641,29 @@ app.get('/api/bootstrap', async (_req, res, next) => {
 
 app.put('/api/settings', requireAdmin, async (req, res, next) => {
   try {
-    const price = Number(req.body?.defaultPricePerPerson);
-    if (!Number.isFinite(price) || price < 0) {
-      return res.status(400).json({ error: 'defaultPricePerPerson harus angka >= 0' });
-    }
     const db = await loadDb();
-    db.settings.defaultPricePerPerson = Math.round(price);
+
+    if (req.body?.defaultPricePerPerson !== undefined) {
+      const price = Number(req.body.defaultPricePerPerson);
+      if (!Number.isFinite(price) || price < 0) {
+        return res.status(400).json({ error: 'defaultPricePerPerson harus angka >= 0' });
+      }
+      db.settings.defaultPricePerPerson = Math.round(price);
+    }
+
+    if (req.body?.merchantQris !== undefined) {
+      const raw = String(req.body.merchantQris || '').trim();
+      if (raw) {
+        const check = validateQRIS(raw);
+        if (!check.valid) {
+          return res.status(400).json({ error: 'QRIS statis tidak valid: ' + (check.errors[0] || 'format salah') });
+        }
+      }
+      db.settings.merchantQris = raw;
+    }
+
     await saveDb(db);
-    res.json({ settings: db.settings });
+    res.json({ settings: { defaultPricePerPerson: db.settings.defaultPricePerPerson, qrisEnabled: Boolean(db.settings.merchantQris), merchantQris: db.settings.merchantQris || '' } });
   } catch (err) {
     next(err);
   }
@@ -643,14 +678,15 @@ app.post('/api/games', requireAdmin, async (req, res, next) => {
     if (err) return res.status(400).json({ error: err });
 
     const db = await loadDb();
-    const scores = parseScoresFromBody(body);
     const koks = buildKoks(body, db.settings.defaultPricePerPerson, db);
+
+    const stockErr = stockDiffError(db, [], koks);
+    if (stockErr) return res.status(400).json({ error: stockErr });
 
     const game = {
       id: uid(),
       date: body.date || todayWIB(),
       players: parsed.players,
-      scores,
       koks,
       notes: body.notes ? String(body.notes).trim() : '',
       createdAt: new Date().toISOString(),
@@ -661,7 +697,7 @@ app.post('/api/games', requireAdmin, async (req, res, next) => {
     applyKoksStockDiff(db, [], koks);
     db.games.unshift(game);
     await saveDb(db);
-    res.status(201).json({ game: enrichGame(game), kokTypes: db.kokTypes });
+    res.status(201).json(summarize(db, true));
   } catch (err) {
     next(err);
   }
@@ -680,10 +716,6 @@ app.patch('/api/games/:id', requireAdmin, async (req, res, next) => {
     if (body.date) game.date = String(body.date);
     if (body.notes !== undefined) game.notes = String(body.notes || '').trim();
 
-    if (body.scores !== undefined || body.score !== undefined) {
-      game.scores = parseScoresFromBody(body);
-    }
-
     if (body.pairs || (Array.isArray(body.players) && body.players.length === 4)) {
       const parsed = parsePlayersFromBody(body, game.players);
       if (parsed.error) return res.status(400).json({ error: parsed.error });
@@ -694,16 +726,19 @@ app.patch('/api/games/:id', requireAdmin, async (req, res, next) => {
     }
 
     if (Array.isArray(body.koks) && body.koks.length > 0) {
-      game.koks = body.koks
+      const nextKoks = body.koks
         .slice(0, 50)
         .map((k) => normalizeKokEntry(k, db.settings.defaultPricePerPerson, db));
+      const stockErr = stockDiffError(db, oldKoks, nextKoks);
+      if (stockErr) return res.status(400).json({ error: stockErr });
+      game.koks = nextKoks;
       applyKoksStockDiff(db, oldKoks, game.koks);
     }
 
     game.updatedAt = new Date().toISOString();
     db.games[idx] = game;
     await saveDb(db);
-    res.json({ game: enrichGame(game), kokTypes: db.kokTypes });
+    res.json(summarize(db, true));
   } catch (err) {
     next(err);
   }
@@ -716,12 +751,14 @@ app.post('/api/games/:id/koks', requireAdmin, async (req, res, next) => {
     if (idx === -1) return res.status(404).json({ error: 'Game tidak ditemukan' });
 
     const kok = normalizeKokEntry(req.body || {}, db.settings.defaultPricePerPerson, db);
+    const stockErr = stockDiffError(db, [], [kok]);
+    if (stockErr) return res.status(400).json({ error: stockErr });
     db.games[idx] = normalizeStoredGame(db.games[idx]);
     db.games[idx].koks.push(kok);
     applyStockDelta(db, kok.typeId, -1);
     db.games[idx].updatedAt = new Date().toISOString();
     await saveDb(db);
-    res.status(201).json({ game: enrichGame(db.games[idx]), kok, kokTypes: db.kokTypes });
+    res.status(201).json(summarize(db, true));
   } catch (err) {
     next(err);
   }
@@ -745,7 +782,7 @@ app.delete('/api/games/:id/koks/:kokId', requireAdmin, async (req, res, next) =>
     game.updatedAt = new Date().toISOString();
     db.games[idx] = game;
     await saveDb(db);
-    res.json({ game: enrichGame(game), kokTypes: db.kokTypes });
+    res.json(summarize(db, true));
   } catch (err) {
     next(err);
   }
@@ -783,13 +820,15 @@ app.patch('/api/games/:id/koks/:kokId', requireAdmin, async (req, res, next) => 
       return res.status(400).json({ error: 'pricePerPerson harus angka >= 0' });
     }
     if (prevTypeId !== (kok.typeId || null)) {
+      const stockErr = stockDiffError(db, [{ typeId: prevTypeId }], [{ typeId: kok.typeId }]);
+      if (stockErr) return res.status(400).json({ error: stockErr });
       applyStockDelta(db, prevTypeId, 1);
       applyStockDelta(db, kok.typeId, -1);
     }
     game.updatedAt = new Date().toISOString();
     db.games[idx] = game;
     await saveDb(db);
-    res.json({ game: enrichGame(game), kokTypes: db.kokTypes });
+    res.json(summarize(db, true));
   } catch (err) {
     next(err);
   }
@@ -928,7 +967,7 @@ app.delete('/api/games/:id', requireAdmin, async (req, res, next) => {
     applyKoksStockDiff(db, game.koks, []);
     db.games.splice(idx, 1);
     await saveDb(db);
-    res.json({ ok: true, kokTypes: db.kokTypes });
+    res.json(summarize(db, true));
   } catch (err) {
     next(err);
   }
@@ -954,7 +993,7 @@ app.patch('/api/games/:id/players/:index/paid', requireAdmin, async (req, res, n
     db.games[idx].players[pIdx].paid = paid;
     db.games[idx].updatedAt = new Date().toISOString();
     await saveDb(db);
-    res.json({ game: enrichGame(db.games[idx]) });
+    res.json(summarize(db, true));
   } catch (err) {
     next(err);
   }
@@ -970,7 +1009,102 @@ app.post('/api/games/:id/mark-all-paid', requireAdmin, async (req, res, next) =>
     db.games[idx].players = db.games[idx].players.map((p) => ({ ...p, paid }));
     db.games[idx].updatedAt = new Date().toISOString();
     await saveDb(db);
-    res.json({ game: enrichGame(db.games[idx]) });
+    res.json(summarize(db, true));
+  } catch (err) {
+    next(err);
+  }
+});
+
+// --- Cicilan / lunasin per orang + QRIS ---
+
+app.post('/api/players/settle', requireAdmin, async (req, res, next) => {
+  try {
+    const name = normalizeName(req.body?.name);
+    if (!name) return res.status(400).json({ error: 'Nama wajib diisi' });
+
+    const db = await loadDb();
+    const carryBefore = Math.max(0, Number(db.carry[name]) || 0);
+    let settled = 0;
+    for (const g of db.games) {
+      const cost = gameCost(g);
+      for (const p of g.players) {
+        if (p.name === name && !p.paid) {
+          p.paid = true;
+          settled += cost.perPerson;
+          g.updatedAt = new Date().toISOString();
+        }
+      }
+    }
+    delete db.carry[name];
+    await saveDb(db);
+    // yang dianggap dibayar tunai = sisa (settled − carry yang sudah dititip)
+    await recordPayment(name, Math.max(0, settled - carryBefore));
+    res.json(summarize(db, true));
+  } catch (err) {
+    next(err);
+  }
+});
+
+app.post('/api/players/pay', requireAdmin, async (req, res, next) => {
+  try {
+    const name = normalizeName(req.body?.name);
+    const amount = Number(req.body?.amount);
+    if (!name) return res.status(400).json({ error: 'Nama wajib diisi' });
+    if (!Number.isFinite(amount) || !Number.isInteger(amount) || amount <= 0) {
+      return res.status(400).json({ error: 'Nominal harus angka bulat > 0' });
+    }
+
+    const db = await loadDb();
+    let credit = Math.max(0, Number(db.carry[name]) || 0) + amount;
+
+    const refs = [];
+    for (const g of db.games) {
+      for (let i = 0; i < g.players.length; i++) {
+        if (g.players[i].name === name && !g.players[i].paid) {
+          refs.push({ g, i, perPerson: gameCost(g).perPerson });
+        }
+      }
+    }
+    refs.sort(
+      (a, b) =>
+        String(a.g.date).localeCompare(String(b.g.date)) ||
+        String(a.g.createdAt).localeCompare(String(b.g.createdAt))
+    );
+    for (const r of refs) {
+      if (credit >= r.perPerson) {
+        r.g.players[r.i].paid = true;
+        r.g.updatedAt = new Date().toISOString();
+        credit -= r.perPerson;
+      } else {
+        break;
+      }
+    }
+    if (credit > 0) db.carry[name] = credit;
+    else delete db.carry[name];
+
+    await saveDb(db);
+    await recordPayment(name, amount);
+    res.json(summarize(db, true));
+  } catch (err) {
+    next(err);
+  }
+});
+
+app.post('/api/qris', async (req, res, next) => {
+  try {
+    const db = await loadDb();
+    const merchant = db.settings.merchantQris;
+    if (!merchant) return res.status(400).json({ error: 'QRIS belum diatur admin' });
+    const amount = Number(req.body?.amount);
+    if (!Number.isFinite(amount) || !Number.isInteger(amount) || amount <= 0) {
+      return res.status(400).json({ error: 'Nominal harus angka bulat > 0' });
+    }
+    try {
+      const payload = convertQRIS(merchant, { amount });
+      res.json({ payload, amount });
+    } catch (e) {
+      return res.status(400).json({ error: 'Gagal buat QRIS: ' + (e?.message || 'invalid') });
+    }
   } catch (err) {
     next(err);
   }

@@ -7,9 +7,10 @@
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <title>Kok Badminton — Admin</title>
-  <link rel="stylesheet" href="/styles.css?v=10" />
-  <script src="/vendor/iconify-icon.js?v=10"></script>
-  <script src="/vendor/icons.js?v=10"></script>
+  <link rel="stylesheet" href="/styles.css?v=11" />
+  <script src="/vendor/iconify-icon.js?v=11"></script>
+  <script src="/vendor/icons.js?v=11"></script>
+  <script src="/vendor/qrcode.js?v=11"></script>
 </head>
 <body class="text-ink50">
 
@@ -49,13 +50,13 @@
   </div>
 
   <!-- ── App ── -->
-  <div id="appRoot" class="mx-auto flex w-full max-w-[720px] flex-col gap-4 px-4 pb-[calc(96px+var(--safe-b))] pt-[calc(16px+var(--safe-t))]" hidden>
+  <div id="appRoot" class="mx-auto flex w-full max-w-[720px] flex-col gap-4 px-4 pb-[calc(104px+var(--safe-b))] pt-[calc(16px+var(--safe-t))]" hidden>
 
     <!-- Header -->
     <header class="relative overflow-hidden rounded-xl2 border border-line bg-surface shadow-card">
       <div class="pointer-events-none absolute -right-8 -top-10 h-32 w-32 rounded-full bg-brand/20 blur-3xl"></div>
       <div class="relative p-4 sm:p-5">
-        <div class="flex flex-wrap items-start justify-between gap-x-3 gap-y-2">
+        <div class="flex items-center justify-between gap-3">
           <div class="flex min-w-0 items-center gap-2.5 sm:gap-3">
             <div class="grid h-10 w-10 shrink-0 place-items-center rounded-2xl bg-brand/15 text-brand ring-1 ring-brand/30 sm:h-11 sm:w-11">
               <iconify-icon icon="mdi:badminton" width="22"></iconify-icon>
@@ -65,41 +66,15 @@
               <h1 class="truncate text-xl font-extrabold leading-tight tracking-tight sm:text-2xl">Kok Badminton</h1>
             </div>
           </div>
-          <div class="ml-auto flex shrink-0 items-center gap-1 sm:gap-1.5">
-            <button type="button" id="kokTypesBtn" title="Jenis kok" class="grid h-8 w-8 place-items-center rounded-xl border border-line bg-elevated text-muted transition active:scale-95 hover:text-ink50 sm:h-9 sm:w-9">
-              <iconify-icon icon="game-icons:shuttlecock" width="16"></iconify-icon>
-            </button>
-            <button type="button" id="settingsBtn" title="Pengaturan" class="grid h-8 w-8 place-items-center rounded-xl border border-line bg-elevated text-muted transition active:scale-95 hover:text-ink50 sm:h-9 sm:w-9">
-              <iconify-icon icon="mdi:cog" width="16"></iconify-icon>
-            </button>
-            <a href="/" title="Halaman publik" class="grid h-8 w-8 place-items-center rounded-xl border border-line bg-elevated text-muted transition active:scale-95 hover:text-ink50 sm:h-9 sm:w-9">
-              <iconify-icon icon="mdi:earth" width="16"></iconify-icon>
-            </a>
-            <button type="button" id="logoutBtn" title="Kunci" class="grid h-8 w-8 place-items-center rounded-xl border border-line bg-elevated text-muted transition active:scale-95 hover:text-danger sm:h-9 sm:w-9">
-              <iconify-icon icon="mdi:lock-outline" width="16"></iconify-icon>
-            </button>
-          </div>
+          <button type="button" id="logoutBtn" title="Kunci" aria-label="Kunci" class="grid h-9 w-9 shrink-0 place-items-center rounded-xl border border-line bg-elevated text-muted transition active:scale-95 hover:text-danger focus-visible:ring-2 focus-visible:ring-brand/60">
+            <iconify-icon icon="mdi:lock-outline" width="16"></iconify-icon>
+          </button>
         </div>
       </div>
     </header>
 
-    <!-- Belum bayar -->
-    <details class="panel rounded-xl2 border border-line bg-surface shadow-card p-4" open>
-      <summary class="mb-3 flex items-center justify-between gap-2">
-        <div class="flex items-center gap-2">
-          <iconify-icon icon="mdi:wallet-outline" width="20" class="text-warn"></iconify-icon>
-          <h2 class="text-base font-bold tracking-tight">Belum bayar</h2>
-        </div>
-        <div class="flex shrink-0 items-center gap-2">
-          <p id="debtMeta" class="text-xs text-soft">—</p>
-          <iconify-icon icon="mdi:chevron-down" width="18" class="debt-chevron text-soft"></iconify-icon>
-        </div>
-      </summary>
-      <div id="debtList" class="grid grid-cols-1 gap-3"></div>
-    </details>
-
-    <!-- Riwayat -->
-    <section class="rounded-xl2 border border-line bg-surface shadow-card p-4">
+    <!-- ── Tab: Riwayat ── -->
+    <section data-panel="riwayat" class="rounded-xl2 border border-line bg-surface shadow-card p-4">
       <div class="mb-3 flex items-center justify-between gap-2">
         <div class="flex items-center gap-2">
           <iconify-icon icon="mdi:history" width="20" class="text-brand"></iconify-icon>
@@ -109,13 +84,83 @@
       </div>
       <div id="gameList" class="grid grid-cols-1 gap-3"></div>
     </section>
+
+    <!-- ── Tab: Belum bayar ── -->
+    <section data-panel="bayar" hidden class="rounded-xl2 border border-line bg-surface shadow-card p-4">
+      <div class="mb-3 flex items-center justify-between gap-2">
+        <div class="flex items-center gap-2">
+          <iconify-icon icon="mdi:wallet-outline" width="20" class="text-warn"></iconify-icon>
+          <h2 class="text-base font-bold tracking-tight">Belum bayar</h2>
+        </div>
+        <div class="flex shrink-0 items-center gap-2">
+          <p id="debtMeta" class="text-xs text-soft">—</p>
+          <button type="button" id="shareAllBtn" title="Share semua tagihan" class="grid h-8 w-8 place-items-center rounded-xl border border-line bg-elevated text-muted transition active:scale-95 hover:text-ink50 focus-visible:ring-2 focus-visible:ring-brand/60">
+            <iconify-icon icon="mdi:share-variant-outline" width="16"></iconify-icon>
+          </button>
+        </div>
+      </div>
+      <div id="debtList" class="grid grid-cols-1 gap-3"></div>
+    </section>
+
+    <!-- ── Tab: Statistik ── -->
+    <section data-panel="statistik" hidden class="flex flex-col gap-4">
+      <div id="statStrip" class="grid grid-cols-2 gap-3"></div>
+      <div class="rounded-xl2 border border-line bg-surface shadow-card p-4">
+        <div class="mb-3 flex items-center gap-2">
+          <iconify-icon icon="mdi:trophy-outline" width="20" class="text-brand"></iconify-icon>
+          <h2 class="text-base font-bold tracking-tight">Statistik pemain</h2>
+        </div>
+        <div id="statPlayers" class="grid grid-cols-1 gap-2"></div>
+      </div>
+    </section>
+
+    <!-- ── Tab: Lainnya ── -->
+    <section data-panel="lainnya" hidden class="rounded-xl2 border border-line bg-surface shadow-card p-2">
+      <button type="button" id="kokTypesBtn" class="menurow">
+        <iconify-icon icon="game-icons:shuttlecock" width="20" class="text-brand"></iconify-icon>
+        <span class="flex-1 text-left">Jenis kok &amp; stok</span>
+        <iconify-icon icon="mdi:chevron-right" width="18" class="text-soft"></iconify-icon>
+      </button>
+      <button type="button" id="settingsBtn" class="menurow">
+        <iconify-icon icon="mdi:cog" width="20" class="text-brand"></iconify-icon>
+        <span class="flex-1 text-left">Pengaturan &amp; QRIS</span>
+        <iconify-icon icon="mdi:chevron-right" width="18" class="text-soft"></iconify-icon>
+      </button>
+      <a href="/" class="menurow">
+        <iconify-icon icon="mdi:earth" width="20" class="text-brand"></iconify-icon>
+        <span class="flex-1 text-left">Halaman publik</span>
+        <iconify-icon icon="mdi:open-in-new" width="16" class="text-soft"></iconify-icon>
+      </a>
+      <button type="button" id="logoutBtn2" class="menurow text-danger">
+        <iconify-icon icon="mdi:lock-outline" width="20"></iconify-icon>
+        <span class="flex-1 text-left">Kunci admin</span>
+      </button>
+    </section>
   </div>
 
   <!-- ── FAB: catat main baru ── -->
   <button type="button" id="fabAdd" aria-label="Catat main baru" hidden
-    class="fixed bottom-[calc(20px+var(--safe-b))] right-4 z-40 grid h-14 w-14 place-items-center rounded-full bg-brand text-ink shadow-glow transition active:scale-90 hover:bg-brand-soft">
+    class="fixed bottom-[calc(84px+var(--safe-b))] right-4 z-40 grid h-14 w-14 place-items-center rounded-full bg-brand text-ink shadow-glow transition active:scale-90 hover:bg-brand-soft">
     <iconify-icon icon="mdi:plus" width="28"></iconify-icon>
   </button>
+
+  <!-- ── Bottom navbar ── -->
+  <nav id="bottomNav" class="fixed inset-x-0 bottom-0 z-40 border-t border-line bg-surface/95 backdrop-blur" hidden>
+    <div class="mx-auto flex w-full max-w-[720px] items-stretch pb-[var(--safe-b)]">
+      <button type="button" class="navitem" data-tab="riwayat" aria-label="Riwayat">
+        <iconify-icon icon="mdi:history" width="22"></iconify-icon><span>Riwayat</span>
+      </button>
+      <button type="button" class="navitem" data-tab="bayar" aria-label="Belum bayar">
+        <iconify-icon icon="mdi:wallet-outline" width="22"></iconify-icon><span>Bayar</span>
+      </button>
+      <button type="button" class="navitem" data-tab="statistik" aria-label="Statistik">
+        <iconify-icon icon="mdi:chart-box-outline" width="22"></iconify-icon><span>Statistik</span>
+      </button>
+      <button type="button" class="navitem" data-tab="lainnya" aria-label="Lainnya">
+        <iconify-icon icon="mdi:dots-horizontal" width="22"></iconify-icon><span>Lainnya</span>
+      </button>
+    </div>
+  </nav>
 
   <!-- ── Catat main dialog ── -->
   <dialog id="gameDialog">
@@ -132,15 +177,9 @@
       </label>
 
       <div id="pairInputs" class="grid grid-cols-1 gap-2.5">
-        <!-- Pair A -->
         <div class="rounded-xl border border-line bg-elevated p-3" data-pair="a">
-          <div class="mb-3 flex items-center justify-between gap-2">
+          <div class="mb-3 flex items-center gap-2">
             <span class="inline-flex items-center gap-1.5 rounded-md bg-brand/10 px-2 py-1 text-xs font-bold uppercase tracking-wide text-brand">Pair A</span>
-            <div class="flex items-center gap-2">
-              <span class="text-xs text-soft">Skor</span>
-              <input type="text" inputmode="numeric" name="scoreA" placeholder="21" maxlength="20" autocomplete="off"
-                class="w-16 rounded-lg border border-line bg-ink px-2 py-2 text-center font-mono text-base outline-none transition focus:border-brand/60" />
-            </div>
           </div>
           <div class="grid gap-2 sm:grid-cols-2">
             <div class="relative">
@@ -156,15 +195,9 @@
 
         <div class="grid place-items-center"><span class="grid h-7 w-7 place-items-center rounded-full border border-line bg-surface text-[10px] font-bold tracking-wider text-soft">VS</span></div>
 
-        <!-- Pair B -->
         <div class="rounded-xl border border-line bg-elevated p-3" data-pair="b">
-          <div class="mb-3 flex items-center justify-between gap-2">
+          <div class="mb-3 flex items-center gap-2">
             <span class="inline-flex items-center gap-1.5 rounded-md bg-ok/10 px-2 py-1 text-xs font-bold uppercase tracking-wide text-ok">Pair B</span>
-            <div class="flex items-center gap-2">
-              <span class="text-xs text-soft">Skor</span>
-              <input type="text" inputmode="numeric" name="scoreB" placeholder="18" maxlength="20" autocomplete="off"
-                class="w-16 rounded-lg border border-line bg-ink px-2 py-2 text-center font-mono text-base outline-none transition focus:border-brand/60" />
-            </div>
           </div>
           <div class="grid gap-2 sm:grid-cols-2">
             <div class="relative">
@@ -208,7 +241,7 @@
 
   <!-- ── Pengaturan dialog ── -->
   <dialog id="settingsDialog">
-    <form id="settingsForm" class="grid grid-cols-1 gap-4 rounded-xl2 border border-line bg-surface p-4 shadow-card">
+    <form id="settingsForm" class="grid grid-cols-1 max-h-[calc(100dvh-20px)] gap-4 overflow-auto rounded-xl2 border border-line bg-surface p-4 shadow-card">
       <div class="flex items-center gap-2">
         <iconify-icon icon="mdi:cog" width="20" class="text-brand"></iconify-icon>
         <h2 class="text-base font-bold tracking-tight">Pengaturan</h2>
@@ -224,7 +257,15 @@
         <p class="text-xs text-soft">Dipakai kalau kok belum pilih jenis. Harga di game tetap snapshot.</p>
       </label>
 
-      <div class="flex items-center gap-2 border-t border-line pt-3">
+      <label class="grid gap-1.5 border-t border-line pt-3">
+        <span class="text-xs font-medium text-muted">QRIS statis merchant</span>
+        <textarea id="merchantQris" rows="3" placeholder="Tempel payload QRIS statis (string panjang mulai 00020101…)"
+          class="w-full rounded-xl border border-line bg-ink px-3 py-2.5 text-xs font-mono outline-none transition focus:border-brand/60"></textarea>
+        <p class="text-xs text-soft">Dipakai buat generate QRIS dinamis per tagihan/cicilan. Decode dari QR cetak kamu lalu tempel di sini. Kosongkan untuk matikan QRIS.</p>
+        <p id="qrisStatus" class="text-xs"></p>
+      </label>
+
+      <div class="sticky bottom-0 -mx-4 -mb-4 flex items-center gap-2 border-t border-line bg-surface px-4 py-3">
         <button type="button" id="cancelSettings" class="rounded-xl border border-line bg-elevated px-3 py-2.5 text-sm font-medium transition active:scale-95">Tutup</button>
         <div class="flex-1"></div>
         <button type="submit" class="inline-flex items-center gap-1.5 rounded-xl bg-brand px-4 py-2.5 text-sm font-bold text-ink transition active:scale-95 hover:bg-brand-soft">
@@ -320,6 +361,67 @@
     </form>
   </dialog>
 
+  <!-- ── Bayar sebagian dialog ── -->
+  <dialog id="payDialog">
+    <form id="payForm" class="grid grid-cols-1 gap-4 rounded-xl2 border border-line bg-surface p-4 shadow-card">
+      <div class="flex items-center gap-2">
+        <iconify-icon icon="mdi:cash-check" width="20" class="text-ok"></iconify-icon>
+        <h2 class="text-base font-bold tracking-tight">Catat pembayaran</h2>
+      </div>
+      <input type="hidden" id="payName" />
+      <p id="payWho" class="text-sm text-muted">—</p>
+      <label class="grid gap-1.5">
+        <span class="text-xs font-medium text-muted">Nominal dibayar</span>
+        <div class="flex items-center gap-2 rounded-xl border border-line bg-ink px-3">
+          <span class="font-mono text-sm text-soft">Rp</span>
+          <input id="payAmount" inputmode="numeric" type="number" min="1" step="1" required
+            class="min-w-0 flex-1 bg-transparent py-2.5 text-base outline-none" />
+        </div>
+        <p id="payHint" class="text-xs text-soft">Cicilan otomatis nutup game terlama dulu; sisa jadi saldo.</p>
+      </label>
+      <div class="flex items-center gap-2 border-t border-line pt-3">
+        <button type="button" id="cancelPay" class="rounded-xl border border-line bg-elevated px-3 py-2.5 text-sm font-medium transition active:scale-95">Batal</button>
+        <div class="flex-1"></div>
+        <button type="submit" class="inline-flex items-center gap-1.5 rounded-xl bg-brand px-4 py-2.5 text-sm font-bold text-ink transition active:scale-95 hover:bg-brand-soft">
+          <iconify-icon icon="mdi:check" width="16"></iconify-icon> Catat
+        </button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- ── QRIS dialog ── -->
+  <dialog id="qrisDialog">
+    <div class="grid grid-cols-1 max-h-[calc(100dvh-20px)] w-[min(100vw-2rem,380px)] gap-3 overflow-auto rounded-xl2 border border-line bg-surface p-4 shadow-card">
+      <div class="flex items-center justify-between gap-2">
+        <div class="flex items-center gap-2">
+          <iconify-icon icon="mdi:qrcode" width="20" class="text-brand"></iconify-icon>
+          <h2 class="text-base font-bold tracking-tight">Bayar QRIS</h2>
+        </div>
+        <button type="button" data-close-qris class="grid h-9 w-9 place-items-center rounded-xl border border-line bg-elevated text-muted transition active:scale-95 hover:text-ink50">
+          <iconify-icon icon="mdi:close" width="18"></iconify-icon>
+        </button>
+      </div>
+      <p id="qrisWho" class="text-sm text-muted">—</p>
+      <label class="grid gap-1.5">
+        <span class="text-xs font-medium text-muted">Nominal (boleh diubah buat nyicil)</span>
+        <div class="flex items-center gap-2 rounded-xl border border-line bg-ink px-3">
+          <span class="font-mono text-sm text-soft">Rp</span>
+          <input id="qrisAmount" inputmode="numeric" type="number" min="1" step="1" class="min-w-0 flex-1 bg-transparent py-2.5 text-base outline-none" />
+          <button type="button" id="qrisGen" class="shrink-0 rounded-lg bg-brand px-3 py-1.5 text-sm font-bold text-ink transition active:scale-95 hover:bg-brand-soft">Buat QR</button>
+        </div>
+      </label>
+      <div id="qrisCanvas" class="grid min-h-[200px] place-items-center rounded-xl border border-line bg-white p-3"></div>
+      <p id="qrisHint" class="text-center text-xs text-soft">Scan pakai aplikasi apapun yang support QRIS.</p>
+      <div class="grid grid-cols-2 gap-2">
+        <button type="button" id="qrisCopy" class="rounded-xl border border-line bg-elevated px-3 py-2.5 text-sm font-medium transition active:scale-95">Salin kode</button>
+        <button type="button" id="qrisShare" class="rounded-xl border border-line bg-elevated px-3 py-2.5 text-sm font-medium transition active:scale-95">Share</button>
+      </div>
+      <button type="button" id="qrisPaid" class="inline-flex items-center justify-center gap-1.5 rounded-xl border border-ok/40 bg-ok/10 px-3 py-2.5 text-sm font-bold text-ok transition active:scale-95">
+        <iconify-icon icon="mdi:cash-check" width="16"></iconify-icon> Sudah dibayar → catat
+      </button>
+    </div>
+  </dialog>
+
   <!-- ── Konfirmasi dialog (generik) ── -->
   <dialog id="confirmDialog">
     <div class="grid grid-cols-1 max-w-[360px] gap-4 rounded-xl2 border border-line bg-surface p-4 shadow-card">
@@ -335,8 +437,8 @@
   </dialog>
 
   <!-- ── Toast stack ── -->
-  <div id="toastStack" class="pointer-events-none fixed inset-x-0 bottom-[calc(16px+var(--safe-b))] z-50 mx-auto flex w-full max-w-[720px] flex-col items-stretch gap-2 px-4"></div>
+  <div id="toastStack" class="pointer-events-none fixed inset-x-0 bottom-[calc(88px+var(--safe-b))] z-50 mx-auto flex w-full max-w-[720px] flex-col items-stretch gap-2 px-4"></div>
 
-  <script src="/admin/app.js?v=10"></script>
+  <script src="/admin/app.js?v=11"></script>
 </body>
 </html>
