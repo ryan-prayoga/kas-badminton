@@ -7,9 +7,9 @@
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <title>Kok Badminton — Admin</title>
-  <link rel="stylesheet" href="/styles.css?v=6" />
-  <script src="/vendor/iconify-icon.js?v=6"></script>
-  <script src="/vendor/icons.js?v=6"></script>
+  <link rel="stylesheet" href="/styles.css?v=7" />
+  <script src="/vendor/iconify-icon.js?v=7"></script>
+  <script src="/vendor/icons.js?v=7"></script>
 </head>
 <body class="text-ink50">
 
@@ -49,7 +49,7 @@
   </div>
 
   <!-- ── App ── -->
-  <div id="appRoot" class="mx-auto flex w-full max-w-[720px] flex-col gap-4 px-4 pb-[calc(40px+var(--safe-b))] pt-[calc(16px+var(--safe-t))]" hidden>
+  <div id="appRoot" class="mx-auto flex w-full max-w-[720px] flex-col gap-4 px-4 pb-[calc(96px+var(--safe-b))] pt-[calc(16px+var(--safe-t))]" hidden>
 
     <!-- Header -->
     <header class="relative overflow-hidden rounded-xl2 border border-line bg-surface shadow-card">
@@ -66,6 +66,9 @@
             </div>
           </div>
           <div class="flex shrink-0 items-center gap-1.5">
+            <button type="button" id="settingsBtn" title="Pengaturan" class="grid h-9 w-9 place-items-center rounded-xl border border-line bg-elevated text-muted transition active:scale-95 hover:text-ink50">
+              <iconify-icon icon="mdi:cog" width="18"></iconify-icon>
+            </button>
             <a href="/" title="Halaman publik" class="grid h-9 w-9 place-items-center rounded-xl border border-line bg-elevated text-muted transition active:scale-95 hover:text-ink50">
               <iconify-icon icon="mdi:earth" width="18"></iconify-icon>
             </a>
@@ -74,99 +77,8 @@
             </button>
           </div>
         </div>
-
-        <!-- default price -->
-        <div class="mt-4 rounded-xl border border-line bg-sunken p-3">
-          <label for="defaultPrice" class="mb-2 block text-xs font-medium text-muted">Default harga / orang / kok</label>
-          <div class="flex items-center gap-2">
-            <span class="font-mono text-sm text-soft">Rp</span>
-            <input id="defaultPrice" inputmode="numeric" type="number" min="0" step="500"
-              class="min-w-0 flex-1 rounded-xl border border-line bg-ink px-3 py-2.5 text-base outline-none transition focus:border-brand/60" />
-            <button id="savePrice" type="button" class="inline-flex shrink-0 items-center gap-1 rounded-xl border border-line bg-elevated px-3 py-2.5 text-sm font-medium transition active:scale-95 hover:border-line2">
-              <iconify-icon icon="mdi:content-save-outline" width="16"></iconify-icon> Simpan
-            </button>
-          </div>
-          <p class="mt-2 text-xs text-soft">Harga lama tetap snapshot, ganti default cuma buat main baru.</p>
-        </div>
       </div>
     </header>
-
-    <!-- Catat main -->
-    <section class="rounded-xl2 border border-line bg-surface shadow-card p-4">
-      <div class="mb-4 flex items-center gap-2">
-        <iconify-icon icon="mdi:plus-circle-outline" width="20" class="text-brand"></iconify-icon>
-        <h2 class="text-base font-bold tracking-tight">Catat main</h2>
-      </div>
-
-      <form id="gameForm" class="grid gap-4">
-        <label class="grid gap-1.5">
-          <span class="text-xs font-medium text-muted">Tanggal</span>
-          <input id="date" type="date" required
-            class="w-full rounded-xl border border-line bg-ink px-3 py-3 text-base outline-none transition focus:border-brand/60" />
-        </label>
-
-        <div id="pairInputs" class="grid gap-2.5">
-          <!-- Pair A -->
-          <div class="rounded-xl border border-line bg-elevated p-3" data-pair="a">
-            <div class="mb-3 flex items-center justify-between gap-2">
-              <span class="inline-flex items-center gap-1.5 rounded-md bg-brand/10 px-2 py-1 text-xs font-bold uppercase tracking-wide text-brand">Pair A</span>
-              <div class="flex items-center gap-2">
-                <span class="text-xs text-soft">Skor</span>
-                <input type="text" inputmode="numeric" name="scoreA" placeholder="21" maxlength="20" autocomplete="off"
-                  class="w-16 rounded-lg border border-line bg-ink px-2 py-2 text-center font-mono text-base outline-none transition focus:border-brand/60" />
-              </div>
-            </div>
-            <div class="grid gap-2 sm:grid-cols-2">
-              <input type="text" name="player0" list="player-suggest" placeholder="Pemain 1" autocomplete="off" required maxlength="40"
-                class="w-full rounded-xl border border-line bg-ink px-3 py-2.5 text-base outline-none transition focus:border-brand/60" />
-              <input type="text" name="player1" list="player-suggest" placeholder="Pemain 2" autocomplete="off" required maxlength="40"
-                class="w-full rounded-xl border border-line bg-ink px-3 py-2.5 text-base outline-none transition focus:border-brand/60" />
-            </div>
-          </div>
-
-          <div class="grid place-items-center"><span class="grid h-7 w-7 place-items-center rounded-full border border-line bg-surface text-[10px] font-bold tracking-wider text-soft">VS</span></div>
-
-          <!-- Pair B -->
-          <div class="rounded-xl border border-line bg-elevated p-3" data-pair="b">
-            <div class="mb-3 flex items-center justify-between gap-2">
-              <span class="inline-flex items-center gap-1.5 rounded-md bg-ok/10 px-2 py-1 text-xs font-bold uppercase tracking-wide text-ok">Pair B</span>
-              <div class="flex items-center gap-2">
-                <span class="text-xs text-soft">Skor</span>
-                <input type="text" inputmode="numeric" name="scoreB" placeholder="18" maxlength="20" autocomplete="off"
-                  class="w-16 rounded-lg border border-line bg-ink px-2 py-2 text-center font-mono text-base outline-none transition focus:border-brand/60" />
-              </div>
-            </div>
-            <div class="grid gap-2 sm:grid-cols-2">
-              <input type="text" name="player2" list="player-suggest" placeholder="Pemain 1" autocomplete="off" required maxlength="40"
-                class="w-full rounded-xl border border-line bg-ink px-3 py-2.5 text-base outline-none transition focus:border-brand/60" />
-              <input type="text" name="player3" list="player-suggest" placeholder="Pemain 2" autocomplete="off" required maxlength="40"
-                class="w-full rounded-xl border border-line bg-ink px-3 py-2.5 text-base outline-none transition focus:border-brand/60" />
-            </div>
-          </div>
-        </div>
-
-        <div class="grid gap-2">
-          <div class="flex items-center justify-between">
-            <span class="text-xs font-medium text-muted">Kok (harga snapshot)</span>
-            <button type="button" id="addKok" class="inline-flex items-center gap-1 rounded-lg border border-line bg-elevated px-2.5 py-1.5 text-xs font-medium transition active:scale-95 hover:border-line2">
-              <iconify-icon icon="mdi:plus" width="14"></iconify-icon> Kok
-            </button>
-          </div>
-          <div id="kokList" class="grid gap-2"></div>
-          <p class="text-xs text-soft" id="formCostHint">—</p>
-        </div>
-
-        <label class="grid gap-1.5">
-          <span class="text-xs font-medium text-muted">Catatan (opsional)</span>
-          <input id="notes" type="text" placeholder="court 3, beli kok baru…" maxlength="160"
-            class="w-full rounded-xl border border-line bg-ink px-3 py-2.5 text-base outline-none transition focus:border-brand/60" />
-        </label>
-
-        <button type="submit" class="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-brand px-4 py-3.5 text-base font-bold text-ink transition active:scale-[0.98] hover:bg-brand-soft">
-          <iconify-icon icon="mdi:content-save-check-outline" width="20"></iconify-icon> Simpan game
-        </button>
-      </form>
-    </section>
 
     <!-- Belum bayar -->
     <section class="rounded-xl2 border border-line bg-surface shadow-card p-4">
@@ -192,6 +104,121 @@
       <div id="gameList" class="grid gap-3"></div>
     </section>
   </div>
+
+  <!-- ── FAB: catat main baru ── -->
+  <button type="button" id="fabAdd" aria-label="Catat main baru" hidden
+    class="fixed bottom-[calc(20px+var(--safe-b))] right-4 z-40 grid h-14 w-14 place-items-center rounded-full bg-brand text-ink shadow-glow transition active:scale-90 hover:bg-brand-soft">
+    <iconify-icon icon="mdi:plus" width="28"></iconify-icon>
+  </button>
+
+  <!-- ── Catat main dialog ── -->
+  <dialog id="gameDialog">
+    <form id="gameForm" class="grid max-h-[calc(100dvh-20px)] gap-4 overflow-auto rounded-xl2 border border-line bg-surface p-4 shadow-card">
+      <div class="flex items-center gap-2">
+        <iconify-icon icon="mdi:plus-circle-outline" width="20" class="text-brand"></iconify-icon>
+        <h2 class="text-base font-bold tracking-tight">Catat main</h2>
+      </div>
+
+      <label class="grid gap-1.5">
+        <span class="text-xs font-medium text-muted">Tanggal</span>
+        <input id="date" type="date" required
+          class="w-full rounded-xl border border-line bg-ink px-3 py-3 text-base outline-none transition focus:border-brand/60" />
+      </label>
+
+      <div id="pairInputs" class="grid gap-2.5">
+        <!-- Pair A -->
+        <div class="rounded-xl border border-line bg-elevated p-3" data-pair="a">
+          <div class="mb-3 flex items-center justify-between gap-2">
+            <span class="inline-flex items-center gap-1.5 rounded-md bg-brand/10 px-2 py-1 text-xs font-bold uppercase tracking-wide text-brand">Pair A</span>
+            <div class="flex items-center gap-2">
+              <span class="text-xs text-soft">Skor</span>
+              <input type="text" inputmode="numeric" name="scoreA" placeholder="21" maxlength="20" autocomplete="off"
+                class="w-16 rounded-lg border border-line bg-ink px-2 py-2 text-center font-mono text-base outline-none transition focus:border-brand/60" />
+            </div>
+          </div>
+          <div class="grid gap-2 sm:grid-cols-2">
+            <input type="text" name="player0" list="player-suggest" placeholder="Pemain 1" autocomplete="off" required maxlength="40"
+              class="w-full rounded-xl border border-line bg-ink px-3 py-2.5 text-base outline-none transition focus:border-brand/60" />
+            <input type="text" name="player1" list="player-suggest" placeholder="Pemain 2" autocomplete="off" required maxlength="40"
+              class="w-full rounded-xl border border-line bg-ink px-3 py-2.5 text-base outline-none transition focus:border-brand/60" />
+          </div>
+        </div>
+
+        <div class="grid place-items-center"><span class="grid h-7 w-7 place-items-center rounded-full border border-line bg-surface text-[10px] font-bold tracking-wider text-soft">VS</span></div>
+
+        <!-- Pair B -->
+        <div class="rounded-xl border border-line bg-elevated p-3" data-pair="b">
+          <div class="mb-3 flex items-center justify-between gap-2">
+            <span class="inline-flex items-center gap-1.5 rounded-md bg-ok/10 px-2 py-1 text-xs font-bold uppercase tracking-wide text-ok">Pair B</span>
+            <div class="flex items-center gap-2">
+              <span class="text-xs text-soft">Skor</span>
+              <input type="text" inputmode="numeric" name="scoreB" placeholder="18" maxlength="20" autocomplete="off"
+                class="w-16 rounded-lg border border-line bg-ink px-2 py-2 text-center font-mono text-base outline-none transition focus:border-brand/60" />
+            </div>
+          </div>
+          <div class="grid gap-2 sm:grid-cols-2">
+            <input type="text" name="player2" list="player-suggest" placeholder="Pemain 1" autocomplete="off" required maxlength="40"
+              class="w-full rounded-xl border border-line bg-ink px-3 py-2.5 text-base outline-none transition focus:border-brand/60" />
+            <input type="text" name="player3" list="player-suggest" placeholder="Pemain 2" autocomplete="off" required maxlength="40"
+              class="w-full rounded-xl border border-line bg-ink px-3 py-2.5 text-base outline-none transition focus:border-brand/60" />
+          </div>
+        </div>
+      </div>
+
+      <div class="grid gap-2">
+        <div class="flex items-center justify-between">
+          <span class="text-xs font-medium text-muted">Kok (harga snapshot)</span>
+          <button type="button" id="addKok" class="inline-flex items-center gap-1 rounded-lg border border-line bg-elevated px-2.5 py-1.5 text-xs font-medium transition active:scale-95 hover:border-line2">
+            <iconify-icon icon="mdi:plus" width="14"></iconify-icon> Kok
+          </button>
+        </div>
+        <div id="kokList" class="grid gap-2"></div>
+        <p class="text-xs text-soft" id="formCostHint">—</p>
+      </div>
+
+      <label class="grid gap-1.5">
+        <span class="text-xs font-medium text-muted">Catatan (opsional)</span>
+        <input id="notes" type="text" placeholder="court 3, beli kok baru…" maxlength="160"
+          class="w-full rounded-xl border border-line bg-ink px-3 py-2.5 text-base outline-none transition focus:border-brand/60" />
+      </label>
+
+      <div class="sticky bottom-0 -mx-4 -mb-4 flex items-center gap-2 border-t border-line bg-surface px-4 py-3">
+        <button type="button" id="cancelGameForm" class="rounded-xl border border-line bg-elevated px-3 py-2.5 text-sm font-medium transition active:scale-95">Batal</button>
+        <div class="flex-1"></div>
+        <button type="submit" class="inline-flex items-center gap-1.5 rounded-xl bg-brand px-4 py-2.5 text-sm font-bold text-ink transition active:scale-95 hover:bg-brand-soft">
+          <iconify-icon icon="mdi:content-save-check-outline" width="16"></iconify-icon> Simpan game
+        </button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- ── Pengaturan dialog ── -->
+  <dialog id="settingsDialog">
+    <form id="settingsForm" class="grid gap-4 rounded-xl2 border border-line bg-surface p-4 shadow-card">
+      <div class="flex items-center gap-2">
+        <iconify-icon icon="mdi:cog" width="20" class="text-brand"></iconify-icon>
+        <h2 class="text-base font-bold tracking-tight">Pengaturan</h2>
+      </div>
+
+      <label class="grid gap-1.5">
+        <span class="text-xs font-medium text-muted">Default harga / orang / kok</span>
+        <div class="flex items-center gap-2 rounded-xl border border-line bg-ink px-3">
+          <span class="font-mono text-sm text-soft">Rp</span>
+          <input id="defaultPrice" inputmode="numeric" type="number" min="0" step="500"
+            class="min-w-0 flex-1 bg-transparent py-2.5 text-base outline-none" />
+        </div>
+        <p class="text-xs text-soft">Harga lama tetap snapshot, ganti default cuma buat main baru.</p>
+      </label>
+
+      <div class="flex items-center gap-2 border-t border-line pt-3">
+        <button type="button" id="cancelSettings" class="rounded-xl border border-line bg-elevated px-3 py-2.5 text-sm font-medium transition active:scale-95">Tutup</button>
+        <div class="flex-1"></div>
+        <button type="submit" class="inline-flex items-center gap-1.5 rounded-xl bg-brand px-4 py-2.5 text-sm font-bold text-ink transition active:scale-95 hover:bg-brand-soft">
+          <iconify-icon icon="mdi:content-save-outline" width="16"></iconify-icon> Simpan
+        </button>
+      </div>
+    </form>
+  </dialog>
 
   <!-- ── Edit dialog ── -->
   <dialog id="editDialog">
@@ -230,7 +257,24 @@
     </form>
   </dialog>
 
+  <!-- ── Konfirmasi dialog (generik) ── -->
+  <dialog id="confirmDialog">
+    <div class="grid max-w-[360px] gap-4 rounded-xl2 border border-line bg-surface p-4 shadow-card">
+      <div class="flex items-start gap-2.5">
+        <iconify-icon icon="mdi:alert-circle-outline" width="22" class="mt-0.5 shrink-0 text-warn"></iconify-icon>
+        <p id="confirmMessage" class="text-sm text-ink50">Yakin?</p>
+      </div>
+      <div class="flex items-center gap-2">
+        <button type="button" id="confirmCancel" class="flex-1 rounded-xl border border-line bg-elevated px-3 py-2.5 text-sm font-medium transition active:scale-95">Batal</button>
+        <button type="button" id="confirmOk" class="flex-1 rounded-xl border border-danger/40 bg-danger/10 px-3 py-2.5 text-sm font-bold text-danger transition active:scale-95">Ya, lanjut</button>
+      </div>
+    </div>
+  </dialog>
+
+  <!-- ── Toast stack ── -->
+  <div id="toastStack" class="pointer-events-none fixed inset-x-0 bottom-[calc(16px+var(--safe-b))] z-50 mx-auto flex w-full max-w-[720px] flex-col items-stretch gap-2 px-4"></div>
+
   <datalist id="player-suggest"></datalist>
-  <script src="/admin/app.js?v=6"></script>
+  <script src="/admin/app.js?v=7"></script>
 </body>
 </html>
