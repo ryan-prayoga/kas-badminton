@@ -33,6 +33,18 @@ iconify-icon {
 input, button, select, textarea { font-family: inherit; }
 input[type="date"], input[type="number"], input[type="text"] { color-scheme: dark; }
 
+/* iOS Safari: date input value defaults to center + spinner overlap → fix */
+input[type="date"] {
+  -webkit-appearance: none;
+  appearance: none;
+  text-align: left;
+}
+input[type="date"]::-webkit-date-and-time-value { text-align: left; }
+input[type="date"]::-webkit-datetime-edit { text-align: left; }
+input[type="number"]::-webkit-outer-spin-button,
+input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
+
 /* Custom scrollbar */
 ::-webkit-scrollbar { width: 10px; height: 10px; }
 ::-webkit-scrollbar-thumb { background: #2a2d34; border-radius: 999px; border: 2px solid transparent; background-clip: content-box; }

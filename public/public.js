@@ -111,8 +111,8 @@ function renderStats() {
   if (!strip) return;
   var games = state.games;
   var totalDebt = state.debtSummary.reduce(function (s, d) { return s + d.total; }, 0);
-  var totalKas = games.reduce(function (s, g) { return s + (g.cost ? g.cost.total : 0); }, 0);
   var totalKok = games.reduce(function (s, g) { return s + (g.cost ? g.cost.kokCount : 0); }, 0);
+  // Total kas sengaja TIDAK ditampilkan di publik (admin-only).
   strip.innerHTML =
     statCard({
       icon: 'mdi:cash-multiple', iconClass: 'text-warn', label: 'Belum bayar',
@@ -122,10 +122,6 @@ function renderStats() {
     statCard({
       icon: 'mdi:badminton', iconClass: 'text-brand', label: 'Total main',
       value: String(games.length), sub: games.length ? 'game tercatat' : 'belum ada',
-    }) +
-    statCard({
-      icon: 'mdi:cash-register', iconClass: 'text-ok', label: 'Total kas',
-      value: fmt(totalKas), sub: 'akumulasi biaya',
     }) +
     statCard({
       icon: 'game-icons:shuttlecock', iconClass: 'text-brand', label: 'Kok terpakai',

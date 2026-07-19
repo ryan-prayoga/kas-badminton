@@ -287,7 +287,7 @@
           <iconify-icon icon="mdi:close" width="18"></iconify-icon>
         </button>
       </div>
-      <p class="text-xs text-soft">Katalog + stok. Saat catat main pilih jenis — stok otomatis berkurang, harga di-snapshot.</p>
+      <p class="text-xs text-soft">Katalog + stok. Saat catat main pilih jenis — stok otomatis berkurang, harga di-snapshot. Beli slop (isi 12) mengurangi kas.</p>
 
       <form id="kokTypeForm" class="grid grid-cols-1 gap-2 rounded-xl border border-line bg-elevated p-3">
         <input type="hidden" id="kokTypeEditId" value="" />
@@ -297,20 +297,28 @@
             class="w-full rounded-xl border border-line bg-ink px-3 py-2.5 text-base outline-none transition focus:border-brand/60" />
         </label>
         <div class="grid grid-cols-2 gap-2">
-          <label class="grid gap-1">
+          <label class="grid min-w-0 gap-1">
             <span class="text-xs font-medium text-muted">Harga / orang</span>
-            <div class="flex items-center gap-2 rounded-xl border border-line bg-ink px-3">
+            <div class="flex min-w-0 items-center gap-2 rounded-xl border border-line bg-ink px-3">
               <span class="font-mono text-sm text-soft">Rp</span>
-              <input id="kokTypePrice" inputmode="numeric" type="number" min="0" step="500" required
+              <input id="kokTypePrice" inputmode="numeric" type="number" min="0" step="1" required
                 class="min-w-0 flex-1 bg-transparent py-2.5 text-base outline-none" />
             </div>
           </label>
-          <label class="grid gap-1">
-            <span class="text-xs font-medium text-muted">Stok</span>
-            <input id="kokTypeStock" inputmode="numeric" type="number" min="0" step="1" value="0" required
-              class="w-full rounded-xl border border-line bg-ink px-3 py-2.5 text-base outline-none transition focus:border-brand/60" />
+          <label class="grid min-w-0 gap-1">
+            <span class="text-xs font-medium text-muted">Harga / slop (isi 12)</span>
+            <div class="flex min-w-0 items-center gap-2 rounded-xl border border-line bg-ink px-3">
+              <span class="font-mono text-sm text-soft">Rp</span>
+              <input id="kokTypeSlopPrice" inputmode="numeric" type="number" min="0" step="1" value="0"
+                class="min-w-0 flex-1 bg-transparent py-2.5 text-base outline-none" />
+            </div>
           </label>
         </div>
+        <label class="grid gap-1">
+          <span class="text-xs font-medium text-muted">Stok awal (pcs)</span>
+          <input id="kokTypeStock" inputmode="numeric" type="number" min="0" step="1" value="0" required
+            class="w-full rounded-xl border border-line bg-ink px-3 py-2.5 text-base outline-none transition focus:border-brand/60" />
+        </label>
         <div class="flex items-center gap-2 pt-1">
           <button type="button" id="kokTypeFormCancel" class="rounded-xl border border-line bg-surface px-3 py-2 text-sm font-medium transition active:scale-95" hidden>Batal edit</button>
           <div class="flex-1"></div>
@@ -420,6 +428,31 @@
         <iconify-icon icon="mdi:cash-check" width="16"></iconify-icon> Sudah dibayar → catat
       </button>
     </div>
+  </dialog>
+
+  <!-- ── Beli slop dialog ── -->
+  <dialog id="buyDialog">
+    <form id="buyForm" class="grid grid-cols-1 gap-4 rounded-xl2 border border-line bg-surface p-4 shadow-card">
+      <div class="flex items-center gap-2">
+        <iconify-icon icon="mdi:cash-register" width="20" class="text-warn"></iconify-icon>
+        <h2 class="text-base font-bold tracking-tight">Beli stok (slop)</h2>
+      </div>
+      <input type="hidden" id="buyTypeId" />
+      <p id="buyWho" class="text-sm text-muted">—</p>
+      <label class="grid gap-1.5">
+        <span class="text-xs font-medium text-muted">Jumlah slop (1 slop = 12 kok)</span>
+        <input id="buySlops" inputmode="numeric" type="number" min="1" step="1" value="1" required
+          class="w-full rounded-xl border border-line bg-ink px-3 py-2.5 text-base outline-none transition focus:border-brand/60" />
+        <p id="buyHint" class="text-xs text-soft">—</p>
+      </label>
+      <div class="flex items-center gap-2 border-t border-line pt-3">
+        <button type="button" id="cancelBuy" class="rounded-xl border border-line bg-elevated px-3 py-2.5 text-sm font-medium transition active:scale-95">Batal</button>
+        <div class="flex-1"></div>
+        <button type="submit" class="inline-flex items-center gap-1.5 rounded-xl bg-brand px-4 py-2.5 text-sm font-bold text-ink transition active:scale-95 hover:bg-brand-soft">
+          <iconify-icon icon="mdi:package-variant" width="16"></iconify-icon> Beli
+        </button>
+      </div>
+    </form>
   </dialog>
 
   <!-- ── Konfirmasi dialog (generik) ── -->

@@ -295,6 +295,7 @@ function rowToKokType(r) {
     id: r.id,
     name: r.name,
     pricePerPerson: Number(r.price_per_person) || 0,
+    pricePerSlop: Math.max(0, Math.round(Number(r.price_per_slop) || 0)),
     stock: Number.isFinite(Number(r.stock)) ? Math.max(0, Math.round(Number(r.stock))) : 0,
     active: r.active !== false,
     createdAt: r.created_at instanceof Date ? r.created_at.toISOString() : r.created_at,
@@ -399,13 +400,19 @@ function summarize(db, isAdmin) {
     qrisEnabled: Boolean(db.settings.merchantQris),
   };
   if (isAdmin) settings.merchantQris = db.settings.merchantQris || '';
-  return {
+  const payload = {
     settings,
     players: db.players,
     kokTypes: db.kokTypes || [],
     games,
     debtSummary: buildDebtSummary(games, db.carry || {}),
   };
+  if (isAdmin) {
+    const paid = games.reduce((s, g) => s + (g.summary ? g.summary.paidTotal : 0), 0);
+    const expense = Math.max(0, Number(db.totalExpense) || 0);
+    payload.kas = { paid, expense, net: paid - expense };
+  }
+  return payload;
 }
 
 async function ensureSchema() {
@@ -425,8 +432,23 @@ async function ensureSchema() {
     ADD COLUMN IF NOT EXISTS stock INT NOT NULL DEFAULT 0
   `);
   await pool.query(`
+    ALTER TABLE kok_types
+    ADD COLUMN IF NOT EXISTS price_per_slop INT NOT NULL DEFAULT 0
+  `);
+  await pool.query(`
     CREATE UNIQUE INDEX IF NOT EXISTS kok_types_name_lower_uidx
     ON kok_types (lower(name))
+  `);
+  // Pengeluaran beli stok kok (kas keluar)
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS expenses (
+      id TEXT PRIMARY KEY,
+      type_id TEXT,
+      type_name TEXT,
+      slops INT NOT NULL DEFAULT 0,
+      amount INT NOT NULL,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
   `);
   // Kolom QRIS statis merchant (settings dibuat manual; ALTER additive aman)
   await pool.query(`ALTER TABLE settings ADD COLUMN IF NOT EXISTS merchant_qris TEXT`);
@@ -448,14 +470,15 @@ async function ensureSchema() {
 }
 
 async function loadDb() {
-  const [settingsRes, playersRes, gamesRes, typesRes, carryRes] = await Promise.all([
+  const [settingsRes, playersRes, gamesRes, typesRes, carryRes, expenseRes] = await Promise.all([
     pool.query('SELECT default_price_per_person, merchant_qris FROM settings WHERE id = 1'),
     pool.query('SELECT name FROM players ORDER BY name'),
     pool.query('SELECT id, date, players, koks, notes, created_at, updated_at FROM games'),
     pool.query(
-      'SELECT id, name, price_per_person, stock, active, created_at, updated_at FROM kok_types ORDER BY lower(name)'
+      'SELECT id, name, price_per_person, price_per_slop, stock, active, created_at, updated_at FROM kok_types ORDER BY lower(name)'
     ),
     pool.query('SELECT name, carry FROM player_carry'),
+    pool.query('SELECT COALESCE(SUM(amount), 0)::int AS total FROM expenses'),
   ]);
   const carry = {};
   for (const r of carryRes.rows) {
@@ -471,6 +494,7 @@ async function loadDb() {
     games: gamesRes.rows.map(rowToGame),
     kokTypes: typesRes.rows.map(rowToKokType),
     carry,
+    totalExpense: Number(expenseRes.rows[0]?.total) || 0,
   };
 }
 
@@ -496,12 +520,13 @@ async function saveDb(db) {
     await client.query('DELETE FROM kok_types');
     for (const t of db.kokTypes || []) {
       await client.query(
-        `INSERT INTO kok_types (id, name, price_per_person, stock, active, created_at, updated_at)
-         VALUES ($1,$2,$3,$4,$5,$6,$7)`,
+        `INSERT INTO kok_types (id, name, price_per_person, price_per_slop, stock, active, created_at, updated_at)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
         [
           t.id,
           t.name,
           t.pricePerPerson,
+          Math.max(0, Math.round(Number(t.pricePerSlop) || 0)),
           parseStock(t.stock, 0),
           t.active !== false,
           t.createdAt || new Date().toISOString(),
@@ -864,6 +889,7 @@ app.post('/api/kok-types', requireAdmin, async (req, res, next) => {
       id: uid(),
       name,
       pricePerPerson: Math.round(price),
+      pricePerSlop: Math.max(0, Math.round(Number(req.body?.pricePerSlop) || 0)),
       stock: parseStock(req.body?.stock, 0),
       active: req.body?.active === false ? false : true,
       createdAt: now,
@@ -900,6 +926,13 @@ app.patch('/api/kok-types/:id', requireAdmin, async (req, res, next) => {
         return res.status(400).json({ error: 'pricePerPerson harus angka >= 0' });
       }
       type.pricePerPerson = Math.round(price);
+    }
+    if (req.body?.pricePerSlop !== undefined) {
+      const ps = Number(req.body.pricePerSlop);
+      if (!Number.isFinite(ps) || ps < 0) {
+        return res.status(400).json({ error: 'pricePerSlop harus angka >= 0' });
+      }
+      type.pricePerSlop = Math.round(ps);
     }
     if (req.body?.stock !== undefined) {
       const stock = Number(req.body.stock);
@@ -938,6 +971,34 @@ app.post('/api/kok-types/:id/stock', requireAdmin, async (req, res, next) => {
     type.updatedAt = new Date().toISOString();
     await saveDb(db);
     res.json({ kokType: type, kokTypes: db.kokTypes });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// Beli stok per slop (1 slop = 12 kok) → tambah stok + catat pengeluaran (kas keluar)
+app.post('/api/kok-types/:id/buy', requireAdmin, async (req, res, next) => {
+  try {
+    const db = await loadDb();
+    const type = (db.kokTypes || []).find((t) => t.id === req.params.id);
+    if (!type) return res.status(404).json({ error: 'Jenis kok tidak ditemukan' });
+
+    const slops = Number(req.body?.slops);
+    if (!Number.isFinite(slops) || !Number.isInteger(slops) || slops <= 0) {
+      return res.status(400).json({ error: 'Jumlah slop harus angka bulat > 0' });
+    }
+    const pricePerSlop = Math.max(0, Number(type.pricePerSlop) || 0);
+    const amount = slops * pricePerSlop;
+
+    type.stock = (Number(type.stock) || 0) + slops * 12;
+    type.updatedAt = new Date().toISOString();
+    await saveDb(db);
+    await pool.query(
+      'INSERT INTO expenses (id, type_id, type_name, slops, amount) VALUES ($1,$2,$3,$4,$5)',
+      [uid(), type.id, type.name, slops, amount]
+    );
+    db.totalExpense = (Number(db.totalExpense) || 0) + amount;
+    res.json(summarize(db, true));
   } catch (err) {
     next(err);
   }

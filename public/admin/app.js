@@ -2,6 +2,7 @@ const state = {
   settings: { defaultPricePerPerson: 3000 },
   qrisEnabled: false,
   merchantQris: '',
+  kas: null,
   players: [],
   kokTypes: [],
   games: [],
@@ -463,6 +464,8 @@ function resetKokTypeForm() {
   $('#kokTypeEditId').value = '';
   $('#kokTypeName').value = '';
   $('#kokTypePrice').value = state.settings.defaultPricePerPerson || 3000;
+  var slopEl = $('#kokTypeSlopPrice');
+  if (slopEl) slopEl.value = 0;
   var stockEl = $('#kokTypeStock');
   if (stockEl) stockEl.value = 0;
   $('#kokTypeFormCancel').hidden = true;
@@ -492,15 +495,16 @@ function renderKokTypeList() {
         '<div class="min-w-0 flex-1">' +
           '<p class="truncate text-sm font-semibold text-ink50">' + escapeHtml(t.name) + '</p>' +
           '<p class="mt-0.5 font-mono text-xs text-muted">' + fmt(t.pricePerPerson) + ' / orang' +
+            (Number(t.pricePerSlop) > 0 ? ' · ' + fmt(t.pricePerSlop) + ' / slop' : '') +
             (inactive ? ' · nonaktif' : '') +
           '</p>' +
           '<div class="mt-1.5 flex flex-wrap items-center gap-1">' +
             '<span class="inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[11px] font-semibold ' + stockBadgeClass(stock) + '">' +
               '<iconify-icon icon="mdi:package-variant" width="12"></iconify-icon>stok ' + stock +
             '</span>' +
-            '<button type="button" data-role="stock-plus" class="rounded-md border border-line bg-surface px-1 py-0.5 text-[11px] font-medium text-muted transition active:scale-95 hover:text-ink50" title="Tambah stok +1">+1</button>' +
-            '<button type="button" data-role="stock-plus12" class="rounded-md border border-line bg-surface px-1 py-0.5 text-[11px] font-medium text-muted transition active:scale-95 hover:text-ink50" title="Tambah 1 tube (+12)">+12</button>' +
-            '<button type="button" data-role="stock-minus" class="rounded-md border border-line bg-surface px-1 py-0.5 text-[11px] font-medium text-muted transition active:scale-95 hover:text-ink50" title="Kurangi stok -1">−1</button>' +
+            '<button type="button" data-role="buy" class="inline-flex items-center gap-1 rounded-md border border-brand/40 bg-brand/10 px-1.5 py-0.5 text-[11px] font-semibold text-brand transition active:scale-95" title="Beli slop (isi 12)"><iconify-icon icon="mdi:cash-register" width="12"></iconify-icon>Beli slop</button>' +
+            '<button type="button" data-role="stock-plus" class="rounded-md border border-line bg-surface px-1 py-0.5 text-[11px] font-medium text-muted transition active:scale-95 hover:text-ink50" title="Koreksi stok +1">+1</button>' +
+            '<button type="button" data-role="stock-minus" class="rounded-md border border-line bg-surface px-1 py-0.5 text-[11px] font-medium text-muted transition active:scale-95 hover:text-ink50" title="Koreksi stok -1">−1</button>' +
           '</div>' +
         '</div>' +
         '<button type="button" data-role="edit-type" class="grid h-8 w-8 shrink-0 place-items-center rounded-lg border border-line text-muted transition active:scale-95 hover:text-ink50" title="Edit">' +
@@ -771,12 +775,12 @@ function renderStats() {
   if (!strip) return;
   var games = state.games;
   var totalDebt = state.debtSummary.reduce(function (s, d) { return s + d.total; }, 0);
-  var totalKas = games.reduce(function (s, g) { return s + (g.cost ? g.cost.total : 0); }, 0);
   var totalKok = games.reduce(function (s, g) { return s + (g.cost ? g.cost.kokCount : 0); }, 0);
+  var kas = state.kas || { paid: 0, expense: 0, net: 0 };
   strip.innerHTML =
+    statCard({ icon: 'mdi:cash-register', iconClass: kas.net >= 0 ? 'text-ok' : 'text-danger', label: 'Total kas', value: fmt(kas.net), valueClass: kas.net >= 0 ? 'text-ok' : 'text-danger', sub: 'masuk ' + fmt(kas.paid) + ' · beli ' + fmt(kas.expense) }) +
     statCard({ icon: 'mdi:cash-multiple', iconClass: 'text-warn', label: 'Belum bayar', value: fmt(totalDebt), valueClass: totalDebt ? 'text-warn' : 'text-ok', sub: state.debtSummary.length ? state.debtSummary.length + ' orang' : 'Semua lunas' }) +
     statCard({ icon: 'mdi:badminton', iconClass: 'text-brand', label: 'Total main', value: String(games.length), sub: games.length ? 'game tercatat' : 'belum ada' }) +
-    statCard({ icon: 'mdi:cash-register', iconClass: 'text-ok', label: 'Total kas', value: fmt(totalKas), sub: 'akumulasi biaya' }) +
     statCard({ icon: 'game-icons:shuttlecock', iconClass: 'text-brand', label: 'Kok terpakai', value: String(totalKok), sub: 'total kok' });
 }
 
@@ -839,6 +843,7 @@ function applyServerState(data) {
   if (data.kokTypes) state.kokTypes = data.kokTypes;
   if (data.games) state.games = data.games;
   if (data.debtSummary) state.debtSummary = data.debtSummary;
+  if (data.kas) state.kas = data.kas;
   renderAll();
 }
 
@@ -934,6 +939,28 @@ function submitPay(name, amount) {
   return api('/api/players/pay', { method: 'POST', body: JSON.stringify({ name: name, amount: amount }) })
     .then(function (data) { applyServerState(data); toast('Pembayaran dicatat.', 'success'); })
     .catch(function (err) { toast(err.message, 'error'); });
+}
+
+// --- Beli slop ---
+var buyType = null;
+
+function updateBuyHint() {
+  var el = $('#buyHint');
+  if (!el || !buyType) return;
+  var slops = Math.max(0, Math.round(Number($('#buySlops').value) || 0));
+  var pcs = slops * 12;
+  var cost = slops * (Number(buyType.pricePerSlop) || 0);
+  el.textContent = '+' + pcs + ' kok · kas −' + fmt(cost) +
+    (Number(buyType.pricePerSlop) > 0 ? '' : ' (harga/slop belum diset → kas 0)');
+}
+
+function openBuy(type) {
+  buyType = type;
+  $('#buyTypeId').value = type.id;
+  $('#buyWho').textContent = type.name + ' · ' + fmt(type.pricePerSlop || 0) + ' / slop';
+  $('#buySlops').value = 1;
+  updateBuyHint();
+  $('#buyDialog').showModal();
 }
 
 // --- Tabs ---
@@ -1071,6 +1098,7 @@ function wire() {
     var body = {
       name: $('#kokTypeName').value,
       pricePerPerson: Number($('#kokTypePrice').value),
+      pricePerSlop: Number($('#kokTypeSlopPrice').value || 0),
       stock: Number($('#kokTypeStock').value || 0),
     };
     var req = editId
@@ -1096,10 +1124,16 @@ function wire() {
     if (!type) return;
     var role = btn.getAttribute('data-role');
 
+    if (role === 'buy') {
+      openBuy(type);
+      return;
+    }
+
     if (role === 'edit-type') {
       $('#kokTypeEditId').value = type.id;
       $('#kokTypeName').value = type.name;
       $('#kokTypePrice').value = type.pricePerPerson;
+      $('#kokTypeSlopPrice').value = Number(type.pricePerSlop) || 0;
       $('#kokTypeStock').value = Number(type.stock) || 0;
       $('#kokTypeFormCancel').hidden = false;
       $('#kokTypeFormSubmit').innerHTML = '<iconify-icon icon="mdi:content-save-outline" width="16"></iconify-icon> Simpan';
@@ -1107,15 +1141,15 @@ function wire() {
       return;
     }
 
-    if (role === 'stock-plus' || role === 'stock-plus12' || role === 'stock-minus') {
-      var delta = role === 'stock-plus' ? 1 : role === 'stock-plus12' ? 12 : -1;
+    if (role === 'stock-plus' || role === 'stock-minus') {
+      var delta = role === 'stock-plus' ? 1 : -1;
       api('/api/kok-types/' + id + '/stock', { method: 'POST', body: JSON.stringify({ delta: delta }) })
         .then(function (data) {
           syncKokTypesFromResponse(data);
           renderKokTypeList();
           renderFormKoks();
           if (state.edit) renderEditKoks();
-          toast('Stok diupdate.', 'success');
+          toast('Stok dikoreksi.', 'success');
         }).catch(function (err) { toast(err.message, 'error'); });
       return;
     }
@@ -1252,6 +1286,24 @@ function wire() {
     }
   };
   $('#shareAllBtn').onclick = function () { doShare(shareAllText()); };
+
+  // Beli slop dialog
+  $('#cancelBuy').onclick = function () { $('#buyDialog').close(); };
+  $('#buySlops').oninput = updateBuyHint;
+  $('#buyForm').onsubmit = function (e) {
+    e.preventDefault();
+    var id = $('#buyTypeId').value;
+    var slops = Math.round(Number($('#buySlops').value) || 0);
+    if (!(slops > 0)) { toast('Jumlah slop harus > 0', 'error'); return; }
+    api('/api/kok-types/' + id + '/buy', { method: 'POST', body: JSON.stringify({ slops: slops }) })
+      .then(function (data) {
+        applyServerState(data);
+        renderKokTypeList();
+        renderFormKoks();
+        $('#buyDialog').close();
+        toast('Stok ditambah, kas berkurang.', 'success');
+      }).catch(function (err) { toast(err.message, 'error'); });
+  };
 
   // Pay dialog
   $('#cancelPay').onclick = function () { $('#payDialog').close(); };
