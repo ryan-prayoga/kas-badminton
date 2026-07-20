@@ -168,6 +168,7 @@ function renderLockDots() {
 }
 
 function showLock(errMsg) {
+  $$('dialog[open]').forEach(function (dlg) { dlg.close(); });
   pinBuffer = '';
   renderLockDots();
   $('#appRoot').hidden = true;

@@ -27,7 +27,7 @@ const DATA_DIR = path.join(__dirname, 'data');
 const LEGACY_DATA_FILE = path.join(DATA_DIR, 'db.json');
 const ADMIN_PIN_FILE = path.join(DATA_DIR, 'admin-pin.txt');
 const PIN_LENGTH = 6;
-const SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30 hari
+const SESSION_TTL_MS = 24 * 60 * 60 * 1000; // 24 jam
 const SESSION_COOKIE = 'admin_session';
 
 if (!process.env.DATABASE_URL) {
