@@ -769,9 +769,10 @@ function playerChip(g, p, index) {
   var paid = !!p.paid;
   var cls = paid ? 'border-ok/30 bg-ok/10 text-ok' : 'border-warn/30 bg-warn/10 text-warn';
   return (
-    '<button type="button" data-action="toggle-paid" data-id="' + g.id + '" data-index="' + index + '" class="flex w-full min-w-0 items-center gap-2 rounded-lg border ' + cls + ' px-2.5 py-3 text-left transition active:scale-[0.98]">' +
-      '<iconify-icon icon="' + (paid ? 'mdi:check-circle' : 'mdi:clock-outline') + '" width="18" class="shrink-0"></iconify-icon>' +
+    '<button type="button" data-action="toggle-paid" data-id="' + g.id + '" data-index="' + index + '" class="flex w-full min-w-0 items-center gap-2 rounded-lg border ' + cls + ' px-2 py-2.5 text-left transition active:scale-[0.98]">' +
+      avatarHtml(p.name, playerPhotoMap()[p.name], 'h-6 w-6') +
       '<span class="min-w-0 flex-1 truncate text-sm font-medium">' + escapeHtml(p.name) + '</span>' +
+      '<iconify-icon icon="' + (paid ? 'mdi:check-circle' : 'mdi:clock-outline') + '" width="16" class="shrink-0"></iconify-icon>' +
     '</button>'
   );
 }

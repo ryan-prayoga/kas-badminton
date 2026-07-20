@@ -415,7 +415,7 @@ function summarize(db, isAdmin) {
   if (isAdmin) settings.merchantQris = db.settings.merchantQris || '';
   const payload = {
     settings,
-    players: isAdmin ? db.players : db.players.map((p) => p.name),
+    players: db.players,
     kokTypes: db.kokTypes || [],
     games,
     debtSummary: buildDebtSummary(games, db.carry || {}),

@@ -5,7 +5,7 @@ function $$(sel, root) {
   return Array.prototype.slice.call((root || document).querySelectorAll(sel));
 }
 
-var state = { games: [], debtSummary: [], kokTypes: [], period: 'all' };
+var state = { games: [], debtSummary: [], kokTypes: [], players: [], period: 'all' };
 
 function fmt(n) {
   return new Intl.NumberFormat('id-ID', {
@@ -206,12 +206,11 @@ function renderStatPlayers() {
     list.innerHTML = emptyState('mdi:account-off-outline', 'Belum ada pemain.');
     return;
   }
+  var photoMap = playerPhotoMap();
   list.innerHTML = rows.map(function (s) {
     return (
       '<div class="flex items-center gap-3 rounded-xl border border-line bg-elevated p-3">' +
-        '<div class="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-brand/15 font-bold text-brand">' +
-          escapeHtml((s.name || '?').slice(0, 1).toUpperCase()) +
-        '</div>' +
+        avatarHtml(s.name, photoMap[s.name], 'h-9 w-9') +
         '<div class="min-w-0 flex-1">' +
           '<div class="truncate font-semibold">' + escapeHtml(s.name) + '</div>' +
           '<div class="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[11px] text-soft">' +
@@ -229,14 +228,31 @@ function renderStatPlayers() {
   }).join('');
 }
 
+// --- Avatar (foto profil / inisial) ---
+function playerPhotoMap() {
+  var map = {};
+  (state.players || []).forEach(function (p) { if (p && p.name && p.photo) map[p.name] = p.photo; });
+  return map;
+}
+
+function avatarHtml(name, photo, sizeClass, colorClass) {
+  sizeClass = sizeClass || 'h-9 w-9';
+  colorClass = colorClass || 'bg-brand/15 text-brand';
+  if (photo) {
+    return '<img src="' + escapeHtml(photo) + '" alt="" class="' + sizeClass + ' shrink-0 rounded-full border border-line object-cover" />';
+  }
+  return '<div class="grid ' + sizeClass + ' shrink-0 place-items-center rounded-full ' + colorClass + ' font-bold">' + escapeHtml((name || '?').slice(0, 1).toUpperCase()) + '</div>';
+}
+
 // --- Riwayat cards ---
 function playerChip(p) {
   if (!p) p = { name: '—', paid: false };
   var cls = p.paid ? 'border-ok/30 bg-ok/10 text-ok' : 'border-warn/30 bg-warn/10 text-warn';
   return (
-    '<div class="flex min-w-0 items-center gap-2 rounded-lg border ' + cls + ' px-2.5 py-2">' +
+    '<div class="flex min-w-0 items-center gap-2 rounded-lg border ' + cls + ' px-2 py-2">' +
+      avatarHtml(p.name, playerPhotoMap()[p.name], 'h-6 w-6') +
+      '<span class="min-w-0 flex-1 truncate text-sm font-medium">' + escapeHtml(p.name) + '</span>' +
       '<iconify-icon icon="' + (p.paid ? 'mdi:check-circle' : 'mdi:clock-outline') + '" width="15" class="shrink-0"></iconify-icon>' +
-      '<span class="min-w-0 truncate text-sm font-medium">' + escapeHtml(p.name) + '</span>' +
     '</div>'
   );
 }
@@ -328,9 +344,7 @@ function debtCard(d) {
     '<details class="debt rounded-xl2 border border-warn/25 bg-warn/[0.06] p-3.5 animate-rise">' +
       '<summary class="flex select-none items-center justify-between gap-3">' +
         '<div class="flex min-w-0 items-center gap-2.5">' +
-          '<div class="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-warn/15 font-bold text-warn">' +
-            escapeHtml((d.name || '?').slice(0, 1).toUpperCase()) +
-          '</div>' +
+          avatarHtml(d.name, playerPhotoMap()[d.name], 'h-9 w-9', 'bg-warn/15 text-warn') +
           '<div class="min-w-0">' +
             '<div class="truncate font-semibold">' + escapeHtml(d.name) + '</div>' +
             '<div class="debt-count text-xs text-muted">' + d.items.length + ' game belum lunas</div>' +
@@ -518,6 +532,7 @@ function applyData(data) {
   state.games = data.games || [];
   state.debtSummary = data.debtSummary || [];
   state.kokTypes = data.kokTypes || [];
+  state.players = data.players || [];
   renderPeriodFilter();
   renderStats();
   renderStatPlayers();
