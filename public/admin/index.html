@@ -7,11 +7,11 @@
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <title>Kok Badminton — Admin</title>
-  <link rel="stylesheet" href="/styles.css?v=13" />
-  <script src="/vendor/iconify-icon.js?v=13"></script>
-  <script src="/vendor/icons.js?v=13"></script>
-  <script src="/vendor/qrcode.js?v=13"></script>
-  <script src="/vendor/jsqr.js?v=13"></script>
+  <link rel="stylesheet" href="/styles.css?v=14" />
+  <script src="/vendor/iconify-icon.js?v=14"></script>
+  <script src="/vendor/icons.js?v=14"></script>
+  <script src="/vendor/qrcode.js?v=14"></script>
+  <script src="/vendor/jsqr.js?v=14"></script>
 </head>
 <body class="text-ink50">
 
@@ -165,7 +165,7 @@
 
   <!-- ── Catat main dialog ── -->
   <dialog id="gameDialog">
-    <form id="gameForm" class="grid grid-cols-1 max-h-[calc(100dvh-20px-var(--safe-b))] gap-4 overflow-auto rounded-xl2 border border-line bg-surface p-4 shadow-card">
+    <form id="gameForm" class="grid grid-cols-1 max-h-[calc(100dvh-20px-var(--safe-b))] gap-4 overflow-auto rounded-xl2 border border-line bg-surface p-4 pb-0 shadow-card">
       <div class="flex items-center gap-2">
         <iconify-icon icon="mdi:plus-circle-outline" width="20" class="text-brand"></iconify-icon>
         <h2 tabindex="-1" autofocus class="text-base font-bold tracking-tight outline-none">Catat main</h2>
@@ -230,7 +230,7 @@
           class="w-full rounded-xl border border-line bg-ink px-3 py-2.5 text-base outline-none transition focus:border-brand/60" />
       </label>
 
-      <div class="sticky bottom-0 -mx-4 -mb-4 flex items-center gap-2 border-t border-line bg-surface px-4 pt-3 pb-[calc(0.75rem+var(--safe-b))]">
+      <div class="sticky bottom-0 -mx-4 flex items-center gap-2 border-t border-line bg-surface px-4 pt-3 pb-[calc(0.75rem+var(--safe-b))]">
         <button type="button" id="cancelGameForm" class="rounded-xl border border-line bg-elevated px-3 py-2.5 text-sm font-medium transition active:scale-95">Batal</button>
         <div class="flex-1"></div>
         <button type="submit" class="inline-flex items-center gap-1.5 rounded-xl bg-brand px-4 py-2.5 text-sm font-bold text-ink transition active:scale-95 hover:bg-brand-soft">
@@ -242,7 +242,7 @@
 
   <!-- ── Pengaturan dialog ── -->
   <dialog id="settingsDialog">
-    <form id="settingsForm" class="grid grid-cols-1 max-h-[calc(100dvh-20px-var(--safe-b))] gap-4 overflow-auto rounded-xl2 border border-line bg-surface p-4 shadow-card">
+    <form id="settingsForm" class="grid grid-cols-1 max-h-[calc(100dvh-20px-var(--safe-b))] gap-4 overflow-auto rounded-xl2 border border-line bg-surface p-4 pb-0 shadow-card">
       <div class="flex items-center gap-2">
         <iconify-icon icon="mdi:cog" width="20" class="text-brand"></iconify-icon>
         <h2 class="text-base font-bold tracking-tight">Pengaturan</h2>
@@ -270,7 +270,7 @@
         <p id="qrisStatus" class="text-xs"></p>
       </label>
 
-      <div class="sticky bottom-0 -mx-4 -mb-4 flex items-center gap-2 border-t border-line bg-surface px-4 pt-3 pb-[calc(0.75rem+var(--safe-b))]">
+      <div class="sticky bottom-0 -mx-4 flex items-center gap-2 border-t border-line bg-surface px-4 pt-3 pb-[calc(0.75rem+var(--safe-b))]">
         <button type="button" id="cancelSettings" class="rounded-xl border border-line bg-elevated px-3 py-2.5 text-sm font-medium transition active:scale-95">Tutup</button>
         <div class="flex-1"></div>
         <button type="submit" class="inline-flex items-center gap-1.5 rounded-xl bg-brand px-4 py-2.5 text-sm font-bold text-ink transition active:scale-95 hover:bg-brand-soft">
@@ -339,7 +339,7 @@
 
   <!-- ── Edit dialog ── -->
   <dialog id="editDialog">
-    <form method="dialog" id="editForm" class="grid grid-cols-1 max-h-[calc(100dvh-20px-var(--safe-b))] gap-3 overflow-auto rounded-xl2 border border-line bg-surface p-4 shadow-card">
+    <form method="dialog" id="editForm" class="grid grid-cols-1 max-h-[calc(100dvh-20px-var(--safe-b))] gap-3 overflow-auto rounded-xl2 border border-line bg-surface p-4 pb-0 shadow-card">
       <div class="flex items-center gap-2">
         <iconify-icon icon="mdi:pencil-outline" width="20" class="text-brand"></iconify-icon>
         <h2 tabindex="-1" autofocus class="text-base font-bold tracking-tight outline-none">Edit game</h2>
@@ -361,7 +361,7 @@
           class="w-full rounded-xl border border-line bg-ink px-3 py-2.5 text-base outline-none transition focus:border-brand/60" />
       </label>
 
-      <div class="sticky bottom-0 -mx-4 -mb-4 flex items-center gap-2 border-t border-line bg-surface px-4 pt-3 pb-[calc(0.75rem+var(--safe-b))]">
+      <div class="sticky bottom-0 -mx-4 flex items-center gap-2 border-t border-line bg-surface px-4 pt-3 pb-[calc(0.75rem+var(--safe-b))]">
         <button type="button" id="deleteGame" class="inline-flex items-center gap-1.5 rounded-xl border border-danger/40 bg-danger/10 px-3 py-2.5 text-sm font-medium text-danger transition active:scale-95">
           <iconify-icon icon="mdi:trash-can-outline" width="16"></iconify-icon> Hapus
         </button>
@@ -487,6 +487,6 @@
   <!-- ── Toast stack ── -->
   <div id="toastStack" class="pointer-events-none fixed inset-x-0 bottom-[calc(88px+var(--safe-b))] z-50 mx-auto flex w-full max-w-[720px] flex-col items-stretch gap-2 px-4"></div>
 
-  <script src="/admin/app.js?v=13"></script>
+  <script src="/admin/app.js?v=14"></script>
 </body>
 </html>
