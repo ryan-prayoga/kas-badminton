@@ -6,7 +6,20 @@ const { Pool } = require('pg');
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
-const { convertQRIS, validateQRIS } = require('@prasetya/qris');
+const { convertQRIS, validateQRIS, parseTLV, calculateCRC16 } = require('@prasetya/qris');
+
+function addQrisReferenceLabel(payload, referenceLabel) {
+  const crcMatch = /6304[0-9A-Fa-f]{4}$/.test(payload);
+  if (!crcMatch) return payload;
+  if (parseTLV(payload).some((el) => el.tag === '62')) return payload;
+  const body = payload.slice(0, -8);
+  const labelLen = Buffer.byteLength(referenceLabel, 'utf8');
+  const sub = '05' + String(labelLen).padStart(2, '0') + referenceLabel;
+  const subLen = Buffer.byteLength(sub, 'utf8');
+  const tag62 = '62' + String(subLen).padStart(2, '0') + sub;
+  const crcInput = body + tag62 + '6304';
+  return crcInput + calculateCRC16(crcInput);
+}
 
 const app = express();
 const PORT = Number(process.env.PORT) || 8200;
@@ -1171,7 +1184,8 @@ app.post('/api/qris', async (req, res, next) => {
       return res.status(400).json({ error: 'Nominal harus angka bulat > 0' });
     }
     try {
-      const payload = convertQRIS(merchant, { amount });
+      const referenceLabel = 'KOK' + Date.now().toString(36).toUpperCase();
+      const payload = addQrisReferenceLabel(convertQRIS(merchant, { amount }), referenceLabel);
       res.json({ payload, amount });
     } catch (e) {
       return res.status(400).json({ error: 'Gagal buat QRIS: ' + (e?.message || 'invalid') });
