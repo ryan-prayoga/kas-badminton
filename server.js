@@ -172,16 +172,16 @@ function enrichGame(game) {
 }
 
 function rememberPlayers(db, names) {
-  const set = new Set(db.players.map((n) => n.toLowerCase()));
+  const set = new Set(db.players.map((p) => p.name.toLowerCase()));
   for (const n of names) {
     const name = normalizeName(n);
     if (!name) continue;
     if (!set.has(name.toLowerCase())) {
-      db.players.push(name);
+      db.players.push({ name, photo: null });
       set.add(name.toLowerCase());
     }
   }
-  db.players.sort((a, b) => a.localeCompare(b, 'id'));
+  db.players.sort((a, b) => a.name.localeCompare(b.name, 'id'));
 }
 
 function parsePlayersFromBody(body, existing) {
@@ -415,7 +415,7 @@ function summarize(db, isAdmin) {
   if (isAdmin) settings.merchantQris = db.settings.merchantQris || '';
   const payload = {
     settings,
-    players: db.players,
+    players: isAdmin ? db.players : db.players.map((p) => p.name),
     kokTypes: db.kokTypes || [],
     games,
     debtSummary: buildDebtSummary(games, db.carry || {}),
@@ -480,12 +480,13 @@ async function ensureSchema() {
       carry INT NOT NULL DEFAULT 0
     )
   `);
+  await pool.query(`ALTER TABLE players ADD COLUMN IF NOT EXISTS photo TEXT`);
 }
 
 async function loadDb() {
   const [settingsRes, playersRes, gamesRes, typesRes, carryRes, expenseRes] = await Promise.all([
     pool.query('SELECT default_price_per_person, merchant_qris FROM settings WHERE id = 1'),
-    pool.query('SELECT name FROM players ORDER BY name'),
+    pool.query('SELECT name, photo FROM players ORDER BY name'),
     pool.query('SELECT id, date, players, koks, notes, created_at, updated_at FROM games'),
     pool.query(
       'SELECT id, name, price_per_person, price_per_slop, stock, active, created_at, updated_at FROM kok_types ORDER BY lower(name)'
@@ -503,7 +504,7 @@ async function loadDb() {
       defaultPricePerPerson: Number(settingsRes.rows[0]?.default_price_per_person) || 3000,
       merchantQris: settingsRes.rows[0]?.merchant_qris || '',
     },
-    players: playersRes.rows.map((r) => r.name),
+    players: playersRes.rows.map((r) => ({ name: r.name, photo: r.photo || null })),
     games: gamesRes.rows.map(rowToGame),
     kokTypes: typesRes.rows.map(rowToKokType),
     carry,
@@ -527,8 +528,8 @@ async function saveDb(db) {
       }
     }
     await client.query('DELETE FROM players');
-    for (const name of db.players) {
-      await client.query('INSERT INTO players (name) VALUES ($1)', [name]);
+    for (const p of db.players) {
+      await client.query('INSERT INTO players (name, photo) VALUES ($1, $2)', [p.name, p.photo || null]);
     }
     await client.query('DELETE FROM kok_types');
     for (const t of db.kokTypes || []) {
@@ -1092,6 +1093,61 @@ app.post('/api/games/:id/mark-all-paid', requireAdmin, async (req, res, next) =>
     db.games[idx] = normalizeStoredGame(db.games[idx]);
     db.games[idx].players = db.games[idx].players.map((p) => ({ ...p, paid }));
     db.games[idx].updatedAt = new Date().toISOString();
+    await saveDb(db);
+    res.json(summarize(db, true));
+  } catch (err) {
+    next(err);
+  }
+});
+
+// --- Kelola pemain: rename (cascade ke riwayat) + foto profil ---
+
+app.patch('/api/players/:name', requireAdmin, async (req, res, next) => {
+  try {
+    const original = normalizeName(req.params.name);
+    const db = await loadDb();
+    const player = db.players.find((p) => p.name === original);
+    if (!player) return res.status(404).json({ error: 'Pemain tidak ditemukan' });
+
+    if (req.body?.name !== undefined) {
+      const newName = normalizeName(req.body.name).slice(0, 60);
+      if (!newName) return res.status(400).json({ error: 'Nama wajib diisi' });
+      if (newName.toLowerCase() !== original.toLowerCase()) {
+        const dup = db.players.some((p) => p !== player && p.name.toLowerCase() === newName.toLowerCase());
+        if (dup) return res.status(409).json({ error: 'Nama pemain sudah dipakai' });
+
+        for (const g of db.games) {
+          let touched = false;
+          for (const p of g.players) {
+            if (p.name === original) { p.name = newName; touched = true; }
+          }
+          if (touched) g.updatedAt = new Date().toISOString();
+        }
+        if (db.carry && db.carry[original] !== undefined) {
+          db.carry[newName] = Math.max(0, Number(db.carry[newName]) || 0) + Math.max(0, Number(db.carry[original]) || 0);
+          delete db.carry[original];
+        }
+        await pool.query('UPDATE payments SET name = $1 WHERE name = $2', [newName, original]);
+        player.name = newName;
+      }
+    }
+
+    if (req.body?.photo !== undefined) {
+      const photo = req.body.photo;
+      if (photo === null) {
+        player.photo = null;
+      } else if (typeof photo === 'string') {
+        if (!/^data:image\/(png|jpe?g|webp);base64,/.test(photo)) {
+          return res.status(400).json({ error: 'Format foto tidak didukung' });
+        }
+        if (photo.length > 700000) {
+          return res.status(400).json({ error: 'Ukuran foto terlalu besar' });
+        }
+        player.photo = photo;
+      }
+    }
+
+    db.players.sort((a, b) => a.name.localeCompare(b.name, 'id'));
     await saveDb(db);
     res.json(summarize(db, true));
   } catch (err) {

@@ -9,6 +9,7 @@ const state = {
   debtSummary: [],
   formKoks: [{ typeId: null, typeName: null, pricePerPerson: 3000 }],
   edit: null,
+  period: 'all',
 };
 
 function $(sel, root) {
@@ -58,6 +59,49 @@ function dateBadge(iso) {
   return rel
     ? '<span class="shrink-0 rounded-full bg-brand/10 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-brand">' + rel + '</span>'
     : '';
+}
+
+// --- Filter periode ---
+var MONTHS_FULL = ['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'];
+
+function periodKey(iso) {
+  var m = /^(\d{4})-(\d{2})/.exec(String(iso || ''));
+  return m ? m[1] + '-' + m[2] : '';
+}
+
+function periodLabel(key) {
+  var m = /^(\d{4})-(\d{2})$/.exec(key);
+  if (!m) return key;
+  return MONTHS_FULL[Number(m[2]) - 1] + ' ' + m[1];
+}
+
+function gamesInPeriod(games) {
+  if (state.period === 'all') return games;
+  return games.filter(function (g) { return periodKey(g.date) === state.period; });
+}
+
+function renderPeriodFilter() {
+  var keys = {};
+  state.games.forEach(function (g) { var k = periodKey(g.date); if (k) keys[k] = true; });
+  var opts = Object.keys(keys).sort().reverse();
+  if (state.period !== 'all' && opts.indexOf(state.period) === -1) state.period = 'all';
+  var html = '<option value="all">Semua waktu</option>' +
+    opts.map(function (k) { return '<option value="' + k + '">' + periodLabel(k) + '</option>'; }).join('');
+  $$('.periodFilter').forEach(function (sel) {
+    if (sel.innerHTML !== html) sel.innerHTML = html;
+    sel.value = state.period;
+  });
+}
+
+function wirePeriodFilter() {
+  document.addEventListener('change', function (e) {
+    if (!e.target.classList || !e.target.classList.contains('periodFilter')) return;
+    state.period = e.target.value;
+    renderPeriodFilter();
+    renderGames();
+    renderStats();
+    renderStatPlayers();
+  });
 }
 
 function escapeAttr(s) {
@@ -251,10 +295,10 @@ function wireLock() {
 // --- Player autocomplete ---
 function playerMatches(query) {
   var q = String(query || '').trim().toLowerCase();
-  var list = state.players || [];
-  if (!q) return list.slice(0, 8);
-  return list.filter(function (p) {
-    return p.toLowerCase().indexOf(q) !== -1;
+  var names = (state.players || []).map(function (p) { return p.name; });
+  if (!q) return names.slice(0, 8);
+  return names.filter(function (n) {
+    return n.toLowerCase().indexOf(q) !== -1;
   }).slice(0, 8);
 }
 
@@ -475,9 +519,9 @@ function resetKokTypeForm() {
 }
 
 function stockBadgeClass(stock) {
-  if (stock <= 0) return 'bg-danger/12 text-danger';
-  if (stock <= 3) return 'bg-warn/12 text-warn';
-  return 'bg-ok/12 text-ok';
+  if (stock <= 0) return 'bg-danger/15 text-danger';
+  if (stock <= 3) return 'bg-warn/15 text-warn';
+  return 'bg-ok/15 text-ok';
 }
 
 function renderKokTypeList() {
@@ -532,6 +576,107 @@ function openKokTypesDialog() {
   $('#kokTypesDialog').showModal();
 }
 
+// --- Avatar (foto profil / inisial) ---
+function playerPhotoMap() {
+  var map = {};
+  (state.players || []).forEach(function (p) { if (p && p.name && p.photo) map[p.name] = p.photo; });
+  return map;
+}
+
+function avatarHtml(name, photo, sizeClass, colorClass) {
+  sizeClass = sizeClass || 'h-9 w-9';
+  colorClass = colorClass || 'bg-brand/15 text-brand';
+  if (photo) {
+    return '<img src="' + escapeAttr(photo) + '" alt="" class="' + sizeClass + ' shrink-0 rounded-full border border-line object-cover" />';
+  }
+  return '<div class="grid ' + sizeClass + ' shrink-0 place-items-center rounded-full ' + colorClass + ' font-bold">' + escapeHtml((name || '?').slice(0, 1).toUpperCase()) + '</div>';
+}
+
+// --- Kelola pemain ---
+function resizeImageFile(file, maxDim, quality) {
+  return new Promise(function (resolve, reject) {
+    var reader = new FileReader();
+    reader.onerror = function () { reject(new Error('Gagal baca file')); };
+    reader.onload = function () {
+      var img = new Image();
+      img.onerror = function () { reject(new Error('File bukan gambar valid')); };
+      img.onload = function () {
+        var scale = Math.min(1, maxDim / Math.max(img.width, img.height));
+        var w = Math.max(1, Math.round(img.width * scale));
+        var h = Math.max(1, Math.round(img.height * scale));
+        var canvas = document.createElement('canvas');
+        canvas.width = w;
+        canvas.height = h;
+        canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+        resolve(canvas.toDataURL('image/jpeg', quality));
+      };
+      img.src = reader.result;
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
+var pendingPlayerPhoto; // undefined = belum diubah, null = dihapus, string = foto baru
+
+function setPlayerPhotoPreview(photo, name) {
+  var img = $('#playerPhotoPreview');
+  var initial = $('#playerPhotoInitial');
+  var removeBtn = $('#playerRemovePhoto');
+  if (photo) {
+    img.src = photo;
+    img.hidden = false;
+    initial.hidden = true;
+    removeBtn.hidden = false;
+  } else {
+    img.hidden = true;
+    initial.hidden = false;
+    initial.textContent = (name || '?').slice(0, 1).toUpperCase();
+    removeBtn.hidden = true;
+  }
+}
+
+function renderPlayerList() {
+  var list = $('#playerList');
+  if (!list) return;
+  var players = state.players || [];
+  if (!players.length) {
+    list.innerHTML = emptyState('mdi:account-off-outline', 'Belum ada pemain.');
+    return;
+  }
+  list.innerHTML = players.map(function (p) {
+    return (
+      '<div class="flex items-center gap-3 rounded-xl border border-line bg-elevated p-3" data-name="' + escapeAttr(p.name) + '">' +
+        avatarHtml(p.name, p.photo, 'h-10 w-10') +
+        '<div class="min-w-0 flex-1"><p class="truncate text-sm font-semibold text-ink50">' + escapeHtml(p.name) + '</p></div>' +
+        '<button type="button" data-role="edit-player" class="grid h-8 w-8 shrink-0 place-items-center rounded-lg border border-line text-muted transition active:scale-95 hover:text-ink50" title="Edit">' +
+          '<iconify-icon icon="mdi:pencil-outline" width="15"></iconify-icon>' +
+        '</button>' +
+      '</div>'
+    );
+  }).join('');
+}
+
+function openPlayerEditForm(p) {
+  pendingPlayerPhoto = undefined;
+  $('#playerEditOriginal').value = p.name;
+  $('#playerEditName').value = p.name;
+  setPlayerPhotoPreview(p.photo || null, p.name);
+  $('#playerEditForm').hidden = false;
+  $('#playerEditName').focus();
+}
+
+function closePlayerEditForm() {
+  $('#playerEditForm').hidden = true;
+  $('#playerEditForm').reset();
+  pendingPlayerPhoto = undefined;
+}
+
+function openPlayersDialog() {
+  closePlayerEditForm();
+  renderPlayerList();
+  $('#playersDialog').showModal();
+}
+
 // --- Belum bayar ---
 function groupDebtItems(items) {
   var map = {};
@@ -576,9 +721,7 @@ function debtCard(d) {
     '<details class="debt rounded-xl2 border border-warn/25 bg-warn/[0.06] p-3.5">' +
       '<summary class="flex select-none items-center justify-between gap-3">' +
         '<div class="flex min-w-0 items-center gap-2.5">' +
-          '<div class="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-warn/15 font-bold text-warn">' +
-            escapeHtml((d.name || '?').slice(0, 1).toUpperCase()) +
-          '</div>' +
+          avatarHtml(d.name, (playerPhotoMap()[d.name]), 'h-9 w-9', 'bg-warn/15 text-warn') +
           '<div class="min-w-0">' +
             '<div class="truncate font-semibold">' + escapeHtml(d.name) + '</div>' +
             '<div class="debt-count text-xs text-muted">' + d.items.length + ' game belum lunas</div>' +
@@ -608,8 +751,10 @@ function renderDebt() {
   var meta = $('#debtMeta');
   if (!list || !meta) return;
   var total = state.debtSummary.reduce(function (s, d) { return s + d.total; }, 0);
-  meta.textContent = state.debtSummary.length
-    ? state.debtSummary.length + ' orang · ' + fmt(total)
+  meta.innerHTML = state.debtSummary.length
+    ? '<span class="inline-flex items-center gap-1"><iconify-icon icon="mdi:account-multiple-outline" width="13"></iconify-icon>' + state.debtSummary.length + ' orang</span>' +
+      '<span class="text-line">·</span>' +
+      '<span class="inline-flex items-center gap-1 font-mono font-semibold text-warn"><iconify-icon icon="mdi:cash-multiple" width="13"></iconify-icon>' + fmt(total) + '</span>'
     : 'Semua lunas';
   if (!state.debtSummary.length) {
     list.innerHTML = emptyState('mdi:emoticon-happy-outline', 'Semua sudah bayar 🎉');
@@ -650,8 +795,8 @@ function kokSummaryLabel(g) {
 
 function adminGameCard(g) {
   var statusBadge = g.summary.allPaid
-    ? '<span class="inline-flex items-center gap-1 rounded-full bg-ok/12 px-2 py-0.5 text-[11px] font-semibold text-ok"><iconify-icon icon="mdi:check-circle" width="13"></iconify-icon>Lunas</span>'
-    : '<span class="inline-flex items-center gap-1 rounded-full bg-warn/12 px-2 py-0.5 text-[11px] font-semibold text-warn"><iconify-icon icon="mdi:alert-circle-outline" width="13"></iconify-icon>' + g.summary.unpaidCount + ' belum</span>';
+    ? '<span class="inline-flex items-center gap-1 rounded-full bg-ok/15 px-2 py-0.5 text-[11px] font-semibold text-ok"><iconify-icon icon="mdi:check-circle" width="13"></iconify-icon>Lunas</span>'
+    : '<span class="inline-flex items-center gap-1 rounded-full bg-warn/15 px-2 py-0.5 text-[11px] font-semibold text-warn"><iconify-icon icon="mdi:alert-circle-outline" width="13"></iconify-icon>' + g.summary.unpaidCount + ' belum</span>';
 
   var markAllCls = g.summary.allPaid
     ? 'border-line bg-elevated text-muted'
@@ -709,8 +854,8 @@ function groupGamesByDate(games) {
 function historyGroup(grp, open) {
   var allPaid = grp.unpaidCount === 0;
   var statusBadge = allPaid
-    ? '<span class="inline-flex items-center gap-1 whitespace-nowrap rounded-full bg-ok/12 px-1.5 py-0.5 text-[11px] font-semibold text-ok"><iconify-icon icon="mdi:check-circle" width="13"></iconify-icon>Lunas</span>'
-    : '<span class="inline-flex items-center gap-1 whitespace-nowrap rounded-full bg-warn/12 px-1.5 py-0.5 text-[11px] font-semibold text-warn"><iconify-icon icon="mdi:alert-circle-outline" width="13"></iconify-icon>' + grp.unpaidCount + ' belum</span>';
+    ? '<span class="inline-flex items-center gap-1 whitespace-nowrap rounded-full bg-ok/15 px-1.5 py-0.5 text-[11px] font-semibold text-ok"><iconify-icon icon="mdi:check-circle" width="13"></iconify-icon>Lunas</span>'
+    : '<span class="inline-flex items-center gap-1 whitespace-nowrap rounded-full bg-warn/15 px-1.5 py-0.5 text-[11px] font-semibold text-warn"><iconify-icon icon="mdi:alert-circle-outline" width="13"></iconify-icon>' + grp.unpaidCount + ' belum</span>';
 
   return (
     '<details class="history overflow-hidden rounded-xl2 border border-line bg-surface shadow-card" data-date="' + escapeAttr(grp.date) + '"' + (open ? ' open' : '') + '>' +
@@ -720,8 +865,9 @@ function historyGroup(grp, open) {
             '<iconify-icon icon="mdi:calendar-blank-outline" width="16" class="text-soft shrink-0"></iconify-icon>' +
             '<span class="truncate">' + fmtDate(grp.date) + '</span>' +
           '</div>' +
-          '<div class="mt-0.5 flex items-center gap-1.5 text-xs text-muted">' +
-            '<iconify-icon icon="mdi:badminton" width="13"></iconify-icon>' + grp.games.length + ' main · total ' + fmt(grp.total) +
+          '<div class="mt-0.5 flex flex-wrap items-center gap-x-2.5 gap-y-0.5 text-xs text-muted">' +
+            '<span class="inline-flex items-center gap-1"><iconify-icon icon="mdi:badminton" width="13"></iconify-icon>' + grp.games.length + ' main</span>' +
+            '<span class="inline-flex items-center gap-1 font-mono"><iconify-icon icon="mdi:cash-multiple" width="13"></iconify-icon>' + fmt(grp.total) + '</span>' +
           '</div>' +
         '</div>' +
         '<div class="flex shrink-0 items-center gap-1.5">' +
@@ -740,8 +886,9 @@ function renderGames() {
   var list = $('#gameList');
   var meta = $('#historyMeta');
   if (!list || !meta) return;
-  meta.textContent = state.games.length ? state.games.length + ' game' : 'Kosong';
-  if (!state.games.length) {
+  var games = gamesInPeriod(state.games);
+  meta.innerHTML = '<iconify-icon icon="mdi:badminton" width="12"></iconify-icon>' + (games.length ? games.length + ' game' : 'Kosong');
+  if (!games.length) {
     list.innerHTML = emptyState('mdi:badminton', 'Belum ada catatan.');
     return;
   }
@@ -750,7 +897,7 @@ function renderGames() {
     openDates[el.getAttribute('data-date')] = true;
   });
   var hadAny = Object.keys(openDates).length > 0;
-  var groups = groupGamesByDate(state.games);
+  var groups = groupGamesByDate(games);
   list.innerHTML = groups.map(function (grp, i) {
     var open = hadAny ? !!openDates[grp.date] : i === 0;
     return historyGroup(grp, open);
@@ -774,7 +921,7 @@ function statCard(opts) {
 function renderStats() {
   var strip = $('#statStrip');
   if (!strip) return;
-  var games = state.games;
+  var games = gamesInPeriod(state.games);
   var totalDebt = state.debtSummary.reduce(function (s, d) { return s + d.total; }, 0);
   var totalKok = games.reduce(function (s, g) { return s + (g.cost ? g.cost.kokCount : 0); }, 0);
   var kas = state.kas || { paid: 0, expense: 0, net: 0 };
@@ -793,7 +940,7 @@ function renderStatPlayers() {
   var list = $('#statPlayers');
   if (!list) return;
   var map = {};
-  state.games.forEach(function (g) {
+  gamesInPeriod(state.games).forEach(function (g) {
     (g.players || []).forEach(function (p) {
       if (!p.name) return;
       if (!map[p.name]) map[p.name] = { name: p.name, main: 0, keluar: 0, nunggak: 0 };
@@ -807,10 +954,11 @@ function renderStatPlayers() {
     return b.nunggak - a.nunggak || b.main - a.main || a.name.localeCompare(b.name, 'id');
   });
   if (!rows.length) { list.innerHTML = emptyState('mdi:account-off-outline', 'Belum ada pemain.'); return; }
+  var photoMap = playerPhotoMap();
   list.innerHTML = rows.map(function (s) {
     return (
       '<div class="flex items-center gap-3 rounded-xl border border-line bg-elevated p-3">' +
-        '<div class="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-brand/15 font-bold text-brand">' + escapeHtml((s.name || '?').slice(0, 1).toUpperCase()) + '</div>' +
+        avatarHtml(s.name, photoMap[s.name], 'h-9 w-9') +
         '<div class="min-w-0 flex-1">' +
           '<div class="truncate font-semibold">' + escapeHtml(s.name) + '</div>' +
           '<div class="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[11px] text-soft">' +
@@ -828,11 +976,13 @@ function renderStatPlayers() {
 }
 
 function renderAll() {
+  renderPeriodFilter();
   renderDebt();
   renderGames();
   renderStats();
   renderStatPlayers();
   if ($('#kokTypesDialog') && $('#kokTypesDialog').open) renderKokTypeList();
+  if ($('#playersDialog') && $('#playersDialog').open) renderPlayerList();
 }
 
 function applyServerState(data) {
@@ -1136,6 +1286,7 @@ function wire() {
   bindFormKoks();
   wireAllPlayerInputs($('#gameForm'));
   wireTabs();
+  wirePeriodFilter();
 
   $('#fabAdd').onclick = openGameDialog;
   $('#cancelGameForm').onclick = function () { $('#gameDialog').close(); };
@@ -1233,6 +1384,53 @@ function wire() {
           }).catch(function (err) { toast(err.message, 'error'); });
       });
     }
+  };
+
+  // Kelola pemain
+  $('#playersBtn').onclick = openPlayersDialog;
+  $('#closePlayers').onclick = function () { $('#playersDialog').close(); };
+  $('#playerEditCancel').onclick = closePlayerEditForm;
+
+  $('#playerList').onclick = function (e) {
+    var btn = e.target.closest('button[data-role="edit-player"]');
+    if (!btn) return;
+    var row = btn.closest('[data-name]');
+    if (!row) return;
+    var name = row.getAttribute('data-name');
+    var p = (state.players || []).filter(function (x) { return x.name === name; })[0];
+    if (p) openPlayerEditForm(p);
+  };
+
+  $('#playerPhotoPick').onclick = function () { $('#playerPhotoInput').click(); };
+
+  $('#playerPhotoInput').onchange = function (e) {
+    var file = e.target.files && e.target.files[0];
+    e.target.value = '';
+    if (!file) return;
+    resizeImageFile(file, 480, 0.82).then(function (dataUrl) {
+      pendingPlayerPhoto = dataUrl;
+      setPlayerPhotoPreview(dataUrl, $('#playerEditName').value);
+    }).catch(function (err) { toast(err.message, 'error'); });
+  };
+
+  $('#playerRemovePhoto').onclick = function () {
+    pendingPlayerPhoto = null;
+    setPlayerPhotoPreview(null, $('#playerEditName').value);
+  };
+
+  $('#playerEditForm').onsubmit = function (e) {
+    e.preventDefault();
+    var original = $('#playerEditOriginal').value;
+    var newName = $('#playerEditName').value;
+    var body = { name: newName };
+    if (pendingPlayerPhoto !== undefined) body.photo = pendingPlayerPhoto;
+    api('/api/players/' + encodeURIComponent(original), { method: 'PATCH', body: JSON.stringify(body) })
+      .then(function (data) {
+        applyServerState(data);
+        closePlayerEditForm();
+        renderPlayerList();
+        toast('Pemain diupdate.', 'success');
+      }).catch(function (err) { toast(err.message, 'error'); });
   };
 
   // Settings

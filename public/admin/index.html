@@ -8,7 +8,7 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <title>Kok Badminton — Admin</title>
   <link rel="icon" href="/favicon.svg?v=15" type="image/svg+xml" />
-  <link rel="stylesheet" href="/styles.css?v=15" />
+  <link rel="stylesheet" href="/styles.css?v=16" />
   <script src="/vendor/iconify-icon.js?v=15"></script>
   <script src="/vendor/icons.js?v=15"></script>
   <script src="/vendor/qrcode.js?v=15"></script>
@@ -77,12 +77,18 @@
 
     <!-- ── Tab: Riwayat ── -->
     <section data-panel="riwayat" class="rounded-xl2 border border-line bg-surface shadow-card p-4">
-      <div class="mb-3 flex items-center justify-between gap-2">
+      <div class="mb-3">
         <div class="flex items-center gap-2">
           <iconify-icon icon="mdi:history" width="20" class="text-brand"></iconify-icon>
           <h2 class="text-base font-bold tracking-tight">Riwayat</h2>
         </div>
-        <p id="historyMeta" class="text-xs text-soft">—</p>
+        <div class="mt-2.5 flex items-center justify-between gap-2">
+          <span id="historyMeta" class="inline-flex items-center gap-1 rounded-full bg-brand/15 px-2 py-0.5 text-[11px] font-semibold text-brand">—</span>
+          <label class="flex shrink-0 items-center gap-1.5 rounded-lg border border-line bg-elevated px-2.5 py-1.5 text-xs font-medium text-muted transition focus-within:border-brand/60">
+            <iconify-icon icon="mdi:calendar-month-outline" width="14" class="text-soft"></iconify-icon>
+            <select class="periodFilter min-w-0 bg-transparent text-ink50 outline-none" aria-label="Filter periode"></select>
+          </label>
+        </div>
       </div>
       <div id="gameList" class="grid grid-cols-1 gap-3"></div>
     </section>
@@ -95,7 +101,7 @@
           <h2 class="text-base font-bold tracking-tight">Belum bayar</h2>
         </div>
         <div class="flex shrink-0 items-center gap-2">
-          <p id="debtMeta" class="text-xs text-soft">—</p>
+          <p id="debtMeta" class="flex items-center gap-1 text-xs text-soft">—</p>
           <button type="button" id="shareAllBtn" title="Share semua tagihan" class="grid h-8 w-8 place-items-center rounded-xl border border-line bg-elevated text-muted transition active:scale-95 hover:text-ink50 focus-visible:ring-2 focus-visible:ring-brand/60">
             <iconify-icon icon="mdi:share-variant-outline" width="16"></iconify-icon>
           </button>
@@ -106,6 +112,12 @@
 
     <!-- ── Tab: Statistik ── -->
     <section data-panel="statistik" hidden class="flex flex-col gap-4">
+      <div class="flex items-center justify-end">
+        <label class="flex items-center gap-1.5 rounded-lg border border-line bg-elevated px-2.5 py-1.5 text-xs font-medium text-muted transition focus-within:border-brand/60">
+          <iconify-icon icon="mdi:calendar-month-outline" width="14" class="text-soft"></iconify-icon>
+          <select class="periodFilter min-w-0 bg-transparent text-ink50 outline-none" aria-label="Filter periode"></select>
+        </label>
+      </div>
       <div id="statStrip" class="grid grid-cols-2 gap-3"></div>
       <div class="rounded-xl2 border border-line bg-surface shadow-card p-4">
         <div class="mb-3 flex items-center gap-2">
@@ -121,6 +133,11 @@
       <button type="button" id="kokTypesBtn" class="menurow">
         <iconify-icon icon="game-icons:shuttlecock" width="20" class="text-brand"></iconify-icon>
         <span class="flex-1 text-left">Jenis kok &amp; stok</span>
+        <iconify-icon icon="mdi:chevron-right" width="18" class="text-soft"></iconify-icon>
+      </button>
+      <button type="button" id="playersBtn" class="menurow">
+        <iconify-icon icon="mdi:account-group-outline" width="20" class="text-brand"></iconify-icon>
+        <span class="flex-1 text-left">Kelola pemain</span>
         <iconify-icon icon="mdi:chevron-right" width="18" class="text-soft"></iconify-icon>
       </button>
       <button type="button" id="settingsBtn" class="menurow">
@@ -338,6 +355,51 @@
     </div>
   </dialog>
 
+  <!-- ── Kelola pemain dialog ── -->
+  <dialog id="playersDialog">
+    <div class="grid grid-cols-1 max-h-[calc(100dvh-20px-var(--safe-b))] w-[min(100vw-2rem,420px)] gap-4 overflow-auto rounded-xl2 border border-line bg-surface p-4 shadow-card">
+      <div class="flex items-center justify-between gap-2">
+        <div class="flex items-center gap-2">
+          <iconify-icon icon="mdi:account-group-outline" width="20" class="text-brand"></iconify-icon>
+          <h2 class="text-base font-bold tracking-tight">Kelola pemain</h2>
+        </div>
+        <button type="button" id="closePlayers" class="grid h-9 w-9 place-items-center rounded-xl border border-line bg-elevated text-muted transition active:scale-95 hover:text-ink50">
+          <iconify-icon icon="mdi:close" width="18"></iconify-icon>
+        </button>
+      </div>
+      <p class="text-xs text-soft">Ganti nama otomatis update semua riwayat &amp; tagihan yang pakai nama itu.</p>
+
+      <form id="playerEditForm" class="grid grid-cols-1 gap-3 rounded-xl border border-line bg-elevated p-3" hidden>
+        <input type="hidden" id="playerEditOriginal" value="" />
+        <div class="flex items-center gap-3">
+          <button type="button" id="playerPhotoPick" class="group relative grid h-16 w-16 shrink-0 place-items-center overflow-hidden rounded-full border border-line bg-ink text-xl font-bold text-brand transition active:scale-95">
+            <img id="playerPhotoPreview" class="h-full w-full object-cover" hidden />
+            <span id="playerPhotoInitial">?</span>
+            <span class="absolute inset-0 grid place-items-center bg-black/45 opacity-0 transition group-hover:opacity-100">
+              <iconify-icon icon="mdi:camera-outline" width="20" class="text-white"></iconify-icon>
+            </span>
+          </button>
+          <input id="playerPhotoInput" type="file" accept="image/*" class="hidden" />
+          <label class="grid min-w-0 flex-1 gap-1">
+            <span class="text-xs font-medium text-muted">Nama</span>
+            <input id="playerEditName" type="text" required maxlength="40"
+              class="w-full rounded-xl border border-line bg-ink px-3 py-2.5 text-base outline-none transition focus:border-brand/60" />
+          </label>
+        </div>
+        <div class="flex items-center gap-2 pt-1">
+          <button type="button" id="playerRemovePhoto" class="rounded-xl border border-line bg-surface px-3 py-2 text-xs font-medium text-muted transition active:scale-95" hidden>Hapus foto</button>
+          <div class="flex-1"></div>
+          <button type="button" id="playerEditCancel" class="rounded-xl border border-line bg-surface px-3 py-2 text-sm font-medium transition active:scale-95">Batal</button>
+          <button type="submit" class="inline-flex items-center gap-1.5 rounded-xl bg-brand px-3.5 py-2 text-sm font-bold text-ink transition active:scale-95 hover:bg-brand-soft">
+            <iconify-icon icon="mdi:content-save-outline" width="16"></iconify-icon> Simpan
+          </button>
+        </div>
+      </form>
+
+      <div id="playerList" class="grid grid-cols-1 gap-2"></div>
+    </div>
+  </dialog>
+
   <!-- ── Edit dialog ── -->
   <dialog id="editDialog">
     <form method="dialog" id="editForm" class="grid grid-cols-1 max-h-[calc(100dvh-20px-var(--safe-b))] gap-3 overflow-auto rounded-xl2 border border-line bg-surface p-4 pb-0 shadow-card">
@@ -488,6 +550,6 @@
   <!-- ── Toast stack ── -->
   <div id="toastStack" class="pointer-events-none fixed inset-x-0 bottom-[calc(88px+var(--safe-b))] z-50 mx-auto flex w-full max-w-[720px] flex-col items-stretch gap-2 px-4"></div>
 
-  <script src="/admin/app.js?v=15"></script>
+  <script src="/admin/app.js?v=16"></script>
 </body>
 </html>
