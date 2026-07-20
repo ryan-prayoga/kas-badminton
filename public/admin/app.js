@@ -382,8 +382,8 @@ function typeOptionsHtml(selectedId, snapshotName) {
 function kokRowHtml(i, kok, disableRemove) {
   kok = kok || {};
   return (
-    '<div class="grid gap-2 rounded-xl border border-line bg-sunken p-2" data-i="' + i + '">' +
-      '<div class="flex items-center gap-2">' +
+    '<div class="grid min-w-0 gap-2 rounded-xl border border-line bg-sunken p-2" data-i="' + i + '">' +
+      '<div class="flex min-w-0 items-center gap-2">' +
         '<span class="w-12 shrink-0 pl-1 font-mono text-xs text-soft">Kok ' + (i + 1) + '</span>' +
         '<select data-role="type" class="min-w-0 flex-1 rounded-lg border border-line bg-ink px-2 py-2 text-sm outline-none">' +
           typeOptionsHtml(kok.typeId, kok.typeName) +
