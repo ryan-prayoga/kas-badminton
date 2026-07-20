@@ -72,21 +72,47 @@ function timingSafeEqualStr(a, b) {
   return crypto.timingSafeEqual(bufA, bufB);
 }
 
-const sessions = new Map(); // token -> expiresAt
+function hashPin(pin) {
+  const salt = crypto.randomBytes(16).toString('hex');
+  const hash = crypto.scryptSync(String(pin), salt, 32).toString('hex');
+  return salt + ':' + hash;
+}
 
-function isValidSession(token) {
-  if (!token) return false;
-  const expiresAt = sessions.get(token);
-  if (!expiresAt || expiresAt < Date.now()) {
+function verifyPinHash(pin, stored) {
+  if (!stored || !stored.includes(':')) return false;
+  const [salt, hash] = stored.split(':');
+  const attempt = crypto.scryptSync(String(pin), salt, 32).toString('hex');
+  return timingSafeEqualStr(attempt, hash);
+}
+
+const sessions = new Map(); // token -> { role: 'admin'|'operator', expiresAt, operatorId?, name? }
+
+function getSession(token) {
+  if (!token) return null;
+  const sess = sessions.get(token);
+  if (!sess || sess.expiresAt < Date.now()) {
     sessions.delete(token);
-    return false;
+    return null;
   }
-  return true;
+  return sess;
+}
+
+function revokeOperatorSessions(operatorId) {
+  for (const [token, sess] of sessions) {
+    if (sess.operatorId === operatorId) sessions.delete(token);
+  }
 }
 
 function requireAdmin(req, res, next) {
-  if (isValidSession(req.cookies?.[SESSION_COOKIE])) return next();
+  const sess = getSession(req.cookies?.[SESSION_COOKIE]);
+  if (sess && sess.role === 'admin') { req.session = sess; return next(); }
   res.status(401).json({ error: 'Perlu login admin' });
+}
+
+function requireStaff(req, res, next) {
+  const sess = getSession(req.cookies?.[SESSION_COOKIE]);
+  if (sess) { req.session = sess; return next(); }
+  res.status(401).json({ error: 'Perlu login' });
 }
 
 const loginAttempts = new Map(); // ip -> { count, resetAt }
@@ -298,6 +324,7 @@ function rowToGame(r) {
     players: r.players,
     koks: r.koks,
     notes: r.notes,
+    recordedBy: r.recorded_by || null,
     createdAt: r.created_at.toISOString(),
     updatedAt: r.updated_at.toISOString(),
   });
@@ -481,13 +508,24 @@ async function ensureSchema() {
     )
   `);
   await pool.query(`ALTER TABLE players ADD COLUMN IF NOT EXISTS photo TEXT`);
+  await pool.query(`ALTER TABLE games ADD COLUMN IF NOT EXISTS recorded_by TEXT`);
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS operators (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      pin_hash TEXT NOT NULL,
+      expires_at TIMESTAMPTZ NOT NULL,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      revoked_at TIMESTAMPTZ
+    )
+  `);
 }
 
 async function loadDb() {
   const [settingsRes, playersRes, gamesRes, typesRes, carryRes, expenseRes] = await Promise.all([
     pool.query('SELECT default_price_per_person, merchant_qris FROM settings WHERE id = 1'),
     pool.query('SELECT name, photo FROM players ORDER BY name'),
-    pool.query('SELECT id, date, players, koks, notes, created_at, updated_at FROM games'),
+    pool.query('SELECT id, date, players, koks, notes, recorded_by, created_at, updated_at FROM games'),
     pool.query(
       'SELECT id, name, price_per_person, price_per_slop, stock, active, created_at, updated_at FROM kok_types ORDER BY lower(name)'
     ),
@@ -551,8 +589,8 @@ async function saveDb(db) {
     await client.query('DELETE FROM games');
     for (const g of db.games) {
       await client.query(
-        `INSERT INTO games (id, date, players, scores, koks, notes, created_at, updated_at)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
+        `INSERT INTO games (id, date, players, scores, koks, notes, recorded_by, created_at, updated_at)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
         [
           g.id,
           g.date,
@@ -560,6 +598,7 @@ async function saveDb(db) {
           '{}',
           JSON.stringify(g.koks),
           g.notes,
+          g.recordedBy || null,
           g.createdAt,
           g.updatedAt,
         ]
@@ -642,23 +681,49 @@ app.get('/api/health', (_req, res) => {
 });
 
 app.get('/api/me', (req, res) => {
-  res.json({ isAdmin: isValidSession(req.cookies?.[SESSION_COOKIE]) });
+  const sess = getSession(req.cookies?.[SESSION_COOKIE]);
+  if (!sess) return res.json({ role: null });
+  res.json({
+    role: sess.role,
+    name: sess.role === 'operator' ? sess.name : undefined,
+    expiresAt: sess.role === 'operator' ? new Date(sess.expiresAt).toISOString() : undefined,
+  });
 });
 
-app.post('/api/login', loginRateLimit, (req, res) => {
-  const pin = String(req.body?.pin ?? '');
-  if (!timingSafeEqualStr(pin, ADMIN_PIN)) {
-    return res.status(401).json({ error: 'PIN salah' });
+app.post('/api/login', loginRateLimit, async (req, res, next) => {
+  try {
+    const pin = String(req.body?.pin ?? '');
+    if (timingSafeEqualStr(pin, ADMIN_PIN)) {
+      const token = crypto.randomBytes(32).toString('hex');
+      sessions.set(token, { role: 'admin', expiresAt: Date.now() + SESSION_TTL_MS });
+      res.cookie(SESSION_COOKIE, token, {
+        httpOnly: true,
+        sameSite: 'lax',
+        secure: req.secure,
+        maxAge: SESSION_TTL_MS,
+      });
+      return res.json({ ok: true });
+    }
+
+    const { rows } = await pool.query(
+      'SELECT id, name, pin_hash, expires_at FROM operators WHERE revoked_at IS NULL AND expires_at > NOW()'
+    );
+    const match = rows.find((r) => verifyPinHash(pin, r.pin_hash));
+    if (!match) return res.status(401).json({ error: 'PIN salah' });
+
+    const token = crypto.randomBytes(32).toString('hex');
+    const sessionExpiresAt = Math.min(Date.now() + SESSION_TTL_MS, new Date(match.expires_at).getTime());
+    sessions.set(token, { role: 'operator', operatorId: match.id, name: match.name, expiresAt: sessionExpiresAt });
+    res.cookie(SESSION_COOKIE, token, {
+      httpOnly: true,
+      sameSite: 'lax',
+      secure: req.secure,
+      maxAge: Math.max(0, sessionExpiresAt - Date.now()),
+    });
+    res.json({ ok: true });
+  } catch (err) {
+    next(err);
   }
-  const token = crypto.randomBytes(32).toString('hex');
-  sessions.set(token, Date.now() + SESSION_TTL_MS);
-  res.cookie(SESSION_COOKIE, token, {
-    httpOnly: true,
-    sameSite: 'lax',
-    secure: req.secure,
-    maxAge: SESSION_TTL_MS,
-  });
-  res.json({ ok: true });
 });
 
 app.post('/api/logout', (req, res) => {
@@ -671,8 +736,8 @@ app.post('/api/logout', (req, res) => {
 app.get('/api/bootstrap', async (req, res, next) => {
   try {
     const db = await loadDb();
-    const isAdmin = isValidSession(req.cookies?.[SESSION_COOKIE]);
-    res.json(summarize(db, isAdmin));
+    const sess = getSession(req.cookies?.[SESSION_COOKIE]);
+    res.json(summarize(db, sess?.role === 'admin'));
   } catch (err) {
     next(err);
   }
@@ -708,7 +773,7 @@ app.put('/api/settings', requireAdmin, async (req, res, next) => {
   }
 });
 
-app.post('/api/games', requireAdmin, async (req, res, next) => {
+app.post('/api/games', requireStaff, async (req, res, next) => {
   try {
     const body = req.body || {};
     const parsed = parsePlayersFromBody(body);
@@ -728,6 +793,7 @@ app.post('/api/games', requireAdmin, async (req, res, next) => {
       players: parsed.players,
       koks,
       notes: body.notes ? String(body.notes).trim() : '',
+      recordedBy: req.session.role === 'admin' ? 'Admin' : req.session.name,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     };
@@ -736,13 +802,13 @@ app.post('/api/games', requireAdmin, async (req, res, next) => {
     applyKoksStockDiff(db, [], koks);
     db.games.unshift(game);
     await saveDb(db);
-    res.status(201).json(summarize(db, true));
+    res.status(201).json(summarize(db, req.session.role === 'admin'));
   } catch (err) {
     next(err);
   }
 });
 
-app.patch('/api/games/:id', requireAdmin, async (req, res, next) => {
+app.patch('/api/games/:id', requireStaff, async (req, res, next) => {
   try {
     const db = await loadDb();
     const idx = db.games.findIndex((g) => g.id === req.params.id);
@@ -777,13 +843,13 @@ app.patch('/api/games/:id', requireAdmin, async (req, res, next) => {
     game.updatedAt = new Date().toISOString();
     db.games[idx] = game;
     await saveDb(db);
-    res.json(summarize(db, true));
+    res.json(summarize(db, req.session.role === 'admin'));
   } catch (err) {
     next(err);
   }
 });
 
-app.post('/api/games/:id/koks', requireAdmin, async (req, res, next) => {
+app.post('/api/games/:id/koks', requireStaff, async (req, res, next) => {
   try {
     const db = await loadDb();
     const idx = db.games.findIndex((g) => g.id === req.params.id);
@@ -797,13 +863,13 @@ app.post('/api/games/:id/koks', requireAdmin, async (req, res, next) => {
     applyStockDelta(db, kok.typeId, -1);
     db.games[idx].updatedAt = new Date().toISOString();
     await saveDb(db);
-    res.status(201).json(summarize(db, true));
+    res.status(201).json(summarize(db, req.session.role === 'admin'));
   } catch (err) {
     next(err);
   }
 });
 
-app.delete('/api/games/:id/koks/:kokId', requireAdmin, async (req, res, next) => {
+app.delete('/api/games/:id/koks/:kokId', requireStaff, async (req, res, next) => {
   try {
     const db = await loadDb();
     const idx = db.games.findIndex((g) => g.id === req.params.id);
@@ -821,13 +887,13 @@ app.delete('/api/games/:id/koks/:kokId', requireAdmin, async (req, res, next) =>
     game.updatedAt = new Date().toISOString();
     db.games[idx] = game;
     await saveDb(db);
-    res.json(summarize(db, true));
+    res.json(summarize(db, req.session.role === 'admin'));
   } catch (err) {
     next(err);
   }
 });
 
-app.patch('/api/games/:id/koks/:kokId', requireAdmin, async (req, res, next) => {
+app.patch('/api/games/:id/koks/:kokId', requireStaff, async (req, res, next) => {
   try {
     const db = await loadDb();
     const idx = db.games.findIndex((g) => g.id === req.params.id);
@@ -867,7 +933,7 @@ app.patch('/api/games/:id/koks/:kokId', requireAdmin, async (req, res, next) => 
     game.updatedAt = new Date().toISOString();
     db.games[idx] = game;
     await saveDb(db);
-    res.json(summarize(db, true));
+    res.json(summarize(db, req.session.role === 'admin'));
   } catch (err) {
     next(err);
   }
@@ -1043,7 +1109,7 @@ app.delete('/api/kok-types/:id', requireAdmin, async (req, res, next) => {
   }
 });
 
-app.delete('/api/games/:id', requireAdmin, async (req, res, next) => {
+app.delete('/api/games/:id', requireStaff, async (req, res, next) => {
   try {
     const db = await loadDb();
     const idx = db.games.findIndex((g) => g.id === req.params.id);
@@ -1052,13 +1118,13 @@ app.delete('/api/games/:id', requireAdmin, async (req, res, next) => {
     applyKoksStockDiff(db, game.koks, []);
     db.games.splice(idx, 1);
     await saveDb(db);
-    res.json(summarize(db, true));
+    res.json(summarize(db, req.session.role === 'admin'));
   } catch (err) {
     next(err);
   }
 });
 
-app.patch('/api/games/:id/players/:index/paid', requireAdmin, async (req, res, next) => {
+app.patch('/api/games/:id/players/:index/paid', requireStaff, async (req, res, next) => {
   try {
     const db = await loadDb();
     const idx = db.games.findIndex((g) => g.id === req.params.id);
@@ -1078,13 +1144,13 @@ app.patch('/api/games/:id/players/:index/paid', requireAdmin, async (req, res, n
     db.games[idx].players[pIdx].paid = paid;
     db.games[idx].updatedAt = new Date().toISOString();
     await saveDb(db);
-    res.json(summarize(db, true));
+    res.json(summarize(db, req.session.role === 'admin'));
   } catch (err) {
     next(err);
   }
 });
 
-app.post('/api/games/:id/mark-all-paid', requireAdmin, async (req, res, next) => {
+app.post('/api/games/:id/mark-all-paid', requireStaff, async (req, res, next) => {
   try {
     const db = await loadDb();
     const idx = db.games.findIndex((g) => g.id === req.params.id);
@@ -1094,7 +1160,7 @@ app.post('/api/games/:id/mark-all-paid', requireAdmin, async (req, res, next) =>
     db.games[idx].players = db.games[idx].players.map((p) => ({ ...p, paid }));
     db.games[idx].updatedAt = new Date().toISOString();
     await saveDb(db);
-    res.json(summarize(db, true));
+    res.json(summarize(db, req.session.role === 'admin'));
   } catch (err) {
     next(err);
   }
@@ -1150,6 +1216,76 @@ app.patch('/api/players/:name', requireAdmin, async (req, res, next) => {
     db.players.sort((a, b) => a.name.localeCompare(b.name, 'id'));
     await saveDb(db);
     res.json(summarize(db, true));
+  } catch (err) {
+    next(err);
+  }
+});
+
+// --- Delegasi (penanggung jawab sementara): PIN terbatas waktu buat catat main ---
+
+app.get('/api/operators', requireAdmin, async (_req, res, next) => {
+  try {
+    const { rows } = await pool.query(
+      'SELECT id, name, expires_at, created_at, revoked_at FROM operators ORDER BY created_at DESC'
+    );
+    const now = Date.now();
+    res.json({
+      operators: rows.map((r) => ({
+        id: r.id,
+        name: r.name,
+        expiresAt: r.expires_at.toISOString(),
+        createdAt: r.created_at.toISOString(),
+        revokedAt: r.revoked_at ? r.revoked_at.toISOString() : null,
+        active: !r.revoked_at && r.expires_at.getTime() > now,
+      })),
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+app.post('/api/operators', requireAdmin, async (req, res, next) => {
+  try {
+    const name = normalizeName(req.body?.name).slice(0, 60);
+    if (!name) return res.status(400).json({ error: 'Nama wajib diisi' });
+
+    const expiresAt = new Date(req.body?.expiresAt);
+    if (Number.isNaN(expiresAt.getTime())) {
+      return res.status(400).json({ error: 'Masa aktif tidak valid' });
+    }
+    if (expiresAt.getTime() <= Date.now()) {
+      return res.status(400).json({ error: 'Masa aktif harus di masa depan' });
+    }
+    if (expiresAt.getTime() > Date.now() + 365 * 24 * 60 * 60 * 1000) {
+      return res.status(400).json({ error: 'Masa aktif maksimal 1 tahun' });
+    }
+
+    let pin = generatePin();
+    while (timingSafeEqualStr(pin, ADMIN_PIN)) pin = generatePin();
+
+    const id = uid();
+    await pool.query(
+      'INSERT INTO operators (id, name, pin_hash, expires_at) VALUES ($1,$2,$3,$4)',
+      [id, name, hashPin(pin), expiresAt.toISOString()]
+    );
+    res.status(201).json({
+      operator: { id, name, expiresAt: expiresAt.toISOString() },
+      pin,
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+app.delete('/api/operators/:id', requireAdmin, async (req, res, next) => {
+  try {
+    const { rows } = await pool.query(
+      'UPDATE operators SET revoked_at = NOW() WHERE id = $1 AND revoked_at IS NULL RETURNING id',
+      [req.params.id]
+    );
+    if (!rows.length) return res.status(404).json({ error: 'Delegasi tidak ditemukan / sudah dicabut' });
+    revokeOperatorSessions(req.params.id);
+    res.json({ ok: true });
   } catch (err) {
     next(err);
   }

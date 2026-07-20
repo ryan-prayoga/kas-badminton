@@ -299,6 +299,9 @@ function gameCard(g) {
             '<span class="min-w-0">' + escapeHtml(g.notes) + '</span>' +
           '</div>'
         : '') +
+      '<div class="mt-2 flex items-center gap-1 text-[11px] text-soft">' +
+        '<iconify-icon icon="mdi:pencil-circle-outline" width="12"></iconify-icon>dicatat oleh ' + escapeHtml(g.recordedBy || 'Admin') +
+      '</div>' +
     '</div>'
   );
 }

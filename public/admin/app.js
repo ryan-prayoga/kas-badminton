@@ -10,6 +10,10 @@ const state = {
   formKoks: [{ typeId: null, typeName: null, pricePerPerson: 3000 }],
   edit: null,
   period: 'all',
+  role: null,
+  operatorName: '',
+  operatorExpiresAt: '',
+  operators: [],
 };
 
 function $(sel, root) {
@@ -235,6 +239,30 @@ function showApp() {
   $('#bottomNav').hidden = false;
 }
 
+function applyRole(me) {
+  state.role = me.role || null;
+  state.operatorName = me.name || '';
+  state.operatorExpiresAt = me.expiresAt || '';
+}
+
+function loadMe() {
+  return fetch('/api/me').then(function (r) { return r.json(); }).then(applyRole);
+}
+
+function renderRoleUI() {
+  var isOperator = state.role === 'operator';
+  var label = $('#roleLabel');
+  if (label) label.textContent = isOperator ? ('Delegasi · ' + state.operatorName) : 'Admin';
+  $$('[data-admin-only]').forEach(function (el) { el.hidden = isOperator; });
+  var info = $('#operatorInfo');
+  if (info) {
+    info.hidden = !isOperator;
+    if (isOperator) {
+      $('#operatorInfoText').textContent = state.operatorName + ' · berlaku sampai ' + fmtDate(state.operatorExpiresAt.slice(0, 10)) + ' ' + new Date(state.operatorExpiresAt).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
+    }
+  }
+}
+
 function submitPin() {
   var pin = pinBuffer;
   pinBuffer = '';
@@ -242,6 +270,9 @@ function submitPin() {
     method: 'POST',
     body: JSON.stringify({ pin: pin }),
   }).then(function () {
+    return loadMe();
+  }).then(function () {
+    renderRoleUI();
     showApp();
     startApp();
   }).catch(function () {
@@ -677,6 +708,144 @@ function openPlayersDialog() {
   $('#playersDialog').showModal();
 }
 
+// --- Penanggung jawab sementara (delegasi) ---
+function fmtDateTime(iso) {
+  if (!iso) return '—';
+  var d = new Date(iso);
+  if (isNaN(d.getTime())) return '—';
+  return fmtDate(d.toISOString().slice(0, 10)) + ' ' + d.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
+}
+
+function operatorStatusBadge(op) {
+  if (op.revokedAt) {
+    return '<span class="inline-flex items-center gap-1 rounded-full bg-danger/15 px-1.5 py-0.5 text-[11px] font-semibold text-danger"><iconify-icon icon="mdi:cancel" width="12"></iconify-icon>Dicabut</span>';
+  }
+  if (!op.active) {
+    return '<span class="inline-flex items-center gap-1 rounded-full bg-line2 px-1.5 py-0.5 text-[11px] font-semibold text-soft"><iconify-icon icon="mdi:clock-alert-outline" width="12"></iconify-icon>Kadaluarsa</span>';
+  }
+  return '<span class="inline-flex items-center gap-1 rounded-full bg-ok/15 px-1.5 py-0.5 text-[11px] font-semibold text-ok"><iconify-icon icon="mdi:check-circle" width="12"></iconify-icon>Aktif</span>';
+}
+
+function renderOperatorList() {
+  var list = $('#operatorList');
+  if (!list) return;
+  if (!state.operators.length) {
+    list.innerHTML = emptyState('mdi:account-clock-outline', 'Belum ada delegasi.');
+    return;
+  }
+  list.innerHTML = state.operators.map(function (op) {
+    return (
+      '<div class="flex items-center gap-3 rounded-xl border border-line bg-elevated p-3" data-id="' + escapeAttr(op.id) + '">' +
+        '<div class="min-w-0 flex-1">' +
+          '<div class="flex items-center gap-1.5">' +
+            '<span class="truncate font-semibold">' + escapeHtml(op.name) + '</span>' +
+            operatorStatusBadge(op) +
+          '</div>' +
+          '<div class="mt-0.5 text-[11px] text-soft">sampai ' + fmtDateTime(op.expiresAt) + '</div>' +
+        '</div>' +
+        (op.active
+          ? '<button type="button" data-role="revoke-operator" class="grid h-8 w-8 shrink-0 place-items-center rounded-lg border border-line text-soft transition active:scale-95 hover:text-danger" title="Cabut"><iconify-icon icon="mdi:trash-can-outline" width="15"></iconify-icon></button>'
+          : '') +
+      '</div>'
+    );
+  }).join('');
+}
+
+function fetchOperators() {
+  return api('/api/operators').then(function (data) {
+    state.operators = data.operators || [];
+    renderOperatorList();
+  }).catch(function (err) { toast(err.message, 'error'); });
+}
+
+function resetOperatorForm() {
+  $('#operatorForm').reset();
+  $('#operatorCustomDate').hidden = true;
+  $('#operatorResult').hidden = true;
+}
+
+function openOperatorsDialog() {
+  resetOperatorForm();
+  $('#operatorNameList').innerHTML = (state.players || []).map(function (p) {
+    return '<option value="' + escapeAttr(p.name) + '"></option>';
+  }).join('');
+  fetchOperators();
+  $('#operatorsDialog').showModal();
+}
+
+function operatorExpiresAtFromForm() {
+  var val = $('#operatorDuration').value;
+  if (val === 'custom') {
+    var d = $('#operatorCustomDate').value;
+    if (!d) return null;
+    return new Date(d + 'T23:59:59').toISOString();
+  }
+  return new Date(Date.now() + Number(val) * 86400000).toISOString();
+}
+
+function wireOperators() {
+  $('#operatorsBtn').onclick = openOperatorsDialog;
+  $('#closeOperators').onclick = function () { $('#operatorsDialog').close(); };
+
+  $('#operatorDuration').onchange = function (e) {
+    $('#operatorCustomDate').hidden = e.target.value !== 'custom';
+  };
+
+  $('#operatorForm').onsubmit = function (e) {
+    e.preventDefault();
+    var name = $('#operatorName').value;
+    var expiresAt = operatorExpiresAtFromForm();
+    if (!expiresAt) { toast('Isi tanggal kadaluarsa.', 'error'); return; }
+    api('/api/operators', { method: 'POST', body: JSON.stringify({ name: name, expiresAt: expiresAt }) })
+      .then(function (data) {
+        $('#operatorResultName').textContent = data.operator.name;
+        $('#operatorResultPin').textContent = data.pin;
+        $('#operatorResultExpiry').textContent = fmtDateTime(data.operator.expiresAt);
+        $('#operatorResult').hidden = false;
+        $('#operatorForm').reset();
+        $('#operatorCustomDate').hidden = true;
+        fetchOperators();
+        toast('PIN delegasi dibuat.', 'success');
+      }).catch(function (err) { toast(err.message, 'error'); });
+  };
+
+  $('#operatorList').onclick = function (e) {
+    var btn = e.target.closest('button[data-role="revoke-operator"]');
+    if (!btn) return;
+    var row = btn.closest('[data-id]');
+    if (!row) return;
+    var id = row.getAttribute('data-id');
+    var op = state.operators.filter(function (o) { return o.id === id; })[0];
+    askConfirm('Cabut akses delegasi "' + (op ? op.name : '') + '"? Sesi yang lagi login langsung ke-logout.').then(function (ok) {
+      if (!ok) return;
+      api('/api/operators/' + id, { method: 'DELETE' })
+        .then(function () { fetchOperators(); toast('Delegasi dicabut.', 'success'); })
+        .catch(function (err) { toast(err.message, 'error'); });
+    });
+  };
+
+  $('#operatorResultCopy').onclick = function () {
+    var pin = $('#operatorResultPin').textContent;
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(pin).then(function () { toast('PIN disalin.', 'success'); }, function () { toast('Gagal salin.', 'error'); });
+    } else {
+      toast('Clipboard tidak didukung.', 'error');
+    }
+  };
+
+  $('#operatorResultShare').onclick = function () {
+    var name = $('#operatorResultName').textContent;
+    var pin = $('#operatorResultPin').textContent;
+    var expiry = $('#operatorResultExpiry').textContent;
+    var text = 'PIN Kok Badminton buat ' + name + ': ' + pin + '\nBerlaku sampai ' + expiry + '\nBuka: ' + location.origin + '/admin';
+    if (navigator.share) {
+      navigator.share({ text: text }).catch(function () {});
+    } else {
+      window.open('https://wa.me/?text=' + encodeURIComponent(text), '_blank');
+    }
+  };
+}
+
 // --- Belum bayar ---
 function groupDebtItems(items) {
   var map = {};
@@ -737,8 +906,8 @@ function debtCard(d) {
         grouped.map(debtRow).join('') +
       '</div>' +
       '<div class="mt-3 grid grid-cols-2 gap-2">' +
-        '<button type="button" data-action="pay" data-name="' + escapeAttr(d.name) + '" data-amount="' + d.total + '" class="inline-flex items-center justify-center gap-1.5 rounded-xl bg-brand px-3 py-2.5 text-sm font-bold text-ink transition active:scale-95 hover:bg-brand-soft"><iconify-icon icon="mdi:cash-plus" width="16"></iconify-icon> Bayar sebagian</button>' +
-        '<button type="button" data-action="settle" data-name="' + escapeAttr(d.name) + '" class="inline-flex items-center justify-center gap-1.5 rounded-xl border border-ok/40 bg-ok/10 px-3 py-2.5 text-sm font-medium text-ok transition active:scale-95"><iconify-icon icon="mdi:check-all" width="16"></iconify-icon> Lunasin semua</button>' +
+        '<button type="button" data-admin-only data-action="pay" data-name="' + escapeAttr(d.name) + '" data-amount="' + d.total + '" class="inline-flex items-center justify-center gap-1.5 rounded-xl bg-brand px-3 py-2.5 text-sm font-bold text-ink transition active:scale-95 hover:bg-brand-soft"><iconify-icon icon="mdi:cash-plus" width="16"></iconify-icon> Bayar sebagian</button>' +
+        '<button type="button" data-admin-only data-action="settle" data-name="' + escapeAttr(d.name) + '" class="inline-flex items-center justify-center gap-1.5 rounded-xl border border-ok/40 bg-ok/10 px-3 py-2.5 text-sm font-medium text-ok transition active:scale-95"><iconify-icon icon="mdi:check-all" width="16"></iconify-icon> Lunasin semua</button>' +
         qrisBtn +
         '<button type="button" data-action="share" data-name="' + escapeAttr(d.name) + '" class="inline-flex items-center justify-center gap-1.5 rounded-xl border border-line bg-elevated px-3 py-2.5 text-sm font-medium transition active:scale-95"><iconify-icon icon="mdi:share-variant-outline" width="16"></iconify-icon> Share</button>' +
       '</div>' +
@@ -823,7 +992,10 @@ function adminGameCard(g) {
             '<span class="min-w-0">' + escapeHtml(g.notes) + '</span>' +
           '</div>'
         : '') +
-      '<div class="mt-3 grid grid-cols-2 gap-2">' +
+      '<div class="mt-2 flex items-center gap-1 text-[11px] text-soft">' +
+        '<iconify-icon icon="mdi:pencil-circle-outline" width="12"></iconify-icon>dicatat oleh ' + escapeHtml(g.recordedBy || 'Admin') +
+      '</div>' +
+      '<div class="mt-2 grid grid-cols-2 gap-2">' +
         '<button data-action="mark-all" data-id="' + g.id + '" data-paid="' + (g.summary.allPaid ? 'false' : 'true') + '" class="col-span-2 inline-flex items-center justify-center gap-1.5 rounded-xl border ' + markAllCls + ' px-3 py-2.5 text-sm font-medium transition active:scale-95">' +
           '<iconify-icon icon="' + (g.summary.allPaid ? 'mdi:restore' : 'mdi:check-all') + '" width="16"></iconify-icon>' +
           (g.summary.allPaid ? 'Tandai semua belum' : 'Tandai semua bayar') +
@@ -930,7 +1102,9 @@ function renderStats() {
   var stockLeft = types.reduce(function (s, t) { return s + Math.max(0, Number(t.stock) || 0); }, 0);
   var typesWithStock = types.filter(function (t) { return (Number(t.stock) || 0) > 0; }).length;
   strip.innerHTML =
-    statCard({ icon: 'mdi:cash-register', iconClass: kas.net >= 0 ? 'text-ok' : 'text-danger', label: 'Total kas', value: fmt(kas.net), valueClass: kas.net >= 0 ? 'text-ok' : 'text-danger', sub: 'masuk ' + fmt(kas.paid) + ' · beli ' + fmt(kas.expense) }) +
+    (state.role === 'admin'
+      ? statCard({ icon: 'mdi:cash-register', iconClass: kas.net >= 0 ? 'text-ok' : 'text-danger', label: 'Total kas', value: fmt(kas.net), valueClass: kas.net >= 0 ? 'text-ok' : 'text-danger', sub: 'masuk ' + fmt(kas.paid) + ' · beli ' + fmt(kas.expense) })
+      : '') +
     statCard({ icon: 'mdi:cash-multiple', iconClass: 'text-warn', label: 'Belum bayar', value: fmt(totalDebt), valueClass: totalDebt ? 'text-warn' : 'text-ok', sub: state.debtSummary.length ? state.debtSummary.length + ' orang' : 'Semua lunas' }) +
     statCard({ icon: 'mdi:badminton', iconClass: 'text-brand', label: 'Total main', value: String(games.length), sub: games.length ? 'game tercatat' : 'belum ada' }) +
     statCard({ icon: 'game-icons:shuttlecock', iconClass: 'text-brand', label: 'Kok terpakai', value: String(totalKok), sub: 'total kok' }) +
@@ -984,6 +1158,7 @@ function renderAll() {
   renderStatPlayers();
   if ($('#kokTypesDialog') && $('#kokTypesDialog').open) renderKokTypeList();
   if ($('#playersDialog') && $('#playersDialog').open) renderPlayerList();
+  renderRoleUI();
 }
 
 function applyServerState(data) {
@@ -1288,6 +1463,7 @@ function wire() {
   wireAllPlayerInputs($('#gameForm'));
   wireTabs();
   wirePeriodFilter();
+  wireOperators();
 
   $('#fabAdd').onclick = openGameDialog;
   $('#cancelGameForm').onclick = function () { $('#gameDialog').close(); };
@@ -1651,10 +1827,9 @@ function startApp() {
 
 (function init() {
   wireLock();
-  fetch('/api/me')
-    .then(function (r) { return r.json(); })
-    .then(function (d) {
-      if (d.isAdmin) { showApp(); startApp(); }
+  loadMe()
+    .then(function () {
+      if (state.role) { renderRoleUI(); showApp(); startApp(); }
       else showLock();
     })
     .catch(function () { showLock(); });

@@ -8,7 +8,7 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <title>Kok Badminton — Admin</title>
   <link rel="icon" href="/favicon.svg?v=15" type="image/svg+xml" />
-  <link rel="stylesheet" href="/styles.css?v=17" />
+  <link rel="stylesheet" href="/styles.css?v=19" />
   <script src="/vendor/iconify-icon.js?v=15"></script>
   <script src="/vendor/icons.js?v=15"></script>
   <script src="/vendor/qrcode.js?v=15"></script>
@@ -22,7 +22,7 @@
       <iconify-icon icon="mdi:lock-outline" width="28"></iconify-icon>
     </div>
     <div id="lockClock" class="font-mono text-5xl font-light tracking-tight tabular-nums">--:--</div>
-    <p class="text-sm text-muted">Masukkan PIN admin</p>
+    <p class="text-sm text-muted">Masukkan PIN</p>
     <div id="lockDots" class="flex gap-3.5">
       <span class="dot h-3 w-3 rounded-full border-[1.5px] border-soft transition"></span>
       <span class="dot h-3 w-3 rounded-full border-[1.5px] border-soft transition"></span>
@@ -64,7 +64,7 @@
               <iconify-icon icon="mdi:badminton" width="22"></iconify-icon>
             </div>
             <div class="min-w-0">
-              <p class="text-[11px] font-semibold uppercase tracking-[0.16em] text-brand">Admin</p>
+              <p id="roleLabel" class="text-[11px] font-semibold uppercase tracking-[0.16em] text-brand">Admin</p>
               <h1 class="truncate text-xl font-extrabold leading-tight tracking-tight sm:text-2xl">Kok Badminton</h1>
             </div>
           </div>
@@ -129,31 +129,42 @@
     </section>
 
     <!-- ── Tab: Lainnya ── -->
-    <section data-panel="lainnya" hidden class="rounded-xl2 border border-line bg-surface shadow-card p-2">
-      <button type="button" id="kokTypesBtn" class="menurow">
-        <iconify-icon icon="game-icons:shuttlecock" width="20" class="text-brand"></iconify-icon>
-        <span class="flex-1 text-left">Jenis kok &amp; stok</span>
-        <iconify-icon icon="mdi:chevron-right" width="18" class="text-soft"></iconify-icon>
-      </button>
-      <button type="button" id="playersBtn" class="menurow">
-        <iconify-icon icon="mdi:account-group-outline" width="20" class="text-brand"></iconify-icon>
-        <span class="flex-1 text-left">Kelola pemain</span>
-        <iconify-icon icon="mdi:chevron-right" width="18" class="text-soft"></iconify-icon>
-      </button>
-      <button type="button" id="settingsBtn" class="menurow">
-        <iconify-icon icon="mdi:cog" width="20" class="text-brand"></iconify-icon>
-        <span class="flex-1 text-left">Pengaturan &amp; QRIS</span>
-        <iconify-icon icon="mdi:chevron-right" width="18" class="text-soft"></iconify-icon>
-      </button>
-      <a href="/" class="menurow">
-        <iconify-icon icon="mdi:earth" width="20" class="text-brand"></iconify-icon>
-        <span class="flex-1 text-left">Halaman publik</span>
-        <iconify-icon icon="mdi:open-in-new" width="16" class="text-soft"></iconify-icon>
-      </a>
-      <button type="button" id="logoutBtn2" class="menurow text-danger">
-        <iconify-icon icon="mdi:lock-outline" width="20"></iconify-icon>
-        <span class="flex-1 text-left">Kunci admin</span>
-      </button>
+    <section data-panel="lainnya" hidden class="grid grid-cols-1 gap-3">
+      <div id="operatorInfo" hidden class="rounded-xl2 border border-brand/30 bg-brand/10 p-3.5 text-sm text-ink50">
+        <div class="flex items-center gap-1.5 font-semibold text-brand"><iconify-icon icon="mdi:account-clock-outline" width="16"></iconify-icon> Login sebagai delegasi</div>
+        <p id="operatorInfoText" class="mt-1 text-xs text-muted">—</p>
+      </div>
+      <div class="rounded-xl2 border border-line bg-surface shadow-card p-2">
+        <button type="button" id="kokTypesBtn" data-admin-only class="menurow">
+          <iconify-icon icon="game-icons:shuttlecock" width="20" class="text-brand"></iconify-icon>
+          <span class="flex-1 text-left">Jenis kok &amp; stok</span>
+          <iconify-icon icon="mdi:chevron-right" width="18" class="text-soft"></iconify-icon>
+        </button>
+        <button type="button" id="playersBtn" data-admin-only class="menurow">
+          <iconify-icon icon="mdi:account-group-outline" width="20" class="text-brand"></iconify-icon>
+          <span class="flex-1 text-left">Kelola pemain</span>
+          <iconify-icon icon="mdi:chevron-right" width="18" class="text-soft"></iconify-icon>
+        </button>
+        <button type="button" id="operatorsBtn" data-admin-only class="menurow">
+          <iconify-icon icon="mdi:account-clock-outline" width="20" class="text-brand"></iconify-icon>
+          <span class="flex-1 text-left">Penanggung jawab sementara</span>
+          <iconify-icon icon="mdi:chevron-right" width="18" class="text-soft"></iconify-icon>
+        </button>
+        <button type="button" id="settingsBtn" data-admin-only class="menurow">
+          <iconify-icon icon="mdi:cog" width="20" class="text-brand"></iconify-icon>
+          <span class="flex-1 text-left">Pengaturan &amp; QRIS</span>
+          <iconify-icon icon="mdi:chevron-right" width="18" class="text-soft"></iconify-icon>
+        </button>
+        <a href="/" class="menurow">
+          <iconify-icon icon="mdi:earth" width="20" class="text-brand"></iconify-icon>
+          <span class="flex-1 text-left">Halaman publik</span>
+          <iconify-icon icon="mdi:open-in-new" width="16" class="text-soft"></iconify-icon>
+        </a>
+        <button type="button" id="logoutBtn2" class="menurow text-danger">
+          <iconify-icon icon="mdi:lock-outline" width="20"></iconify-icon>
+          <span class="flex-1 text-left">Kunci</span>
+        </button>
+      </div>
     </section>
   </div>
 
@@ -400,6 +411,60 @@
     </div>
   </dialog>
 
+  <!-- ── Penanggung jawab sementara (delegasi) dialog ── -->
+  <dialog id="operatorsDialog">
+    <div class="grid grid-cols-1 max-h-[calc(100dvh-20px-var(--safe-b))] w-[min(100vw-2rem,420px)] gap-4 overflow-auto rounded-xl2 border border-line bg-surface p-4 shadow-card">
+      <div class="flex items-center justify-between gap-2">
+        <div class="flex items-center gap-2">
+          <iconify-icon icon="mdi:account-clock-outline" width="20" class="text-brand"></iconify-icon>
+          <h2 class="text-base font-bold tracking-tight">Penanggung jawab sementara</h2>
+        </div>
+        <button type="button" id="closeOperators" class="grid h-9 w-9 place-items-center rounded-xl border border-line bg-elevated text-muted transition active:scale-95 hover:text-ink50">
+          <iconify-icon icon="mdi:close" width="18"></iconify-icon>
+        </button>
+      </div>
+      <p class="text-xs text-soft">Kasih PIN sementara ke siapa aja buat catat main. Gak bisa akses kas, jenis kok/stok, kelola pemain, atau pengaturan.</p>
+
+      <form id="operatorForm" class="grid grid-cols-1 gap-2 rounded-xl border border-line bg-elevated p-3">
+        <label class="grid gap-1">
+          <span class="text-xs font-medium text-muted">Nama</span>
+          <input id="operatorName" type="text" required maxlength="60" placeholder="Nama delegasi (manual atau pilih pemain)"
+            list="operatorNameList" autocomplete="off"
+            class="w-full rounded-xl border border-line bg-ink px-3 py-2.5 text-base outline-none transition focus:border-brand/60" />
+          <datalist id="operatorNameList"></datalist>
+        </label>
+        <label class="grid gap-1">
+          <span class="text-xs font-medium text-muted">Masa aktif</span>
+          <select id="operatorDuration"
+            class="w-full rounded-xl border border-line bg-ink px-3 py-2.5 text-base outline-none transition focus:border-brand/60">
+            <option value="1">1 hari</option>
+            <option value="3">3 hari</option>
+            <option value="7" selected>7 hari</option>
+            <option value="30">30 hari</option>
+            <option value="custom">Custom tanggal…</option>
+          </select>
+        </label>
+        <input id="operatorCustomDate" type="date" hidden
+          class="w-full rounded-xl border border-line bg-ink px-3 py-2.5 text-base outline-none transition focus:border-brand/60" />
+        <button type="submit" class="mt-1 inline-flex items-center justify-center gap-1.5 rounded-xl bg-brand px-3.5 py-2.5 text-sm font-bold text-ink transition active:scale-95 hover:bg-brand-soft">
+          <iconify-icon icon="mdi:key-plus" width="16"></iconify-icon> Buat PIN
+        </button>
+      </form>
+
+      <div id="operatorResult" hidden class="grid grid-cols-1 gap-2 rounded-xl border border-brand/40 bg-brand/10 p-3.5 text-center">
+        <p class="text-xs text-muted">PIN untuk <span id="operatorResultName" class="font-semibold text-ink50">—</span></p>
+        <p id="operatorResultPin" class="font-mono text-3xl font-bold tracking-[0.3em] text-brand">------</p>
+        <p class="text-xs text-soft">Berlaku sampai <span id="operatorResultExpiry">—</span></p>
+        <div class="grid grid-cols-2 gap-2">
+          <button type="button" id="operatorResultCopy" class="rounded-xl border border-line bg-elevated px-3 py-2 text-sm font-medium transition active:scale-95">Salin PIN</button>
+          <button type="button" id="operatorResultShare" class="rounded-xl border border-line bg-elevated px-3 py-2 text-sm font-medium transition active:scale-95">Share</button>
+        </div>
+      </div>
+
+      <div id="operatorList" class="grid grid-cols-1 gap-2"></div>
+    </div>
+  </dialog>
+
   <!-- ── Edit dialog ── -->
   <dialog id="editDialog">
     <form method="dialog" id="editForm" class="grid grid-cols-1 max-h-[calc(100dvh-20px-var(--safe-b))] gap-3 overflow-auto rounded-xl2 border border-line bg-surface p-4 pb-0 shadow-card">
@@ -550,6 +615,6 @@
   <!-- ── Toast stack ── -->
   <div id="toastStack" class="pointer-events-none fixed inset-x-0 bottom-[calc(88px+var(--safe-b))] z-50 mx-auto flex w-full max-w-[720px] flex-col items-stretch gap-2 px-4"></div>
 
-  <script src="/admin/app.js?v=17"></script>
+  <script src="/admin/app.js?v=19"></script>
 </body>
 </html>
