@@ -14,6 +14,7 @@ const state = {
   operatorName: '',
   operatorExpiresAt: '',
   operators: [],
+  operatorRevealed: [],
 };
 
 function $(sel, root) {
@@ -716,36 +717,50 @@ function fmtDateTime(iso) {
   return fmtDate(d.toISOString().slice(0, 10)) + ' ' + d.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
 }
 
-function operatorStatusBadge(op) {
-  if (op.revokedAt) {
-    return '<span class="inline-flex items-center gap-1 rounded-full bg-danger/15 px-1.5 py-0.5 text-[11px] font-semibold text-danger"><iconify-icon icon="mdi:cancel" width="12"></iconify-icon>Dicabut</span>';
-  }
-  if (!op.active) {
-    return '<span class="inline-flex items-center gap-1 rounded-full bg-line2 px-1.5 py-0.5 text-[11px] font-semibold text-soft"><iconify-icon icon="mdi:clock-alert-outline" width="12"></iconify-icon>Kadaluarsa</span>';
-  }
+function operatorStatusBadge() {
   return '<span class="inline-flex items-center gap-1 rounded-full bg-ok/15 px-1.5 py-0.5 text-[11px] font-semibold text-ok"><iconify-icon icon="mdi:check-circle" width="12"></iconify-icon>Aktif</span>';
 }
 
 function renderOperatorList() {
   var list = $('#operatorList');
   if (!list) return;
-  if (!state.operators.length) {
-    list.innerHTML = emptyState('mdi:account-clock-outline', 'Belum ada delegasi.');
+  var active = (state.operators || []).filter(function (op) { return op.active; });
+  if (!active.length) {
+    list.innerHTML = emptyState('mdi:account-clock-outline', 'Belum ada delegasi aktif.');
     return;
   }
-  list.innerHTML = state.operators.map(function (op) {
+  list.innerHTML = active.map(function (op) {
     return (
       '<div class="flex items-center gap-3 rounded-xl border border-line bg-elevated p-3" data-id="' + escapeAttr(op.id) + '">' +
         '<div class="min-w-0 flex-1">' +
           '<div class="flex items-center gap-1.5">' +
             '<span class="truncate font-semibold">' + escapeHtml(op.name) + '</span>' +
-            operatorStatusBadge(op) +
+            operatorStatusBadge() +
           '</div>' +
           '<div class="mt-0.5 text-[11px] text-soft">sampai ' + fmtDateTime(op.expiresAt) + '</div>' +
         '</div>' +
-        (op.active
-          ? '<button type="button" data-role="revoke-operator" class="grid h-8 w-8 shrink-0 place-items-center rounded-lg border border-line text-soft transition active:scale-95 hover:text-danger" title="Cabut"><iconify-icon icon="mdi:trash-can-outline" width="15"></iconify-icon></button>'
-          : '') +
+        '<button type="button" data-role="revoke-operator" class="grid h-8 w-8 shrink-0 place-items-center rounded-lg border border-line text-soft transition active:scale-95 hover:text-danger" title="Cabut"><iconify-icon icon="mdi:trash-can-outline" width="15"></iconify-icon></button>' +
+      '</div>'
+    );
+  }).join('');
+}
+
+function renderOperatorRevealed() {
+  var box = $('#operatorRevealed');
+  if (!box) return;
+  var activeIds = {};
+  (state.operators || []).forEach(function (op) { if (op.active) activeIds[op.id] = true; });
+  state.operatorRevealed = state.operatorRevealed.filter(function (r) { return activeIds[r.id]; });
+  box.innerHTML = state.operatorRevealed.map(function (r) {
+    return (
+      '<div class="grid grid-cols-1 gap-2 rounded-xl border border-brand/40 bg-brand/10 p-3.5 text-center">' +
+        '<p class="text-xs text-muted">PIN untuk <span class="font-semibold text-ink50">' + escapeHtml(r.name) + '</span></p>' +
+        '<p class="font-mono text-3xl font-bold tracking-[0.3em] text-brand">' + escapeHtml(r.pin) + '</p>' +
+        '<p class="text-xs text-soft">Berlaku sampai ' + fmtDateTime(r.expiresAt) + '</p>' +
+        '<div class="grid grid-cols-2 gap-2">' +
+          '<button type="button" data-role="copy-pin" data-pin="' + escapeAttr(r.pin) + '" class="rounded-xl border border-line bg-elevated px-3 py-2 text-sm font-medium transition active:scale-95">Salin PIN</button>' +
+          '<button type="button" data-role="share-pin" data-name="' + escapeAttr(r.name) + '" data-pin="' + escapeAttr(r.pin) + '" data-expiry="' + escapeAttr(fmtDateTime(r.expiresAt)) + '" class="rounded-xl border border-line bg-elevated px-3 py-2 text-sm font-medium transition active:scale-95">Share</button>' +
+        '</div>' +
       '</div>'
     );
   }).join('');
@@ -755,20 +770,17 @@ function fetchOperators() {
   return api('/api/operators').then(function (data) {
     state.operators = data.operators || [];
     renderOperatorList();
+    renderOperatorRevealed();
   }).catch(function (err) { toast(err.message, 'error'); });
 }
 
 function resetOperatorForm() {
   $('#operatorForm').reset();
   $('#operatorCustomDate').hidden = true;
-  $('#operatorResult').hidden = true;
 }
 
 function openOperatorsDialog() {
   resetOperatorForm();
-  $('#operatorNameList').innerHTML = (state.players || []).map(function (p) {
-    return '<option value="' + escapeAttr(p.name) + '"></option>';
-  }).join('');
   fetchOperators();
   $('#operatorsDialog').showModal();
 }
@@ -780,12 +792,16 @@ function operatorExpiresAtFromForm() {
     if (!d) return null;
     return new Date(d + 'T23:59:59').toISOString();
   }
-  return new Date(Date.now() + Number(val) * 86400000).toISOString();
+  var unit = val.slice(-1);
+  var amount = Number(val.slice(0, -1));
+  var ms = unit === 'h' ? amount * 3600000 : amount * 86400000;
+  return new Date(Date.now() + ms).toISOString();
 }
 
 function wireOperators() {
   $('#operatorsBtn').onclick = openOperatorsDialog;
   $('#closeOperators').onclick = function () { $('#operatorsDialog').close(); };
+  wirePlayerAutocomplete($('#operatorName'));
 
   $('#operatorDuration').onchange = function (e) {
     $('#operatorCustomDate').hidden = e.target.value !== 'custom';
@@ -798,10 +814,7 @@ function wireOperators() {
     if (!expiresAt) { toast('Isi tanggal kadaluarsa.', 'error'); return; }
     api('/api/operators', { method: 'POST', body: JSON.stringify({ name: name, expiresAt: expiresAt }) })
       .then(function (data) {
-        $('#operatorResultName').textContent = data.operator.name;
-        $('#operatorResultPin').textContent = data.pin;
-        $('#operatorResultExpiry').textContent = fmtDateTime(data.operator.expiresAt);
-        $('#operatorResult').hidden = false;
+        state.operatorRevealed.unshift({ id: data.operator.id, name: data.operator.name, pin: data.pin, expiresAt: data.operator.expiresAt });
         $('#operatorForm').reset();
         $('#operatorCustomDate').hidden = true;
         fetchOperators();
@@ -824,24 +837,28 @@ function wireOperators() {
     });
   };
 
-  $('#operatorResultCopy').onclick = function () {
-    var pin = $('#operatorResultPin').textContent;
-    if (navigator.clipboard && navigator.clipboard.writeText) {
-      navigator.clipboard.writeText(pin).then(function () { toast('PIN disalin.', 'success'); }, function () { toast('Gagal salin.', 'error'); });
-    } else {
-      toast('Clipboard tidak didukung.', 'error');
+  $('#operatorRevealed').onclick = function (e) {
+    var copyBtn = e.target.closest('button[data-role="copy-pin"]');
+    if (copyBtn) {
+      var pin = copyBtn.getAttribute('data-pin');
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(pin).then(function () { toast('PIN disalin.', 'success'); }, function () { toast('Gagal salin.', 'error'); });
+      } else {
+        toast('Clipboard tidak didukung.', 'error');
+      }
+      return;
     }
-  };
-
-  $('#operatorResultShare').onclick = function () {
-    var name = $('#operatorResultName').textContent;
-    var pin = $('#operatorResultPin').textContent;
-    var expiry = $('#operatorResultExpiry').textContent;
-    var text = 'PIN Kok Badminton buat ' + name + ': ' + pin + '\nBerlaku sampai ' + expiry + '\nBuka: ' + location.origin + '/admin';
-    if (navigator.share) {
-      navigator.share({ text: text }).catch(function () {});
-    } else {
-      window.open('https://wa.me/?text=' + encodeURIComponent(text), '_blank');
+    var shareBtn = e.target.closest('button[data-role="share-pin"]');
+    if (shareBtn) {
+      var name = shareBtn.getAttribute('data-name');
+      var sPin = shareBtn.getAttribute('data-pin');
+      var expiry = shareBtn.getAttribute('data-expiry');
+      var text = 'PIN Kok Badminton buat ' + name + ': ' + sPin + '\nBerlaku sampai ' + expiry + '\nBuka: ' + location.origin + '/admin';
+      if (navigator.share) {
+        navigator.share({ text: text }).catch(function () {});
+      } else {
+        window.open('https://wa.me/?text=' + encodeURIComponent(text), '_blank');
+      }
     }
   };
 }
@@ -981,6 +998,10 @@ function adminGameCard(g) {
         '</div>' +
         '<div class="shrink-0">' + statusBadge + '</div>' +
       '</div>' +
+      '<div class="mt-1 flex items-center gap-1 text-[11px] text-soft">' +
+        '<iconify-icon icon="mdi:pencil-outline" width="11" class="shrink-0"></iconify-icon>' +
+        '<span class="truncate">dicatat oleh ' + escapeHtml(g.recordedBy || 'Admin') + '</span>' +
+      '</div>' +
       '<div class="mt-2.5 grid grid-cols-[1fr_auto_1fr] items-center gap-x-2 gap-y-1.5 sm:gap-x-2.5">' +
         pairGroup(playerChip(g, g.players[0], 0) + playerChip(g, g.players[1], 1)) +
         '<div class="text-center text-[10px] font-bold uppercase tracking-wider text-soft">vs</div>' +
@@ -992,9 +1013,6 @@ function adminGameCard(g) {
             '<span class="min-w-0">' + escapeHtml(g.notes) + '</span>' +
           '</div>'
         : '') +
-      '<div class="mt-2 flex items-center gap-1 text-[11px] text-soft">' +
-        '<iconify-icon icon="mdi:pencil-circle-outline" width="12"></iconify-icon>dicatat oleh ' + escapeHtml(g.recordedBy || 'Admin') +
-      '</div>' +
       '<div class="mt-2 grid grid-cols-2 gap-2">' +
         '<button data-action="mark-all" data-id="' + g.id + '" data-paid="' + (g.summary.allPaid ? 'false' : 'true') + '" class="col-span-2 inline-flex items-center justify-center gap-1.5 rounded-xl border ' + markAllCls + ' px-3 py-2.5 text-sm font-medium transition active:scale-95">' +
           '<iconify-icon icon="' + (g.summary.allPaid ? 'mdi:restore' : 'mdi:check-all') + '" width="16"></iconify-icon>' +

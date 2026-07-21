@@ -288,6 +288,10 @@ function gameCard(g) {
         '</div>' +
         '<div class="shrink-0">' + statusBadge + '</div>' +
       '</div>' +
+      '<div class="mt-1 flex items-center gap-1 text-[11px] text-soft">' +
+        '<iconify-icon icon="mdi:pencil-outline" width="11" class="shrink-0"></iconify-icon>' +
+        '<span class="truncate">dicatat oleh ' + escapeHtml(g.recordedBy || 'Admin') + '</span>' +
+      '</div>' +
       '<div class="mt-2.5 grid grid-cols-[1fr_auto_1fr] items-center gap-x-2 gap-y-1.5 sm:gap-x-2.5">' +
         pairGroup(playerChip(g.players[0]) + playerChip(g.players[1])) +
         '<div class="text-center text-[10px] font-bold uppercase tracking-wider text-soft">vs</div>' +
@@ -299,9 +303,6 @@ function gameCard(g) {
             '<span class="min-w-0">' + escapeHtml(g.notes) + '</span>' +
           '</div>'
         : '') +
-      '<div class="mt-2 flex items-center gap-1 text-[11px] text-soft">' +
-        '<iconify-icon icon="mdi:pencil-circle-outline" width="12"></iconify-icon>dicatat oleh ' + escapeHtml(g.recordedBy || 'Admin') +
-      '</div>' +
     '</div>'
   );
 }

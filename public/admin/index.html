@@ -8,7 +8,7 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <title>Kok Badminton — Admin</title>
   <link rel="icon" href="/favicon.svg?v=15" type="image/svg+xml" />
-  <link rel="stylesheet" href="/styles.css?v=19" />
+  <link rel="stylesheet" href="/styles.css?v=20" />
   <script src="/vendor/iconify-icon.js?v=15"></script>
   <script src="/vendor/icons.js?v=16"></script>
   <script src="/vendor/qrcode.js?v=15"></script>
@@ -428,19 +428,25 @@
       <form id="operatorForm" class="grid grid-cols-1 gap-2 rounded-xl border border-line bg-elevated p-3">
         <label class="grid gap-1">
           <span class="text-xs font-medium text-muted">Nama</span>
-          <input id="operatorName" type="text" required maxlength="60" placeholder="Nama delegasi (manual atau pilih pemain)"
-            list="operatorNameList" autocomplete="off"
-            class="w-full rounded-xl border border-line bg-ink px-3 py-2.5 text-base outline-none transition focus:border-brand/60" />
-          <datalist id="operatorNameList"></datalist>
+          <div class="relative">
+            <input id="operatorName" type="text" data-role="player" required maxlength="60" placeholder="Nama delegasi (manual atau pilih pemain)"
+              autocomplete="off"
+              class="w-full rounded-xl border border-line bg-ink px-3 py-2.5 text-base outline-none transition focus:border-brand/60" />
+          </div>
         </label>
         <label class="grid gap-1">
           <span class="text-xs font-medium text-muted">Masa aktif</span>
           <select id="operatorDuration"
             class="w-full rounded-xl border border-line bg-ink px-3 py-2.5 text-base outline-none transition focus:border-brand/60">
-            <option value="1">1 hari</option>
-            <option value="3">3 hari</option>
-            <option value="7" selected>7 hari</option>
-            <option value="30">30 hari</option>
+            <option value="1h">1 jam</option>
+            <option value="2h">2 jam</option>
+            <option value="3h">3 jam</option>
+            <option value="6h">6 jam</option>
+            <option value="12h">12 jam</option>
+            <option value="1d">1 hari</option>
+            <option value="3d">3 hari</option>
+            <option value="7d" selected>7 hari</option>
+            <option value="30d">30 hari</option>
             <option value="custom">Custom tanggal…</option>
           </select>
         </label>
@@ -451,15 +457,7 @@
         </button>
       </form>
 
-      <div id="operatorResult" hidden class="grid grid-cols-1 gap-2 rounded-xl border border-brand/40 bg-brand/10 p-3.5 text-center">
-        <p class="text-xs text-muted">PIN untuk <span id="operatorResultName" class="font-semibold text-ink50">—</span></p>
-        <p id="operatorResultPin" class="font-mono text-3xl font-bold tracking-[0.3em] text-brand">------</p>
-        <p class="text-xs text-soft">Berlaku sampai <span id="operatorResultExpiry">—</span></p>
-        <div class="grid grid-cols-2 gap-2">
-          <button type="button" id="operatorResultCopy" class="rounded-xl border border-line bg-elevated px-3 py-2 text-sm font-medium transition active:scale-95">Salin PIN</button>
-          <button type="button" id="operatorResultShare" class="rounded-xl border border-line bg-elevated px-3 py-2 text-sm font-medium transition active:scale-95">Share</button>
-        </div>
-      </div>
+      <div id="operatorRevealed" class="grid grid-cols-1 gap-2"></div>
 
       <div id="operatorList" class="grid grid-cols-1 gap-2"></div>
     </div>
@@ -615,6 +613,6 @@
   <!-- ── Toast stack ── -->
   <div id="toastStack" class="pointer-events-none fixed inset-x-0 bottom-[calc(88px+var(--safe-b))] z-50 mx-auto flex w-full max-w-[720px] flex-col items-stretch gap-2 px-4"></div>
 
-  <script src="/admin/app.js?v=19"></script>
+  <script src="/admin/app.js?v=20"></script>
 </body>
 </html>
