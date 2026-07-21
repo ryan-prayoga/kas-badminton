@@ -1185,8 +1185,6 @@ function applyServerState(data) {
     state.settings = { defaultPricePerPerson: data.settings.defaultPricePerPerson };
     state.qrisEnabled = !!data.settings.qrisEnabled;
     if (data.settings.merchantQris !== undefined) state.merchantQris = data.settings.merchantQris;
-    var priceEl = $('#defaultPrice');
-    if (priceEl) priceEl.value = data.settings.defaultPricePerPerson;
   }
   if (data.players) state.players = data.players;
   if (data.kokTypes) state.kokTypes = data.kokTypes;
@@ -1329,12 +1327,30 @@ function decodeQrisImage(file) {
       } else {
         setQrisStatus('QR gak kebaca. Coba foto lebih jelas / crop pas ke kotak QR.', 'error');
       }
+      renderQrisPreview();
     };
     img.onerror = function () { setQrisStatus('Gagal buka gambar.', 'error'); };
     img.src = reader.result;
   };
   reader.onerror = function () { setQrisStatus('Gagal baca file.', 'error'); };
   reader.readAsDataURL(file);
+}
+
+function renderQrisPreview() {
+  var val = ($('#merchantQris').value || '').trim();
+  var box = $('#qrisPreviewBox');
+  var empty = $('#qrisEmptyBox');
+  var removeBtn = $('#qrisRemoveBtn');
+  if (val) {
+    renderQr($('#qrisPreviewCanvas'), val);
+    box.hidden = false;
+    empty.hidden = true;
+    removeBtn.hidden = false;
+  } else {
+    box.hidden = true;
+    empty.hidden = false;
+    removeBtn.hidden = true;
+  }
 }
 
 // --- Beli slop ---
@@ -1630,8 +1646,8 @@ function wire() {
 
   // Settings
   $('#settingsBtn').onclick = function () {
-    $('#defaultPrice').value = state.settings.defaultPricePerPerson;
     $('#merchantQris').value = state.merchantQris || '';
+    renderQrisPreview();
     var st = $('#qrisStatus');
     if (st) {
       st.textContent = state.qrisEnabled ? '✓ QRIS aktif' : 'QRIS belum diatur';
@@ -1647,13 +1663,17 @@ function wire() {
     if (file) decodeQrisImage(file);
     e.target.value = '';
   };
+  $('#qrisRemoveBtn').onclick = function () {
+    $('#merchantQris').value = '';
+    renderQrisPreview();
+    setQrisStatus('QRIS dikosongkan. Klik Simpan buat matikan.', 'info');
+  };
 
   $('#settingsForm').onsubmit = function (e) {
     e.preventDefault();
     api('/api/settings', {
       method: 'PUT',
       body: JSON.stringify({
-        defaultPricePerPerson: Number($('#defaultPrice').value),
         merchantQris: $('#merchantQris').value,
       }),
     }).then(function (data) {

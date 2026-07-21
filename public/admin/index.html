@@ -8,7 +8,7 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <title>Kok Badminton — Admin</title>
   <link rel="icon" href="/favicon.svg?v=15" type="image/svg+xml" />
-  <link rel="stylesheet" href="/styles.css?v=20" />
+  <link rel="stylesheet" href="/styles.css?v=21" />
   <script src="/vendor/iconify-icon.js?v=15"></script>
   <script src="/vendor/icons.js?v=16"></script>
   <script src="/vendor/qrcode.js?v=15"></script>
@@ -151,8 +151,8 @@
           <iconify-icon icon="mdi:chevron-right" width="18" class="text-soft"></iconify-icon>
         </button>
         <button type="button" id="settingsBtn" data-admin-only class="menurow">
-          <iconify-icon icon="mdi:cog" width="20" class="text-brand"></iconify-icon>
-          <span class="flex-1 text-left">Pengaturan &amp; QRIS</span>
+          <iconify-icon icon="mdi:qrcode" width="20" class="text-brand"></iconify-icon>
+          <span class="flex-1 text-left">QRIS</span>
           <iconify-icon icon="mdi:chevron-right" width="18" class="text-soft"></iconify-icon>
         </button>
         <a href="/" class="menurow">
@@ -269,35 +269,36 @@
     </form>
   </dialog>
 
-  <!-- ── Pengaturan dialog ── -->
+  <!-- ── Pengaturan QRIS dialog ── -->
   <dialog id="settingsDialog">
     <form id="settingsForm" class="grid grid-cols-1 max-h-[calc(100dvh-20px-var(--safe-b))] gap-4 overflow-auto rounded-xl2 border border-line bg-surface p-4 pb-0 shadow-card">
       <div class="flex items-center gap-2">
-        <iconify-icon icon="mdi:cog" width="20" class="text-brand"></iconify-icon>
-        <h2 class="text-base font-bold tracking-tight">Pengaturan</h2>
+        <iconify-icon icon="mdi:qrcode" width="20" class="text-brand"></iconify-icon>
+        <h2 class="text-base font-bold tracking-tight">Pengaturan QRIS</h2>
       </div>
 
-      <label class="grid gap-1.5">
-        <span class="text-xs font-medium text-muted">Default harga / orang / kok</span>
-        <div class="flex items-center gap-2 rounded-xl border border-line bg-ink px-3">
-          <span class="font-mono text-sm text-soft">Rp</span>
-          <input id="defaultPrice" inputmode="numeric" type="number" min="0" step="500"
-            class="min-w-0 flex-1 bg-transparent py-2.5 text-base outline-none" />
-        </div>
-        <p class="text-xs text-soft">Dipakai kalau kok belum pilih jenis. Harga di game tetap snapshot.</p>
-      </label>
-
-      <label class="grid gap-1.5 border-t border-line pt-3">
+      <div class="grid gap-1.5">
         <span class="text-xs font-medium text-muted">QRIS statis merchant</span>
-        <button type="button" id="qrisUploadBtn" class="inline-flex items-center justify-center gap-1.5 rounded-xl border border-brand/40 bg-brand/10 px-3 py-2.5 text-sm font-bold text-brand transition active:scale-95">
-          <iconify-icon icon="mdi:qrcode" width="16"></iconify-icon> Upload / foto QRIS
-        </button>
+        <div id="qrisPreviewBox" class="grid place-items-center gap-3 rounded-xl border border-line bg-white p-4" hidden>
+          <div id="qrisPreviewCanvas" class="w-full max-w-[200px]"></div>
+        </div>
+        <div id="qrisEmptyBox" class="grid place-items-center gap-1.5 rounded-xl border border-dashed border-line bg-sunken py-8 text-soft">
+          <iconify-icon icon="mdi:qrcode" width="28"></iconify-icon>
+          <span class="text-sm">Belum ada QRIS</span>
+        </div>
+        <div class="grid grid-cols-2 gap-2">
+          <button type="button" id="qrisUploadBtn" class="inline-flex items-center justify-center gap-1.5 rounded-xl border border-brand/40 bg-brand/10 px-3 py-2.5 text-sm font-bold text-brand transition active:scale-95">
+            <iconify-icon icon="mdi:qrcode" width="16"></iconify-icon> Upload / foto QRIS
+          </button>
+          <button type="button" id="qrisRemoveBtn" hidden class="inline-flex items-center justify-center gap-1.5 rounded-xl border border-line bg-elevated px-3 py-2.5 text-sm font-medium text-muted transition active:scale-95">
+            <iconify-icon icon="mdi:trash-can-outline" width="16"></iconify-icon> Hapus QRIS
+          </button>
+        </div>
         <input type="file" id="qrisFile" accept="image/*" class="hidden" />
-        <textarea id="merchantQris" rows="3" placeholder="Atau tempel payload QRIS statis (string panjang mulai 00020101…)"
-          class="w-full rounded-xl border border-line bg-ink px-3 py-2.5 text-xs font-mono outline-none transition focus:border-brand/60"></textarea>
-        <p class="text-xs text-soft">Upload/foto QR statis kamu — nanti kode-nya kebaca otomatis. Atau tempel manual. Kosongkan untuk matikan QRIS.</p>
+        <textarea id="merchantQris" class="hidden"></textarea>
+        <p class="text-xs text-soft">Upload/foto QR statis kamu — nanti otomatis kebaca & tampil di sini.</p>
         <p id="qrisStatus" class="text-xs"></p>
-      </label>
+      </div>
 
       <div class="sticky bottom-0 -mx-4 flex items-center gap-2 border-t border-line bg-surface px-4 pt-3 pb-[calc(0.75rem+var(--safe-b))]">
         <button type="button" id="cancelSettings" class="rounded-xl border border-line bg-elevated px-3 py-2.5 text-sm font-medium transition active:scale-95">Tutup</button>
@@ -613,6 +614,6 @@
   <!-- ── Toast stack ── -->
   <div id="toastStack" class="pointer-events-none fixed inset-x-0 bottom-[calc(88px+var(--safe-b))] z-50 mx-auto flex w-full max-w-[720px] flex-col items-stretch gap-2 px-4"></div>
 
-  <script src="/admin/app.js?v=20"></script>
+  <script src="/admin/app.js?v=21"></script>
 </body>
 </html>
