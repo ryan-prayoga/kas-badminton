@@ -396,11 +396,12 @@ function groupGamesByDate(games) {
   var map = {};
   var order = [];
   games.forEach(function (g) {
-    if (!map[g.date]) { map[g.date] = { date: g.date, games: [], total: 0, unpaidCount: 0 }; order.push(g.date); }
+    if (!map[g.date]) { map[g.date] = { date: g.date, games: [], total: 0, unpaidCount: 0, koks: 0 }; order.push(g.date); }
     var grp = map[g.date];
     grp.games.push(g);
     grp.total += g.cost.total;
     grp.unpaidCount += g.summary.unpaidCount;
+    grp.koks += Number(g.cost.kokCount) || 0;
   });
   return order.map(function (dt) { return map[dt]; });
 }
@@ -421,6 +422,7 @@ function historyGroup(grp, open) {
           '</div>' +
           '<div class="mt-0.5 flex flex-wrap items-center gap-x-2.5 gap-y-0.5 text-xs text-muted">' +
             '<span class="inline-flex items-center gap-1"><iconify-icon icon="mdi:badminton" width="13"></iconify-icon>' + grp.games.length + ' main</span>' +
+            '<span class="inline-flex items-center gap-1"><iconify-icon icon="game-icons:shuttlecock" width="12"></iconify-icon>' + grp.koks + ' kok</span>' +
             '<span class="inline-flex items-center gap-1 font-mono"><iconify-icon icon="mdi:cash-multiple" width="13"></iconify-icon>' + fmt(grp.total) + '</span>' +
           '</div>' +
         '</div>' +
