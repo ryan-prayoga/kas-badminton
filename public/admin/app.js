@@ -580,8 +580,6 @@ function renderKokTypeList() {
               '<iconify-icon icon="mdi:package-variant" width="12"></iconify-icon>stok ' + stock +
             '</span>' +
             '<button type="button" data-role="buy" class="inline-flex items-center gap-1 rounded-md border border-brand/40 bg-brand/10 px-1.5 py-0.5 text-[11px] font-semibold text-brand transition active:scale-95" title="Beli slop (isi 12)"><iconify-icon icon="mdi:cash-register" width="12"></iconify-icon>Beli slop</button>' +
-            '<button type="button" data-role="stock-plus" class="rounded-md border border-line bg-surface px-1 py-0.5 text-[11px] font-medium text-muted transition active:scale-95 hover:text-ink50" title="Koreksi stok +1">+1</button>' +
-            '<button type="button" data-role="stock-minus" class="rounded-md border border-line bg-surface px-1 py-0.5 text-[11px] font-medium text-muted transition active:scale-95 hover:text-ink50" title="Koreksi stok -1">−1</button>' +
           '</div>' +
         '</div>' +
         '<button type="button" data-role="edit-type" class="grid h-8 w-8 shrink-0 place-items-center rounded-lg border border-line text-muted transition active:scale-95 hover:text-ink50" title="Edit">' +
@@ -1627,19 +1625,6 @@ function wire() {
       $('#kokTypeFormCancel').hidden = false;
       $('#kokTypeFormSubmit').innerHTML = '<iconify-icon icon="mdi:content-save-outline" width="16"></iconify-icon> Simpan';
       $('#kokTypeName').focus();
-      return;
-    }
-
-    if (role === 'stock-plus' || role === 'stock-minus') {
-      var delta = role === 'stock-plus' ? 1 : -1;
-      api('/api/kok-types/' + id + '/stock', { method: 'POST', body: JSON.stringify({ delta: delta }) })
-        .then(function (data) {
-          applyServerState(data);
-          renderKokTypeList();
-          renderFormKoks();
-          if (state.edit) renderEditKoks();
-          toast('Stok dikoreksi.', 'success');
-        }).catch(function (err) { toast(err.message, 'error'); });
       return;
     }
 

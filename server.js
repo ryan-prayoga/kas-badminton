@@ -1033,43 +1033,6 @@ app.patch('/api/kok-types/:id', requireAdmin, async (req, res, next) => {
   }
 });
 
-app.post('/api/kok-types/:id/stock', requireAdmin, async (req, res, next) => {
-  try {
-    const db = await loadDb();
-    const type = (db.kokTypes || []).find((t) => t.id === req.params.id);
-    if (!type) return res.status(404).json({ error: 'Jenis kok tidak ditemukan' });
-
-    const delta = Number(req.body?.delta);
-    if (!Number.isFinite(delta) || !Number.isInteger(delta) || delta === 0) {
-      return res.status(400).json({ error: 'delta harus integer non-zero (mis. +12 atau -1)' });
-    }
-    const nextStock = (Number(type.stock) || 0) + delta;
-    if (nextStock < 0) {
-      return res.status(400).json({ error: 'Stok tidak cukup' });
-    }
-    type.stock = nextStock;
-    type.updatedAt = new Date().toISOString();
-    await saveDb(db);
-
-    // Nambah stok (delta > 0) dianggap beli, jadi ikut ngurangin kas
-    // proporsional ke harga per slop yang tersimpan (1 slop = 12 kok).
-    if (delta > 0) {
-      const pricePerSlop = Number(type.pricePerSlop) || 0;
-      const amount = Math.round((delta * pricePerSlop) / 12);
-      if (amount > 0) {
-        await pool.query(
-          'INSERT INTO expenses (id, type_id, type_name, slops, amount) VALUES ($1,$2,$3,$4,$5)',
-          [uid(), type.id, type.name, Math.round(delta / 12), amount]
-        );
-        db.totalExpense = (Number(db.totalExpense) || 0) + amount;
-      }
-    }
-    res.json(summarize(db, true));
-  } catch (err) {
-    next(err);
-  }
-});
-
 // Beli stok per slop (1 slop = 12 kok) → tambah stok + catat pengeluaran (kas keluar)
 app.post('/api/kok-types/:id/buy', requireAdmin, async (req, res, next) => {
   try {
