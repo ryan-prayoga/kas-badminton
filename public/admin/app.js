@@ -895,6 +895,7 @@ function debtRow(g) {
 
 function debtCard(d) {
   var grouped = groupDebtItems(d.items);
+  var totalKok = (d.items || []).reduce(function (s, it) { return s + (Number(it.kokCount) || 0); }, 0);
   var carryLine = d.carry > 0
     ? '<div class="mt-0.5 text-[11px] text-ok">dicicil ' + fmt(d.carry) + ' dari ' + fmt(d.owedGross) + '</div>'
     : '';
@@ -908,7 +909,10 @@ function debtCard(d) {
           avatarHtml(d.name, (playerPhotoMap()[d.name]), 'h-9 w-9', 'bg-warn/15 text-warn') +
           '<div class="min-w-0">' +
             '<div class="truncate font-semibold">' + escapeHtml(d.name) + '</div>' +
-            '<div class="debt-count inline-flex items-center gap-1 text-xs text-muted"><iconify-icon icon="mdi:badminton" width="13"></iconify-icon>' + d.items.length + '</div>' +
+            '<div class="debt-count inline-flex items-center gap-2 text-xs text-muted">' +
+              '<span class="inline-flex items-center gap-1"><iconify-icon icon="mdi:badminton" width="13"></iconify-icon>' + d.items.length + ' main</span>' +
+              '<span class="inline-flex items-center gap-1"><iconify-icon icon="game-icons:shuttlecock" width="12"></iconify-icon>' + totalKok + ' kok</span>' +
+            '</div>' +
             carryLine +
           '</div>' +
         '</div>' +
