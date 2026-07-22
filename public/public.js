@@ -509,19 +509,20 @@ function switchTab(name) {
 
 // --- Accordion (details) smooth expand/collapse ---
 function animateDetailsToggle(details, summary) {
-  // niat toggle diputusin dari state terakhir yang KITA set, bukan dari
-  // details.open — soalnya pas nutup, details.open baru jadi false di akhir
-  // animasi (onfinish). Kalau diklik lagi di tengah animasi nutup,
-  // details.open masih true, jadi tanpa ini kode salah kira "masih terbuka"
-  // dan nutup lagi alih-alih buka.
+  // Niat toggle dari state terakhir yang KITA set (bukan details.open, yang
+  // baru flip di akhir animasi). Klik di tengah animasi harus reverse arah.
   var wasOpen = details._accOpen === undefined ? details.open : details._accOpen;
   var willOpen = !wasOpen;
   details._accOpen = willOpen;
 
-  var startH = details.getBoundingClientRect().height;
-  if (details._accAnimating) details._accAnimating.cancel();
-  details.style.overflow = 'hidden';
+  // Bunuh SEMUA animasi nyangkut di element ini. fill:forwards dari klik
+  // sebelumnya numpuk & nge-pin height ke nilai basi → bikin overlap sama
+  // card sebelah / accordion stuck gak bisa dibuka. cancel 1 animasi terakhir
+  // aja gak cukup; harus semua.
+  details.getAnimations().forEach(function (a) { a.cancel(); });
 
+  var startH = details.getBoundingClientRect().height;
+  details.style.overflow = 'hidden';
   var gen = (details._accGen = (details._accGen || 0) + 1);
 
   if (willOpen) {
@@ -531,26 +532,22 @@ function animateDetailsToggle(details, summary) {
       { height: [startH + 'px', openH + 'px'] },
       { duration: 220, easing: 'ease-out', fill: 'forwards' }
     );
-    details._accAnimating = anim;
     anim.onfinish = function () {
       if (details._accGen !== gen) return;
-      details.style.height = '';
+      anim.cancel(); // lepas pin fill → height balik ke auto (natural)
       details.style.overflow = '';
-      details._accAnimating = null;
     };
   } else {
     var closedH = summary.getBoundingClientRect().height;
-    var anim2 = details.animate(
+    var anim = details.animate(
       { height: [startH + 'px', closedH + 'px'] },
       { duration: 220, easing: 'ease-out', fill: 'forwards' }
     );
-    details._accAnimating = anim2;
-    anim2.onfinish = function () {
+    anim.onfinish = function () {
       if (details._accGen !== gen) return;
-      details.open = false;
-      details.style.height = '';
+      details.open = false; // konten hilang dulu (natural = collapsed)
+      anim.cancel();        // baru lepas pin → gak ada flash
       details.style.overflow = '';
-      details._accAnimating = null;
     };
   }
 }
