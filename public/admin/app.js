@@ -568,7 +568,7 @@ function renderKokTypeList() {
     var inactive = t.active === false;
     var stock = Number(t.stock) || 0;
     return (
-      '<div class="flex items-center gap-1.5 rounded-xl border border-line bg-elevated p-3' + (inactive ? ' opacity-60' : '') + '" data-id="' + escapeAttr(t.id) + '">' +
+      '<div class="flex items-center gap-1.5 rounded-xl border border-line bg-elevated p-3 animate-rise' + (inactive ? ' opacity-60' : '') + '" data-id="' + escapeAttr(t.id) + '">' +
         '<div class="min-w-0 flex-1">' +
           '<p class="truncate text-sm font-semibold text-ink50">' + escapeHtml(t.name) + '</p>' +
           '<p class="mt-0.5 font-mono text-xs text-muted">' + fmt(t.pricePerPerson) + ' / orang' +
@@ -677,7 +677,7 @@ function renderPlayerList() {
   }
   list.innerHTML = players.map(function (p) {
     return (
-      '<div class="flex items-center gap-3 rounded-xl border border-line bg-elevated p-3" data-name="' + escapeAttr(p.name) + '">' +
+      '<div class="flex items-center gap-3 rounded-xl border border-line bg-elevated p-3 animate-rise" data-name="' + escapeAttr(p.name) + '">' +
         avatarHtml(p.name, p.photo, 'h-10 w-10') +
         '<div class="min-w-0 flex-1"><p class="truncate text-sm font-semibold text-ink50">' + escapeHtml(p.name) + '</p></div>' +
         '<button type="button" data-role="edit-player" class="grid h-8 w-8 shrink-0 place-items-center rounded-lg border border-line text-muted transition active:scale-95 hover:text-ink50" title="Edit">' +
@@ -731,7 +731,7 @@ function renderOperatorList() {
   }
   list.innerHTML = active.map(function (op) {
     return (
-      '<div class="flex items-center gap-3 rounded-xl border border-line bg-elevated p-3" data-id="' + escapeAttr(op.id) + '">' +
+      '<div class="flex items-center gap-3 rounded-xl border border-line bg-elevated p-3 animate-rise" data-id="' + escapeAttr(op.id) + '">' +
         '<div class="min-w-0 flex-1">' +
           '<div class="flex items-center gap-1.5">' +
             '<span class="truncate font-semibold">' + escapeHtml(op.name) + '</span>' +
@@ -904,7 +904,7 @@ function debtCard(d) {
     ? '<button type="button" data-action="qris" data-name="' + escapeAttr(d.name) + '" data-amount="' + d.total + '" class="inline-flex items-center justify-center gap-1.5 rounded-xl border border-line bg-elevated px-3 py-2.5 text-sm font-medium transition active:scale-95"><iconify-icon icon="mdi:qrcode" width="16"></iconify-icon> QRIS</button>'
     : '';
   return (
-    '<details class="debt rounded-xl2 border border-warn/25 bg-warn/[0.06] p-3.5">' +
+    '<details class="debt rounded-xl2 border border-warn/25 bg-warn/[0.06] p-3.5 animate-rise">' +
       '<summary class="flex select-none items-center justify-between gap-3">' +
         '<div class="flex min-w-0 items-center gap-2.5">' +
           avatarHtml(d.name, (playerPhotoMap()[d.name]), 'h-9 w-9', 'bg-warn/15 text-warn') +
@@ -1049,7 +1049,7 @@ function historyGroup(grp, open) {
     : '<span class="inline-flex items-center gap-1 whitespace-nowrap rounded-full bg-warn/15 px-1.5 py-0.5 text-[11px] font-semibold text-warn"><iconify-icon icon="mdi:alert-circle-outline" width="13"></iconify-icon>' + grp.unpaidCount + ' belum</span>';
 
   return (
-    '<details class="history overflow-hidden rounded-xl2 border border-line bg-surface shadow-card" data-date="' + escapeAttr(grp.date) + '"' + (open ? ' open' : '') + '>' +
+    '<details class="history overflow-hidden rounded-xl2 border border-line bg-surface shadow-card animate-rise" data-date="' + escapeAttr(grp.date) + '"' + (open ? ' open' : '') + '>' +
       '<summary class="flex select-none items-center justify-between gap-2 p-3.5">' +
         '<div class="min-w-0">' +
           '<div class="flex items-center gap-1.5 font-semibold">' +
@@ -1150,12 +1150,12 @@ function renderStatPlayers() {
   var photoMap = playerPhotoMap();
   list.innerHTML = rows.map(function (s) {
     return (
-      '<div class="flex items-center gap-3 rounded-xl border border-line bg-elevated p-3">' +
+      '<div class="flex items-center gap-3 rounded-xl border border-line bg-elevated p-3 animate-rise">' +
         avatarHtml(s.name, photoMap[s.name], 'h-9 w-9') +
         '<div class="min-w-0 flex-1">' +
           '<div class="truncate font-semibold">' + escapeHtml(s.name) + '</div>' +
           '<div class="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[11px] text-soft">' +
-            '<span>' + s.main + ' main</span><span>keluar ' + fmt(s.keluar) + '</span>' +
+            '<span class="inline-flex items-center gap-1"><iconify-icon icon="mdi:badminton" width="13"></iconify-icon>' + s.main + ' main</span><span class="inline-flex items-center gap-1 font-mono"><iconify-icon icon="mdi:cash-multiple" width="13"></iconify-icon>' + fmt(s.keluar) + '</span>' +
           '</div>' +
         '</div>' +
         '<div class="shrink-0 text-right">' +
@@ -1384,13 +1384,68 @@ function updateFabVisibility() {
 
 function switchTab(name) {
   document.body.setAttribute('data-tab', name);
-  $$('[data-panel]').forEach(function (el) { el.hidden = el.getAttribute('data-panel') !== name; });
+  $$('[data-panel]').forEach(function (el) {
+    var match = el.getAttribute('data-panel') === name;
+    el.hidden = !match;
+    if (match) {
+      el.classList.remove('animate-rise');
+      void el.offsetWidth;
+      el.classList.add('animate-rise');
+    }
+  });
   $$('#bottomNav .navitem').forEach(function (b) {
     b.classList.toggle('is-active', b.getAttribute('data-tab') === name);
   });
   updateFabVisibility();
   try { sessionStorage.setItem('kok-admin-tab', name); } catch (e) {}
   window.scrollTo(0, 0);
+}
+
+// --- Accordion (details) smooth expand/collapse ---
+function animateDetailsToggle(details, summary) {
+  if (details._accAnimating) details._accAnimating.cancel();
+  details.style.overflow = 'hidden';
+  if (details.open) {
+    var startH = details.offsetHeight;
+    var anim = details.animate(
+      { height: [startH + 'px', summary.offsetHeight + 'px'] },
+      { duration: 220, easing: 'ease-out', fill: 'forwards' }
+    );
+    details._accAnimating = anim;
+    anim.onfinish = function () {
+      details.open = false;
+      details.style.height = '';
+      details.style.overflow = '';
+      details._accAnimating = null;
+    };
+  } else {
+    var closedH = details.offsetHeight;
+    details.open = true;
+    var openH = details.offsetHeight;
+    var anim2 = details.animate(
+      { height: [closedH + 'px', openH + 'px'] },
+      { duration: 220, easing: 'ease-out', fill: 'forwards' }
+    );
+    details._accAnimating = anim2;
+    anim2.onfinish = function () {
+      details.style.height = '';
+      details.style.overflow = '';
+      details._accAnimating = null;
+    };
+  }
+}
+
+function wireAccordions(containerSelector) {
+  var container = $(containerSelector);
+  if (!container) return;
+  container.addEventListener('click', function (e) {
+    var summary = e.target.closest('summary');
+    if (!summary) return;
+    var details = summary.closest('details');
+    if (!details) return;
+    e.preventDefault();
+    animateDetailsToggle(details, summary);
+  });
 }
 
 function wireTabs() {
@@ -1498,6 +1553,8 @@ function wire() {
   wireTabs();
   wirePeriodFilter();
   wireOperators();
+  wireAccordions('#gameList');
+  wireAccordions('#debtList');
 
   $('#fabAdd').onclick = openGameDialog;
   $('#cancelGameForm').onclick = function () { $('#gameDialog').close(); };

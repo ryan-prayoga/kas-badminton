@@ -209,13 +209,13 @@ function renderStatPlayers() {
   var photoMap = playerPhotoMap();
   list.innerHTML = rows.map(function (s) {
     return (
-      '<div class="flex items-center gap-3 rounded-xl border border-line bg-elevated p-3">' +
+      '<div class="flex items-center gap-3 rounded-xl border border-line bg-elevated p-3 animate-rise">' +
         avatarHtml(s.name, photoMap[s.name], 'h-9 w-9') +
         '<div class="min-w-0 flex-1">' +
           '<div class="truncate font-semibold">' + escapeHtml(s.name) + '</div>' +
           '<div class="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[11px] text-soft">' +
-            '<span>' + s.main + ' main</span>' +
-            '<span>keluar ' + fmt(s.keluar) + '</span>' +
+            '<span class="inline-flex items-center gap-1"><iconify-icon icon="mdi:badminton" width="13"></iconify-icon>' + s.main + ' main</span>' +
+            '<span class="inline-flex items-center gap-1 font-mono"><iconify-icon icon="mdi:cash-multiple" width="13"></iconify-icon>' + fmt(s.keluar) + '</span>' +
           '</div>' +
         '</div>' +
         '<div class="shrink-0 text-right">' +
@@ -408,7 +408,7 @@ function historyGroup(grp, open) {
     : '<span class="inline-flex items-center gap-1 whitespace-nowrap rounded-full bg-warn/15 px-1.5 py-0.5 text-[11px] font-semibold text-warn"><iconify-icon icon="mdi:alert-circle-outline" width="13"></iconify-icon>' + grp.unpaidCount + ' belum</span>';
 
   return (
-    '<details class="history overflow-hidden rounded-xl2 border border-line bg-surface shadow-card" data-date="' + escapeHtml(grp.date) + '"' + (open ? ' open' : '') + '>' +
+    '<details class="history overflow-hidden rounded-xl2 border border-line bg-surface shadow-card animate-rise" data-date="' + escapeHtml(grp.date) + '"' + (open ? ' open' : '') + '>' +
       '<summary class="flex select-none items-center justify-between gap-2 p-3.5">' +
         '<div class="min-w-0">' +
           '<div class="flex items-center gap-1.5 font-semibold">' +
@@ -491,12 +491,67 @@ function copyText(text) {
 
 // --- Tabs ---
 function switchTab(name) {
-  $$('[data-panel]').forEach(function (el) { el.hidden = el.getAttribute('data-panel') !== name; });
+  $$('[data-panel]').forEach(function (el) {
+    var match = el.getAttribute('data-panel') === name;
+    el.hidden = !match;
+    if (match) {
+      el.classList.remove('animate-rise');
+      void el.offsetWidth;
+      el.classList.add('animate-rise');
+    }
+  });
   $$('#bottomNav .navitem').forEach(function (b) {
     b.classList.toggle('is-active', b.getAttribute('data-tab') === name);
   });
   try { sessionStorage.setItem('kok-tab', name); } catch (e) {}
   window.scrollTo(0, 0);
+}
+
+// --- Accordion (details) smooth expand/collapse ---
+function animateDetailsToggle(details, summary) {
+  if (details._accAnimating) details._accAnimating.cancel();
+  details.style.overflow = 'hidden';
+  if (details.open) {
+    var startH = details.offsetHeight;
+    var anim = details.animate(
+      { height: [startH + 'px', summary.offsetHeight + 'px'] },
+      { duration: 220, easing: 'ease-out', fill: 'forwards' }
+    );
+    details._accAnimating = anim;
+    anim.onfinish = function () {
+      details.open = false;
+      details.style.height = '';
+      details.style.overflow = '';
+      details._accAnimating = null;
+    };
+  } else {
+    var closedH = details.offsetHeight;
+    details.open = true;
+    var openH = details.offsetHeight;
+    var anim2 = details.animate(
+      { height: [closedH + 'px', openH + 'px'] },
+      { duration: 220, easing: 'ease-out', fill: 'forwards' }
+    );
+    details._accAnimating = anim2;
+    anim2.onfinish = function () {
+      details.style.height = '';
+      details.style.overflow = '';
+      details._accAnimating = null;
+    };
+  }
+}
+
+function wireAccordions(containerSelector) {
+  var container = $(containerSelector);
+  if (!container) return;
+  container.addEventListener('click', function (e) {
+    var summary = e.target.closest('summary');
+    if (!summary) return;
+    var details = summary.closest('details');
+    if (!details) return;
+    e.preventDefault();
+    animateDetailsToggle(details, summary);
+  });
 }
 
 function wireTabs() {
@@ -568,6 +623,8 @@ $('#refreshBtn').onclick = function () { loadData(false); };
 wireTabs();
 wireDebtActions();
 wirePeriodFilter();
+wireAccordions('#gameList');
+wireAccordions('#debtList');
 setInterval(updateLastUpdatedLabel, 30000);
 setInterval(function () { if (!document.hidden) loadData(true); }, 45000);
 document.addEventListener('visibilitychange', function () { if (!document.hidden) loadData(true); });
