@@ -1403,31 +1403,45 @@ function switchTab(name) {
 
 // --- Accordion (details) smooth expand/collapse ---
 function animateDetailsToggle(details, summary) {
+  // niat toggle diputusin dari state terakhir yang KITA set, bukan dari
+  // details.open — soalnya pas nutup, details.open baru jadi false di akhir
+  // animasi (onfinish). Kalau diklik lagi di tengah animasi nutup,
+  // details.open masih true, jadi tanpa ini kode salah kira "masih terbuka"
+  // dan nutup lagi alih-alih buka.
+  var wasOpen = details._accOpen === undefined ? details.open : details._accOpen;
+  var willOpen = !wasOpen;
+  details._accOpen = willOpen;
+
+  var startH = details.getBoundingClientRect().height;
   if (details._accAnimating) details._accAnimating.cancel();
   details.style.overflow = 'hidden';
-  if (details.open) {
-    var startH = details.offsetHeight;
+
+  var gen = (details._accGen = (details._accGen || 0) + 1);
+
+  if (willOpen) {
+    if (!details.open) details.open = true;
+    var openH = details.getBoundingClientRect().height;
     var anim = details.animate(
-      { height: [startH + 'px', summary.offsetHeight + 'px'] },
+      { height: [startH + 'px', openH + 'px'] },
       { duration: 220, easing: 'ease-out', fill: 'forwards' }
     );
     details._accAnimating = anim;
     anim.onfinish = function () {
-      details.open = false;
+      if (details._accGen !== gen) return;
       details.style.height = '';
       details.style.overflow = '';
       details._accAnimating = null;
     };
   } else {
-    var closedH = details.offsetHeight;
-    details.open = true;
-    var openH = details.offsetHeight;
+    var closedH = summary.getBoundingClientRect().height;
     var anim2 = details.animate(
-      { height: [closedH + 'px', openH + 'px'] },
+      { height: [startH + 'px', closedH + 'px'] },
       { duration: 220, easing: 'ease-out', fill: 'forwards' }
     );
     details._accAnimating = anim2;
     anim2.onfinish = function () {
+      if (details._accGen !== gen) return;
+      details.open = false;
       details.style.height = '';
       details.style.overflow = '';
       details._accAnimating = null;
