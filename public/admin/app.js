@@ -1432,7 +1432,13 @@ function animateDetailsToggle(details, summary) {
       details.style.overflow = '';
     };
   } else {
-    var closedH = summary.getBoundingClientRect().height;
+    // Ukur tinggi collapsed ASLI (summary + padding/border details), bukan cuma
+    // summary.height. Toggle open sesaat—gak ada paint di antara baris sync ini,
+    // jadi gak flash. Kalau pakai summary.height doang, card nyusut kelewat kecil
+    // lalu mantul balik ke tinggi natural = flicker.
+    details.open = false;
+    var closedH = details.getBoundingClientRect().height;
+    details.open = true;
     var anim = details.animate(
       { height: [startH + 'px', closedH + 'px'] },
       { duration: 220, easing: 'ease-out', fill: 'forwards' }
