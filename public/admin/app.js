@@ -1634,7 +1634,7 @@ function wire() {
       var delta = role === 'stock-plus' ? 1 : -1;
       api('/api/kok-types/' + id + '/stock', { method: 'POST', body: JSON.stringify({ delta: delta }) })
         .then(function (data) {
-          syncKokTypesFromResponse(data);
+          applyServerState(data);
           renderKokTypeList();
           renderFormKoks();
           if (state.edit) renderEditKoks();
