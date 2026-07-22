@@ -910,7 +910,7 @@ function debtCard(d) {
           avatarHtml(d.name, (playerPhotoMap()[d.name]), 'h-9 w-9', 'bg-warn/15 text-warn') +
           '<div class="min-w-0">' +
             '<div class="truncate font-semibold">' + escapeHtml(d.name) + '</div>' +
-            '<div class="debt-count text-xs text-muted">' + d.items.length + ' game belum lunas</div>' +
+            '<div class="debt-count inline-flex items-center gap-1 text-xs text-muted"><iconify-icon icon="mdi:badminton" width="13"></iconify-icon>' + d.items.length + '</div>' +
             carryLine +
           '</div>' +
         '</div>' +
