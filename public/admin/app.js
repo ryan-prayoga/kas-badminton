@@ -1160,7 +1160,7 @@ function renderStatPlayers() {
         '</div>' +
         '<div class="shrink-0 text-right">' +
           (s.nunggak > 0
-            ? '<div class="font-mono text-sm font-bold text-warn">' + fmt(s.nunggak) + '</div><div class="text-[10px] text-soft">nunggak</div>'
+            ? '<div class="font-mono text-sm font-bold text-warn">' + fmt(s.nunggak) + '</div>'
             : '<div class="font-mono text-sm font-bold text-ok">Lunas</div>') +
         '</div>' +
       '</div>'
