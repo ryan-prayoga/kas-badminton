@@ -30,18 +30,40 @@ export async function createKokType(input: {
   });
   if (dup) throw new DomainError("Jenis kok dengan nama itu sudah ada", 409);
 
+  const stock = parseStock(input.stock, 0);
+  const pricePerSlop = Math.max(0, Math.round(Number(input.pricePerSlop) || 0));
   const now = new Date();
-  const row = await prisma.kok_types.create({
-    data: {
-      id: uid(),
-      name,
-      price_per_person: Math.round(price),
-      price_per_slop: Math.max(0, Math.round(Number(input.pricePerSlop) || 0)),
-      stock: parseStock(input.stock, 0),
-      active: input.active === false ? false : true,
-      created_at: now,
-      updated_at: now,
-    },
+  const id = uid();
+
+  // Stok awal + harga slop → catat pengeluaran (kas keluar), biar "beli" konsisten.
+  // 1 slop = 12 kok; stok non-kelipatan dihitung ceil slop.
+  const initialSlops = stock > 0 && pricePerSlop > 0 ? Math.max(1, Math.ceil(stock / 12)) : 0;
+
+  const row = await prisma.$transaction(async (tx) => {
+    const created = await tx.kok_types.create({
+      data: {
+        id,
+        name,
+        price_per_person: Math.round(price),
+        price_per_slop: pricePerSlop,
+        stock,
+        active: input.active === false ? false : true,
+        created_at: now,
+        updated_at: now,
+      },
+    });
+    if (initialSlops > 0) {
+      await tx.expenses.create({
+        data: {
+          id: uid(),
+          type_id: id,
+          type_name: name,
+          slops: initialSlops,
+          amount: initialSlops * pricePerSlop,
+        },
+      });
+    }
+    return created;
   });
   return rowToKokType(row);
 }

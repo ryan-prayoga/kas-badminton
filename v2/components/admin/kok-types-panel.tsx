@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import { Loader2, Minus, Package, Pencil, Plus, ShoppingCart, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import type { KokType } from "@/lib/domain/types";
@@ -27,6 +28,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 
 function BuyDialog({ type }: { type: KokType }) {
+  const router = useRouter();
   const [open, setOpen] = useState(false);
   const [slops, setSlops] = useState("1");
   const [price, setPrice] = useState(String(type.pricePerSlop || ""));
@@ -36,8 +38,9 @@ function BuyDialog({ type }: { type: KokType }) {
     startTransition(async () => {
       const res = await buyStockAction(type.id, Number(slops), price ? Number(price) : undefined);
       if (res.ok) {
-        toast.success(`+${Number(slops) * 12} kok (${type.name})`);
+        toast.success(`+${Number(slops) * 12} kok (${type.name}) · kas keluar ${formatRupiah(Number(slops) * Number(price || 0))}`);
         setOpen(false);
+        router.refresh();
       } else {
         toast.error(res.error);
       }
@@ -154,20 +157,24 @@ function EditDialog({ type }: { type: KokType }) {
 }
 
 function TypeRow({ type }: { type: KokType }) {
+  const router = useRouter();
   const [pending, startTransition] = useTransition();
 
   const bump = (delta: number) =>
     startTransition(async () => {
       const res = await adjustStockAction(type.id, delta);
       if (!res.ok) toast.error(res.error);
+      else router.refresh();
     });
 
   const del = () =>
     startTransition(async () => {
       if (!confirm(`Hapus jenis kok ${type.name}?`)) return;
       const res = await deleteKokTypeAction(type.id);
-      if (res.ok) toast.success("Jenis kok dihapus");
-      else toast.error(res.error);
+      if (res.ok) {
+        toast.success("Jenis kok dihapus");
+        router.refresh();
+      } else toast.error(res.error);
     });
 
   return (
@@ -209,23 +216,36 @@ function TypeRow({ type }: { type: KokType }) {
 }
 
 export function KokTypesPanel({ kokTypes }: { kokTypes: KokType[] }) {
+  const router = useRouter();
   const [name, setName] = useState("");
   const [price, setPrice] = useState("");
+  const [slop, setSlop] = useState("");
   const [stock, setStock] = useState("");
   const [pending, startTransition] = useTransition();
 
   const add = () =>
     startTransition(async () => {
+      const stockN = stock ? Number(stock) : 0;
+      const slopN = slop ? Number(slop) : 0;
       const res = await createKokTypeAction({
         name,
         pricePerPerson: Number(price),
-        stock: stock ? Number(stock) : 0,
+        pricePerSlop: slopN,
+        stock: stockN,
       });
       if (res.ok) {
-        toast.success("Jenis kok ditambah");
+        const expense =
+          stockN > 0 && slopN > 0 ? Math.max(1, Math.ceil(stockN / 12)) * slopN : 0;
+        toast.success(
+          expense > 0
+            ? `Jenis kok ditambah · kas keluar ${formatRupiah(expense)}`
+            : "Jenis kok ditambah",
+        );
         setName("");
         setPrice("");
+        setSlop("");
         setStock("");
+        router.refresh();
       } else {
         toast.error(res.error);
       }
@@ -233,24 +253,41 @@ export function KokTypesPanel({ kokTypes }: { kokTypes: KokType[] }) {
 
   return (
     <div className="space-y-3">
-      <Card className="gap-3 p-4">
+      <Card className="gap-3 rounded-xl2 p-4">
         <p className="text-sm font-semibold">Tambah jenis kok</p>
-        <Input placeholder="Nama (cth. RS Gold)" value={name} onChange={(e) => setName(e.target.value)} />
+        <p className="text-xs text-muted-foreground">
+          Isi harga/slop + stok awal supaya kas keluar tercatat (1 slop = 12 kok).
+        </p>
+        <Input
+          placeholder="Nama (cth. Indra Silver)"
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          className="rounded-xl"
+        />
         <div className="grid grid-cols-2 gap-2">
           <Input
             placeholder="Harga/org"
             inputMode="numeric"
             value={price}
             onChange={(e) => setPrice(e.target.value.replace(/[^\d]/g, ""))}
+            className="rounded-xl"
           />
           <Input
-            placeholder="Stok awal"
+            placeholder="Harga/slop (beli)"
             inputMode="numeric"
-            value={stock}
-            onChange={(e) => setStock(e.target.value.replace(/[^\d]/g, ""))}
+            value={slop}
+            onChange={(e) => setSlop(e.target.value.replace(/[^\d]/g, ""))}
+            className="rounded-xl"
           />
         </div>
-        <Button onClick={add} disabled={pending || !name || !price} className="w-full">
+        <Input
+          placeholder="Stok awal (pcs)"
+          inputMode="numeric"
+          value={stock}
+          onChange={(e) => setStock(e.target.value.replace(/[^\d]/g, ""))}
+          className="rounded-xl"
+        />
+        <Button onClick={add} disabled={pending || !name || !price} className="w-full rounded-xl">
           {pending ? <Loader2 className="size-4 animate-spin" /> : "Tambah"}
         </Button>
       </Card>

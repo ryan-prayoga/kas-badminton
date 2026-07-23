@@ -7,6 +7,7 @@ import { toast } from "sonner";
 import type { EnrichedGame, KokType, PlayerRow } from "@/lib/domain/types";
 import { fmt } from "@/lib/format";
 import { updateGameAction } from "@/server/actions/games";
+import { buildPhotoMap } from "@/components/kok/avatar";
 import { KIcon } from "@/components/kok/icons";
 import { PlayerNameInput } from "@/components/kok/player-name-input";
 import {
@@ -46,6 +47,7 @@ export function EditGameSheet({
     game.koks.map((k) => ({ id: k.id, typeId: k.typeId ?? "", price: String(k.pricePerPerson) })),
   );
 
+  const photoMap = buildPhotoMap(players);
   const active = kokTypes.filter((t) => t.active || game.koks.some((k) => k.typeId === t.id));
   const perPerson = koks.reduce((s, k) => s + (Number(k.price) || 0), 0);
 
@@ -91,7 +93,10 @@ export function EditGameSheet({
       >
         <KIcon name="pencil" className="size-4" />
       </SheetTrigger>
-      <SheetContent side="bottom" className="mx-auto max-h-[92dvh] max-w-[600px] overflow-y-auto">
+      <SheetContent
+        side="bottom"
+        className="mx-auto max-h-[92dvh] max-w-[600px] overflow-y-auto rounded-t-[1.75rem] border-line pb-[max(1rem,env(safe-area-inset-bottom))]"
+      >
         <SheetHeader>
           <SheetTitle className="font-display">Edit game</SheetTitle>
           <SheetDescription>Ubah pemain, kok, tanggal, atau catatan.</SheetDescription>
@@ -110,6 +115,7 @@ export function EditGameSheet({
                     <PlayerNameInput
                       key={idx}
                       names={players.map((p) => p.name)}
+                      photoMap={photoMap}
                       value={names[idx]}
                       onChange={(v) => setNames((n) => n.map((x, k) => (k === idx ? v : x)))}
                     />

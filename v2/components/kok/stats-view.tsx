@@ -50,11 +50,13 @@ export function StatsView({
   debts,
   kokTypes,
   photoMap,
+  kas,
 }: {
   games: EnrichedGame[];
   debts: DebtEntry[];
   kokTypes: KokType[];
   photoMap: PhotoMap;
+  kas?: { paid: number; expense: number; net: number };
 }) {
   const [period, setPeriod] = useState("all");
 
@@ -97,6 +99,16 @@ export function StatsView({
       </div>
 
       <div className="grid grid-cols-2 gap-3">
+        {kas && (
+          <StatCard
+            icon="cash"
+            iconClass={kas.net >= 0 ? "text-paid" : "text-danger"}
+            label="Total kas"
+            value={fmt(kas.net)}
+            valueClass={kas.net >= 0 ? "text-paid" : "text-danger"}
+            sub={`masuk ${fmt(kas.paid)} · beli ${fmt(kas.expense)}`}
+          />
+        )}
         <StatCard
           icon="cash"
           iconClass="text-owe"

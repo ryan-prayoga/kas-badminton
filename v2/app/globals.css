@@ -171,6 +171,29 @@
   animation: rise-in 0.34s cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
+@keyframes shake {
+  10%,
+  90% {
+    transform: translateX(-5px);
+  }
+  20%,
+  80% {
+    transform: translateX(7px);
+  }
+  30%,
+  50%,
+  70% {
+    transform: translateX(-9px);
+  }
+  40%,
+  60% {
+    transform: translateX(9px);
+  }
+}
+.animate-shake {
+  animation: shake 0.4s;
+}
+
 @keyframes shimmer {
   100% {
     transform: translateX(100%);

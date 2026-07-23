@@ -20,6 +20,7 @@ export default async function StatistikPage() {
         debts={data.debtSummary}
         kokTypes={data.kokTypes}
         photoMap={buildPhotoMap(data.players)}
+        kas={isAdmin ? data.kas : undefined}
       />
     </AppFrame>
   );

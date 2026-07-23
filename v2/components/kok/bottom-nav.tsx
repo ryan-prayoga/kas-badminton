@@ -5,22 +5,37 @@ import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { KIcon, type IconName } from "@/components/kok/icons";
 
-function buildItems(loggedIn: boolean): { href: string; label: string; icon: IconName; match: (p: string) => boolean }[] {
-  return [
+type Role = "admin" | "operator" | null | undefined;
+
+function buildItems(role: Role): { href: string; label: string; icon: IconName; match: (p: string) => boolean }[] {
+  const loggedIn = !!role;
+  const items: { href: string; label: string; icon: IconName; match: (p: string) => boolean }[] = [
     {
       href: loggedIn ? "/admin" : "/",
       label: "Riwayat",
       icon: "history",
-      match: (p) => (loggedIn ? p === "/admin" || p.startsWith("/admin/") : p === "/"),
+      match: (p) => (loggedIn ? p === "/admin" : p === "/"),
     },
     { href: "/belum-bayar", label: "Bayar", icon: "wallet", match: (p) => p.startsWith("/belum-bayar") },
     { href: "/statistik", label: "Statistik", icon: "chart", match: (p) => p.startsWith("/statistik") },
   ];
+  if (role === "admin") {
+    items.push({
+      href: "/admin/lainnya",
+      label: "Lainnya",
+      icon: "dotsHorizontal",
+      match: (p) => p.startsWith("/admin/lainnya"),
+    });
+  }
+  return items;
 }
 
-export function BottomNav({ role }: { role?: "admin" | "operator" | null }) {
+export function BottomNav({ role }: { role?: Role }) {
   const pathname = usePathname();
-  const items = buildItems(!!role);
+  // Lockscreen admin: sembunyikan nav biar mirip v1
+  if (!role && pathname.startsWith("/admin")) return null;
+
+  const items = buildItems(role);
   return (
     <div
       className="pointer-events-none fixed inset-x-0 bottom-0 z-40 flex justify-center px-4"
@@ -34,7 +49,7 @@ export function BottomNav({ role }: { role?: "admin" | "operator" | null }) {
               key={href}
               href={href}
               className={cn(
-                "flex items-center gap-2 rounded-full px-4 py-2 text-sm font-semibold transition",
+                "flex items-center gap-2 rounded-full px-3.5 py-2 text-sm font-semibold transition sm:px-4",
                 active
                   ? "bg-court text-white shadow-court"
                   : "text-ink-soft hover:bg-court/8 hover:text-court",

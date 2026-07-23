@@ -22,11 +22,23 @@ export default async function LainnyaPage() {
       right={<SessionBadge role={data.me.role} name={data.me.name} />}
     >
       <Tabs defaultValue="kok">
-        <TabsList className="grid w-full grid-cols-4">
-          <TabsTrigger value="kok">Kok</TabsTrigger>
-          <TabsTrigger value="pemain">Pemain</TabsTrigger>
-          <TabsTrigger value="delegasi">Delegasi</TabsTrigger>
-          <TabsTrigger value="setelan">Setelan</TabsTrigger>
+        <TabsList className="flex h-auto w-full items-center gap-1 rounded-full border border-line bg-surface/85 p-1.5 shadow-card">
+          {(
+            [
+              ["kok", "Kok"],
+              ["pemain", "Pemain"],
+              ["delegasi", "Delegasi"],
+              ["setelan", "Setelan"],
+            ] as const
+          ).map(([value, label]) => (
+            <TabsTrigger
+              key={value}
+              value={value}
+              className="flex-1 rounded-full border-0 px-2 py-2 text-sm font-semibold text-ink-soft shadow-none transition data-active:bg-court data-active:text-white data-active:shadow-court"
+            >
+              {label}
+            </TabsTrigger>
+          ))}
         </TabsList>
 
         <TabsContent value="kok" className="mt-4">

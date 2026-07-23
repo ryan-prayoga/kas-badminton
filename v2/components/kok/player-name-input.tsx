@@ -2,17 +2,20 @@
 
 import { useState } from "react";
 import { cn } from "@/lib/utils";
+import { Avatar, type PhotoMap } from "@/components/kok/avatar";
 
 export function PlayerNameInput({
   value,
   onChange,
   names,
+  photoMap,
   placeholder,
   className,
 }: {
   value: string;
   onChange: (v: string) => void;
   names: string[];
+  photoMap?: PhotoMap;
   placeholder?: string;
   className?: string;
 }) {
@@ -21,26 +24,38 @@ export function PlayerNameInput({
   const matches = names
     .filter((n) => n.toLowerCase().includes(q) && n.toLowerCase() !== q)
     .slice(0, 6);
+  const selectedPhoto = value.trim() ? photoMap?.[value.trim()] : undefined;
 
   return (
     <div className="relative">
-      <input
-        value={value}
-        onChange={(e) => {
-          onChange(e.target.value);
-          setOpen(true);
-        }}
-        onFocus={() => setOpen(true)}
-        onBlur={() => setTimeout(() => setOpen(false), 120)}
-        placeholder={placeholder}
-        autoComplete="off"
-        autoCorrect="off"
-        autoCapitalize="words"
-        className={cn(
-          "w-full rounded-xl border border-input bg-surface px-3 py-2 text-sm text-ink outline-none focus:border-court/50",
-          className,
+      <div className="relative">
+        {selectedPhoto && (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={selectedPhoto}
+            alt=""
+            className="pointer-events-none absolute left-2.5 top-1/2 size-6 -translate-y-1/2 rounded-full object-cover ring-1 ring-line-strong"
+          />
         )}
-      />
+        <input
+          value={value}
+          onChange={(e) => {
+            onChange(e.target.value);
+            setOpen(true);
+          }}
+          onFocus={() => setOpen(true)}
+          onBlur={() => setTimeout(() => setOpen(false), 120)}
+          placeholder={placeholder}
+          autoComplete="off"
+          autoCorrect="off"
+          autoCapitalize="words"
+          className={cn(
+            "w-full rounded-xl border border-input bg-surface py-2.5 text-sm text-ink outline-none focus:border-court/50",
+            selectedPhoto ? "pr-3 pl-10" : "px-3",
+            className,
+          )}
+        />
+      </div>
       {open && matches.length > 0 && (
         <ul className="absolute z-30 mt-1 max-h-56 w-full overflow-auto rounded-xl border border-line bg-surface p-1 shadow-pop">
           {matches.map((n) => (
@@ -52,9 +67,10 @@ export function PlayerNameInput({
                   onChange(n);
                   setOpen(false);
                 }}
-                className="block w-full truncate rounded-lg px-3 py-2 text-left text-sm font-medium text-ink transition hover:bg-court/8"
+                className="flex w-full items-center gap-2 truncate rounded-lg px-2 py-2 text-left text-sm font-medium text-ink transition hover:bg-court/8"
               >
-                {n}
+                <Avatar name={n} photo={photoMap?.[n]} size="size-7" />
+                <span className="truncate">{n}</span>
               </button>
             </li>
           ))}

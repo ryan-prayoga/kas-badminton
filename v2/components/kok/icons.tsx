@@ -34,6 +34,8 @@ import cog from "@iconify-icons/mdi/cog-outline";
 import accountPlus from "@iconify-icons/mdi/account-plus-outline";
 import camera from "@iconify-icons/mdi/camera-outline";
 import happy from "@iconify-icons/mdi/emoticon-happy-outline";
+import dotsHorizontal from "@iconify-icons/mdi/dots-horizontal";
+import backspace from "@iconify-icons/mdi/backspace-outline";
 
 export const ICONS = {
   racket, // "main" / game
@@ -69,6 +71,8 @@ export const ICONS = {
   camera,
   happy,
   back,
+  dotsHorizontal,
+  backspace,
 } satisfies Record<string, IconifyIcon>;
 
 export type IconName = keyof typeof ICONS;
