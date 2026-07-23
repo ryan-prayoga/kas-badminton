@@ -7,7 +7,7 @@ jobs:
   diagnose:
     runs-on: ubuntu-latest
     steps:
-      - name: Fix caddy config (restore port 8200) & verify
+      - name: Read-only checks on server
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.SERVER_HOST }}
@@ -15,22 +15,47 @@ jobs:
           key: ${{ secrets.SERVER_DEPLOY_KEY }}
           port: 22
           script: |
-            set -e
-            echo "=== before ==="
-            sudo cat /etc/caddy/sites/kok-badminton.caddy
+            set +e
 
-            echo "=== restore .bak-8200 (config port 8200 yang bener) ==="
-            sudo cp /etc/caddy/sites/kok-badminton.caddy /etc/caddy/sites/kok-badminton.caddy.bak-8201-wrong
-            sudo cp /etc/caddy/sites/kok-badminton.caddy.bak-8200 /etc/caddy/sites/kok-badminton.caddy
+            echo "=== docker ps -a (v2 related) ==="
+            docker ps -a --filter "name=v2-app" || true
+            docker ps -a | grep -i kok || true
 
-            echo "=== after ==="
-            sudo cat /etc/caddy/sites/kok-badminton.caddy
+            echo "=== docker compose ps ==="
+            cd /home/ubuntu/projects/kok-badminton-v2/v2 2>/dev/null && docker compose ps || true
 
-            echo "=== validate & reload caddy ==="
-            sudo caddy validate --config /etc/caddy/Caddyfile
-            sudo systemctl reload caddy
-            sleep 2
+            echo "=== docker compose logs (tail 100) ==="
+            cd /home/ubuntu/projects/kok-badminton-v2/v2 2>/dev/null && docker compose logs --no-color --tail=100 || true
 
-            echo "=== curl via domain publik ==="
-            curl -sS -o /dev/null -w "HTTP %{http_code}\n" https://kok.ryanprayoga.dev/api/health
-            curl -sS https://kok.ryanprayoga.dev/api/health
+            echo "=== data/ ownership (harus 1001:65533) ==="
+            ls -la /home/ubuntu/projects/kok-badminton-v2/v2/data 2>/dev/null || true
+
+            echo "=== curl localhost:8200/api/health ==="
+            curl -sS -o /dev/null -w "HTTP %{http_code}\n" http://127.0.0.1:8200/api/health 2>&1 || true
+            curl -sS http://127.0.0.1:8200/api/health 2>&1 || true
+
+            echo "=== curl localhost:8201/api/health (port validasi, seharusnya kosong) ==="
+            curl -sS -o /dev/null -w "HTTP %{http_code}\n" http://127.0.0.1:8201/api/health 2>&1 || true
+
+            echo "=== pm2 list (kok only) ==="
+            export NVM_DIR="$HOME/.nvm"
+            [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"
+            export PATH="/usr/bin:$HOME/.nvm/versions/node/v24.14.0/bin:$PATH"
+            pm2 list 2>/dev/null | grep -i kok || true
+
+            echo "=== caddy site config (kok) ==="
+            sudo find /etc/caddy -type f 2>/dev/null || true
+            for f in $(sudo grep -rl "kok" /etc/caddy/ 2>/dev/null); do
+              echo "--- $f ---"
+              sudo cat "$f"
+            done
+
+            echo "=== caddy validate (read-only) ==="
+            sudo caddy validate --config /etc/caddy/Caddyfile 2>&1 || true
+
+            echo "=== journalctl caddy (last 15 min) ==="
+            sudo journalctl -u caddy --since "-15 min" --no-pager 2>/dev/null | tail -80 || true
+
+            echo "=== curl domain publik ==="
+            curl -sS -o /dev/null -w "HTTP %{http_code}\n" https://kok.ryanprayoga.dev/api/health 2>&1 || true
+            curl -sS https://kok.ryanprayoga.dev/api/health 2>&1 || true
