@@ -430,30 +430,40 @@ function defaultKokEntry() {
   };
 }
 
-function typeOptionsHtml(selectedId, snapshotName) {
+function typeButtonLabel(selectedId, snapshotName) {
   var types = activeKokTypes();
-  var opts =
-    '<option value="">' +
-    (types.length ? '— Manual —' : 'Manual (isi harga)') +
-    '</option>';
-  types.forEach(function (t) {
+  var t = types.filter(function (x) { return x.id === selectedId; })[0];
+  if (t) {
+    var stock = Number(t.stock) || 0;
+    return t.name + ' · ' + fmt(t.pricePerPerson) + (stock > 0 ? ' · stok ' + stock : ' · habis');
+  }
+  if (selectedId && snapshotName) return snapshotName + ' (lama)';
+  return types.length ? 'Pilih jenis kok' : 'Belum ada jenis kok';
+}
+
+function typeMenuItemsHtml(selectedId, snapshotName) {
+  var types = activeKokTypes();
+  var itemCls = 'flex w-full items-center justify-between gap-2 rounded-lg px-2.5 py-2 text-left text-sm transition active:scale-[0.98] disabled:opacity-40 disabled:active:scale-100';
+  var html = types.map(function (t) {
     var stock = Number(t.stock) || 0;
     var out = stock <= 0 && selectedId !== t.id;
-    opts +=
-      '<option value="' + escapeAttr(t.id) + '"' +
-      (selectedId === t.id ? ' selected' : '') +
-      (out ? ' disabled' : '') +
-      '>' +
-      escapeHtml(t.name) + ' · ' + fmt(t.pricePerPerson) +
-      (stock <= 0 ? ' · habis' : ' · stok ' + stock) +
-      '</option>';
-  });
+    return (
+      '<button type="button" data-role="type-item" data-value="' + escapeAttr(t.id) + '"' + (out ? ' disabled' : '') + ' class="' + itemCls + ' ' + (selectedId === t.id ? 'bg-brand/10 text-brand' : 'text-ink50 hover:bg-surface') + '">' +
+        '<span class="min-w-0 truncate">' + escapeHtml(t.name) + '</span>' +
+        '<span class="shrink-0 font-mono text-xs text-soft">' + fmt(t.pricePerPerson) + (stock <= 0 ? ' · habis' : ' · stok ' + stock) + '</span>' +
+      '</button>'
+    );
+  }).join('');
   if (selectedId && !types.some(function (t) { return t.id === selectedId; }) && snapshotName) {
-    opts +=
-      '<option value="' + escapeAttr(selectedId) + '" selected>' +
-      escapeHtml(snapshotName) + ' (lama)</option>';
+    html +=
+      '<button type="button" data-role="type-item" data-value="' + escapeAttr(selectedId) + '" class="' + itemCls + ' bg-brand/10 text-brand">' +
+        '<span class="min-w-0 truncate">' + escapeHtml(snapshotName) + ' (lama)</span>' +
+      '</button>';
   }
-  return opts;
+  if (!html) {
+    html = '<p class="px-2.5 py-2 text-xs text-soft">Belum ada jenis kok. Tambah dulu di menu "Jenis kok &amp; stok".</p>';
+  }
+  return html;
 }
 
 function kokRowHtml(i, kok, disableRemove) {
@@ -462,9 +472,15 @@ function kokRowHtml(i, kok, disableRemove) {
     '<div class="grid min-w-0 gap-2 rounded-xl border border-line bg-sunken p-2" data-i="' + i + '">' +
       '<div class="flex min-w-0 items-center gap-2">' +
         '<span class="w-12 shrink-0 pl-1 font-mono text-xs text-soft">Kok ' + (i + 1) + '</span>' +
-        '<select data-role="type" class="min-w-0 flex-1 rounded-lg border border-line bg-ink px-2 py-2 text-sm outline-none">' +
-          typeOptionsHtml(kok.typeId, kok.typeName) +
-        '</select>' +
+        '<div class="relative min-w-0 flex-1" data-role="type-wrap">' +
+          '<button type="button" data-role="type-btn" class="flex w-full min-w-0 items-center justify-between gap-1.5 rounded-lg border border-line bg-ink px-2.5 py-2 text-left text-sm outline-none transition active:scale-[0.98]">' +
+            '<span class="min-w-0 truncate" data-role="type-label">' + escapeHtml(typeButtonLabel(kok.typeId, kok.typeName)) + '</span>' +
+            '<iconify-icon icon="mdi:chevron-down" width="14" class="shrink-0 text-soft"></iconify-icon>' +
+          '</button>' +
+          '<div data-role="type-menu" class="absolute left-0 top-[calc(100%+4px)] z-20 grid max-h-52 w-max min-w-full max-w-[min(80vw,300px)] gap-0.5 overflow-auto rounded-xl border border-line bg-elevated p-1 shadow-card" hidden>' +
+            typeMenuItemsHtml(kok.typeId, kok.typeName) +
+          '</div>' +
+        '</div>' +
         '<button type="button" data-role="remove"' + (disableRemove ? ' disabled' : '') + ' class="grid h-9 w-9 shrink-0 place-items-center rounded-lg border border-line text-soft transition active:scale-95 hover:text-danger disabled:opacity-40">' +
           '<iconify-icon icon="mdi:close" width="16"></iconify-icon>' +
         '</button>' +
@@ -476,6 +492,51 @@ function kokRowHtml(i, kok, disableRemove) {
       '</div>' +
     '</div>'
   );
+}
+
+// --- Custom kok-type dropdown (menggantikan <select> native) ---
+function closeAllTypeMenus() {
+  $$('[data-role="type-menu"]').forEach(function (menu) { menu.hidden = true; });
+}
+
+document.addEventListener('click', function (e) {
+  if (e.target.closest('[data-role="type-wrap"]')) return;
+  closeAllTypeMenus();
+});
+
+// Handler dipakai bareng oleh form "Catat main" & dialog "Edit game" — nge-cover
+// remove-row, buka/tutup dropdown jenis kok, dan pilih item-nya.
+function kokListClickHandler(getKoks, rerender) {
+  return function (e) {
+    var removeBtn = e.target.closest('[data-role="remove"]');
+    if (removeBtn) {
+      var removeRow = removeBtn.closest('[data-i]');
+      if (!removeRow) return;
+      var koks = getKoks();
+      if (koks.length <= 1) return;
+      koks.splice(Number(removeRow.getAttribute('data-i')), 1);
+      rerender();
+      return;
+    }
+    var typeBtn = e.target.closest('[data-role="type-btn"]');
+    if (typeBtn) {
+      var wrap = typeBtn.closest('[data-role="type-wrap"]');
+      var menu = wrap.querySelector('[data-role="type-menu"]');
+      var willOpen = menu.hidden;
+      closeAllTypeMenus();
+      menu.hidden = !willOpen;
+      if (willOpen) menu.scrollIntoView({ block: 'nearest' });
+      return;
+    }
+    var item = e.target.closest('[data-role="type-item"]');
+    if (item && !item.disabled) {
+      var itemRow = item.closest('[data-i]');
+      if (!itemRow) return;
+      var i = Number(itemRow.getAttribute('data-i'));
+      applyTypeToKok(getKoks()[i], item.getAttribute('data-value') || null);
+      rerender();
+    }
+  };
 }
 
 function updateFormCostHint() {
@@ -509,24 +570,7 @@ function renderFormKoks() {
 function bindFormKoks() {
   var list = $('#kokList');
   if (!list) return;
-  list.onclick = function (e) {
-    var btn = e.target.closest('[data-role="remove"]');
-    if (!btn) return;
-    var row = btn.closest('[data-i]');
-    if (!row) return;
-    var i = Number(row.getAttribute('data-i'));
-    if (state.formKoks.length <= 1) return;
-    state.formKoks.splice(i, 1);
-    renderFormKoks();
-  };
-  list.onchange = function (e) {
-    if (!e.target || e.target.getAttribute('data-role') !== 'type') return;
-    var row = e.target.closest('[data-i]');
-    if (!row) return;
-    var i = Number(row.getAttribute('data-i'));
-    applyTypeToKok(state.formKoks[i], e.target.value || null);
-    renderFormKoks();
-  };
+  list.onclick = kokListClickHandler(function () { return state.formKoks; }, renderFormKoks);
   list.oninput = function (e) {
     if (!e.target || e.target.getAttribute('data-role') !== 'price') return;
     var row = e.target.closest('[data-i]');
@@ -1386,6 +1430,23 @@ function updateFabVisibility() {
   $('#fabAdd').hidden = !(tab === 'riwayat' || tab === 'bayar');
 }
 
+// Pill highlight yang geser mulus ke tombol nav aktif.
+function positionNavIndicator(animate) {
+  var nav = $('#bottomNav');
+  var indicator = nav && nav.querySelector('[data-role="nav-indicator"]');
+  var activeBtn = nav && nav.querySelector('.navitem.is-active');
+  if (!indicator || !activeBtn || nav.hidden) return;
+  var wrapRect = activeBtn.parentElement.getBoundingClientRect();
+  var btnRect = activeBtn.getBoundingClientRect();
+  if (!animate) indicator.style.transitionDuration = '0s';
+  indicator.style.width = btnRect.width + 'px';
+  indicator.style.transform = 'translateX(' + (btnRect.left - wrapRect.left) + 'px)';
+  if (!animate) {
+    void indicator.offsetWidth;
+    indicator.style.transitionDuration = '';
+  }
+}
+
 function switchTab(name) {
   document.body.setAttribute('data-tab', name);
   $$('[data-panel]').forEach(function (el) {
@@ -1400,10 +1461,13 @@ function switchTab(name) {
   $$('#bottomNav .navitem').forEach(function (b) {
     b.classList.toggle('is-active', b.getAttribute('data-tab') === name);
   });
+  positionNavIndicator(true);
   updateFabVisibility();
   try { sessionStorage.setItem('kok-admin-tab', name); } catch (e) {}
   window.scrollTo(0, 0);
 }
+
+window.addEventListener('resize', function () { positionNavIndicator(false); });
 
 // --- Accordion (details) smooth expand/collapse ---
 function animateDetailsToggle(details, summary) {
@@ -1541,23 +1605,7 @@ function renderEditKoks() {
     renderEditKoks();
   };
 
-  list.onclick = function (e) {
-    var btn = e.target.closest('[data-role="remove"]');
-    if (!btn) return;
-    var row = btn.closest('[data-i]');
-    if (!row) return;
-    if (state.edit.koks.length <= 1) return;
-    state.edit.koks.splice(Number(row.getAttribute('data-i')), 1);
-    renderEditKoks();
-  };
-  list.onchange = function (e) {
-    if (!e.target || e.target.getAttribute('data-role') !== 'type') return;
-    var row = e.target.closest('[data-i]');
-    if (!row) return;
-    var i = Number(row.getAttribute('data-i'));
-    applyTypeToKok(state.edit.koks[i], e.target.value || null);
-    renderEditKoks();
-  };
+  list.onclick = kokListClickHandler(function () { return state.edit.koks; }, renderEditKoks);
   list.oninput = function (e) {
     if (!e.target || e.target.getAttribute('data-role') !== 'price') return;
     var row = e.target.closest('[data-i]');

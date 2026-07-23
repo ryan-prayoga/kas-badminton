@@ -8,7 +8,7 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <title>Kok Badminton</title>
   <link rel="icon" href="/favicon.svg?v=15" type="image/svg+xml" />
-  <link rel="stylesheet" href="/styles.css?v=22" />
+  <link rel="stylesheet" href="/styles.css?v=24" />
   <script src="/vendor/iconify-icon.js?v=15"></script>
   <script src="/vendor/icons.js?v=16"></script>
 </head>
@@ -33,10 +33,6 @@
             <button type="button" id="refreshBtn" title="Refresh" aria-label="Refresh" class="grid h-8 w-8 place-items-center rounded-xl border border-line bg-elevated text-muted transition active:scale-95 hover:text-ink50 focus-visible:ring-2 focus-visible:ring-brand/60 sm:h-9 sm:w-9">
               <iconify-icon icon="mdi:refresh" width="16"></iconify-icon>
             </button>
-            <a href="/admin" class="inline-flex shrink-0 items-center gap-1.5 rounded-xl border border-line bg-elevated px-2.5 py-2 text-sm font-medium text-muted transition active:scale-95 hover:text-ink50 hover:border-line2 focus-visible:ring-2 focus-visible:ring-brand/60">
-              <iconify-icon icon="mdi:shield-account-outline" width="16"></iconify-icon>
-              Admin
-            </a>
           </div>
         </div>
         <p id="lastUpdated" class="mt-3 text-xs text-soft">Memuat…</p>
@@ -106,6 +102,17 @@
       </div>
     </section>
 
+    <!-- ── Tab: Lainnya ── -->
+    <section data-panel="lainnya" hidden class="grid grid-cols-1 gap-3">
+      <div class="rounded-xl2 border border-line bg-surface shadow-card p-2">
+        <a href="/admin" class="menurow">
+          <iconify-icon icon="mdi:shield-account-outline" width="20" class="text-brand"></iconify-icon>
+          <span class="flex-1 text-left">Masuk Admin</span>
+          <iconify-icon icon="mdi:open-in-new" width="16" class="text-soft"></iconify-icon>
+        </a>
+      </div>
+    </section>
+
     <footer class="pb-2 pt-1 text-center text-xs text-soft">
       Kok Badminton · pencatatan kas patungan
     </footer>
@@ -113,15 +120,19 @@
 
   <!-- ── Bottom navbar ── -->
   <nav id="bottomNav" class="fixed inset-x-0 bottom-0 z-40 border-t border-line bg-surface/95 backdrop-blur">
-    <div class="mx-auto flex w-full max-w-[720px] items-stretch pb-[var(--safe-b)]">
-      <button type="button" class="navitem" data-tab="riwayat" aria-label="Riwayat">
+    <div class="relative mx-auto flex w-full max-w-[720px] items-stretch pb-[var(--safe-b)]">
+      <span data-role="nav-indicator" class="pointer-events-none absolute inset-y-1.5 left-0 z-0 rounded-2xl bg-brand/10 transition-all duration-300 ease-out"></span>
+      <button type="button" class="navitem relative z-10" data-tab="riwayat" aria-label="Riwayat">
         <iconify-icon icon="mdi:history" width="22"></iconify-icon><span>Riwayat</span>
       </button>
-      <button type="button" class="navitem" data-tab="bayar" aria-label="Belum bayar">
+      <button type="button" class="navitem relative z-10" data-tab="bayar" aria-label="Belum bayar">
         <iconify-icon icon="mdi:wallet-outline" width="22"></iconify-icon><span>Bayar</span>
       </button>
-      <button type="button" class="navitem" data-tab="statistik" aria-label="Statistik">
+      <button type="button" class="navitem relative z-10" data-tab="statistik" aria-label="Statistik">
         <iconify-icon icon="mdi:chart-box-outline" width="22"></iconify-icon><span>Statistik</span>
+      </button>
+      <button type="button" class="navitem relative z-10" data-tab="lainnya" aria-label="Lainnya">
+        <iconify-icon icon="mdi:dots-horizontal" width="22"></iconify-icon><span>Lainnya</span>
       </button>
     </div>
   </nav>
@@ -129,6 +140,6 @@
   <!-- ── Toast stack ── -->
   <div id="toastStack" class="pointer-events-none fixed inset-x-0 bottom-[calc(84px+var(--safe-b))] z-50 mx-auto flex w-full max-w-[720px] flex-col items-stretch gap-2 px-4"></div>
 
-  <script src="/public.js?v=26"></script>
+  <script src="/public.js?v=27"></script>
 </body>
 </html>

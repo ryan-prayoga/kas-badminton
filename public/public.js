@@ -496,6 +496,23 @@ function copyText(text) {
 }
 
 // --- Tabs ---
+// Pill highlight yang geser mulus ke tombol nav aktif.
+function positionNavIndicator(animate) {
+  var nav = $('#bottomNav');
+  var indicator = nav && nav.querySelector('[data-role="nav-indicator"]');
+  var activeBtn = nav && nav.querySelector('.navitem.is-active');
+  if (!indicator || !activeBtn || nav.hidden) return;
+  var wrapRect = activeBtn.parentElement.getBoundingClientRect();
+  var btnRect = activeBtn.getBoundingClientRect();
+  if (!animate) indicator.style.transitionDuration = '0s';
+  indicator.style.width = btnRect.width + 'px';
+  indicator.style.transform = 'translateX(' + (btnRect.left - wrapRect.left) + 'px)';
+  if (!animate) {
+    void indicator.offsetWidth;
+    indicator.style.transitionDuration = '';
+  }
+}
+
 function switchTab(name) {
   $$('[data-panel]').forEach(function (el) {
     var match = el.getAttribute('data-panel') === name;
@@ -509,9 +526,12 @@ function switchTab(name) {
   $$('#bottomNav .navitem').forEach(function (b) {
     b.classList.toggle('is-active', b.getAttribute('data-tab') === name);
   });
+  positionNavIndicator(true);
   try { sessionStorage.setItem('kok-tab', name); } catch (e) {}
   window.scrollTo(0, 0);
 }
+
+window.addEventListener('resize', function () { positionNavIndicator(false); });
 
 // --- Accordion (details) smooth expand/collapse ---
 function animateDetailsToggle(details, summary) {

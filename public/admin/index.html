@@ -8,7 +8,7 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <title>Kok Badminton — Admin</title>
   <link rel="icon" href="/favicon.svg?v=15" type="image/svg+xml" />
-  <link rel="stylesheet" href="/styles.css?v=22" />
+  <link rel="stylesheet" href="/styles.css?v=24" />
   <script src="/vendor/iconify-icon.js?v=15"></script>
   <script src="/vendor/icons.js?v=16"></script>
   <script src="/vendor/qrcode.js?v=15"></script>
@@ -176,17 +176,18 @@
 
   <!-- ── Bottom navbar ── -->
   <nav id="bottomNav" class="fixed inset-x-0 bottom-0 z-40 border-t border-line bg-surface/95 backdrop-blur" hidden>
-    <div class="mx-auto flex w-full max-w-[720px] items-stretch pb-[var(--safe-b)]">
-      <button type="button" class="navitem" data-tab="riwayat" aria-label="Riwayat">
+    <div class="relative mx-auto flex w-full max-w-[720px] items-stretch pb-[var(--safe-b)]">
+      <span data-role="nav-indicator" class="pointer-events-none absolute inset-y-1.5 left-0 z-0 rounded-2xl bg-brand/10 transition-all duration-300 ease-out"></span>
+      <button type="button" class="navitem relative z-10" data-tab="riwayat" aria-label="Riwayat">
         <iconify-icon icon="mdi:history" width="22"></iconify-icon><span>Riwayat</span>
       </button>
-      <button type="button" class="navitem" data-tab="bayar" aria-label="Belum bayar">
+      <button type="button" class="navitem relative z-10" data-tab="bayar" aria-label="Belum bayar">
         <iconify-icon icon="mdi:wallet-outline" width="22"></iconify-icon><span>Bayar</span>
       </button>
-      <button type="button" class="navitem" data-tab="statistik" aria-label="Statistik">
+      <button type="button" class="navitem relative z-10" data-tab="statistik" aria-label="Statistik">
         <iconify-icon icon="mdi:chart-box-outline" width="22"></iconify-icon><span>Statistik</span>
       </button>
-      <button type="button" class="navitem" data-tab="lainnya" aria-label="Lainnya">
+      <button type="button" class="navitem relative z-10" data-tab="lainnya" aria-label="Lainnya">
         <iconify-icon icon="mdi:dots-horizontal" width="22"></iconify-icon><span>Lainnya</span>
       </button>
     </div>
@@ -614,6 +615,6 @@
   <!-- ── Toast stack ── -->
   <div id="toastStack" class="pointer-events-none fixed inset-x-0 bottom-[calc(88px+var(--safe-b))] z-50 mx-auto flex w-full max-w-[720px] flex-col items-stretch gap-2 px-4"></div>
 
-  <script src="/admin/app.js?v=27"></script>
+  <script src="/admin/app.js?v=29"></script>
 </body>
 </html>
