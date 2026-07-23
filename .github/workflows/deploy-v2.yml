@@ -44,6 +44,7 @@ jobs:
               echo "DATABASE_URL kosong di $V1_DIR/.env" >&2
               exit 1
             fi
+            export DATABASE_URL
 
             mkdir -p "$PROJECT_DIR"
             cd "$PROJECT_DIR"
@@ -61,19 +62,56 @@ jobs:
             cd v2
             printf 'DATABASE_URL=%s\nPORT=8200\n' "$DATABASE_URL" > .env
 
+            # bersihin sisa container lama (mis. dari attempt yang gagal/crash-loop)
+            docker compose down || true
+
             docker compose build
 
-            # pertama kali: tandai skema existing (dari v1) sebagai udah "applied" biar
-            # migrate deploy gak nabrak CREATE TABLE ke tabel yang udah ada isinya.
-            # --entrypoint "" skip docker-entrypoint.sh (yang otomatis migrate deploy + start server).
-            # aman diulang - kalau udah pernah di-resolve, prisma exit non-zero, ditelan || true.
+            # tandai skema existing (dari v1) sebagai udah "applied" biar migrate deploy
+            # gak nabrak CREATE TABLE ke tabel yang udah ada isinya. aman diulang - kalau
+            # udah pernah di-resolve, prisma exit non-zero, ditelan || true.
             docker compose run --rm --entrypoint "" app \
-              sh -c "node node_modules/prisma/build/index.js migrate resolve --applied 0_init || npx prisma migrate resolve --applied 0_init" || true
+              npx prisma migrate resolve --applied 0_init || true
 
-            # matiin v1 biar port 8200 kosong buat v2 ambil alih
-            pm2 stop kok-badminton || true
-
-            docker compose down
+            # --- validasi dulu di port sementara (8201), JANGAN sentuh v1 sebelum ini lolos ---
+            export HOST_PORT=8201
             docker compose up -d
+            ok=0
+            for i in $(seq 1 15); do
+              if curl -fsS "http://127.0.0.1:8201/api/health" >/dev/null 2>&1; then
+                ok=1
+                break
+              fi
+              sleep 2
+            done
+            docker compose down
+
+            if [ "$ok" != "1" ]; then
+              echo "v2 gagal sehat di port validasi, batal cutover - v1 tetap jalan" >&2
+              docker compose logs --no-color --tail=100 || true
+              exit 1
+            fi
+
+            # --- lolos validasi, baru cutover: matiin v1, naikin v2 di port 8200 ---
+            unset HOST_PORT
+            pm2 stop kok-badminton || true
+            docker compose up -d
+
+            ok=0
+            for i in $(seq 1 15); do
+              if curl -fsS "http://127.0.0.1:8200/api/health" >/dev/null 2>&1; then
+                ok=1
+                break
+              fi
+              sleep 2
+            done
+
+            if [ "$ok" != "1" ]; then
+              echo "v2 gagal sehat di port 8200 setelah cutover, rollback ke v1" >&2
+              docker compose logs --no-color --tail=100 || true
+              docker compose down || true
+              pm2 restart kok-badminton || pm2 start "$V1_DIR/server.js" --name kok-badminton --cwd "$V1_DIR"
+              exit 1
+            fi
 
             echo "Deploy v2 complete: $(git rev-parse --short HEAD) ($(date))"
