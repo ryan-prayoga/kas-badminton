@@ -9,6 +9,8 @@ FROM node:20-alpine AS builder
 WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
+# prisma generate cuma butuh DATABASE_URL ke-resolve secara sintaks, gak konek ke DB beneran
+ENV DATABASE_URL="postgresql://build:build@localhost:5432/build"
 RUN npx prisma generate
 RUN npm run build
 
