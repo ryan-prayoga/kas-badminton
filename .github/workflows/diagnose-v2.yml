@@ -15,33 +15,27 @@ jobs:
           key: ${{ secrets.SERVER_DEPLOY_KEY }}
           port: 22
           script: |
-            echo "=== docker ps -a (v2 related) ==="
-            docker ps -a --filter "name=v2-app" || true
+            echo "=== nginx sites-enabled (list all) ==="
+            sudo ls -la /etc/nginx/sites-enabled/ 2>/dev/null || true
 
-            echo "=== docker compose ps ==="
-            cd /home/ubuntu/projects/kok-badminton-v2/v2 2>/dev/null && docker compose ps || true
+            echo "=== grep ryanprayoga.dev across nginx configs ==="
+            sudo grep -rl "ryanprayoga" /etc/nginx/ 2>/dev/null || true
 
-            echo "=== docker compose logs (tail 100) ==="
-            cd /home/ubuntu/projects/kok-badminton-v2/v2 2>/dev/null && docker compose logs --no-color --tail=100 || true
-
-            echo "=== curl localhost:8200/api/health ==="
-            curl -v http://127.0.0.1:8200/api/health 2>&1 || true
-
-            echo "=== pm2 list (kok only) ==="
-            export NVM_DIR="$HOME/.nvm"
-            [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"
-            export PATH="/usr/bin:$HOME/.nvm/versions/node/v24.14.0/bin:$PATH"
-            pm2 list | grep -i kok || true
-
-            echo "=== nginx sites (grep kok) ==="
-            sudo grep -rl "kok" /etc/nginx/sites-enabled/ /etc/nginx/conf.d/ 2>/dev/null || true
-            for f in $(sudo grep -rl "kok" /etc/nginx/sites-enabled/ /etc/nginx/conf.d/ 2>/dev/null); do
+            echo "=== grep 8200 across nginx configs (port v1/v2 pake) ==="
+            sudo grep -rl "8200" /etc/nginx/ 2>/dev/null || true
+            for f in $(sudo grep -rl "8200" /etc/nginx/ 2>/dev/null); do
               echo "--- $f ---"
               sudo cat "$f"
             done
 
-            echo "=== nginx error log (tail 50) ==="
-            sudo tail -50 /var/log/nginx/error.log 2>/dev/null || true
+            echo "=== is there caddy / other reverse proxy? ==="
+            which caddy 2>/dev/null || true
+            systemctl list-units --type=service --all 2>/dev/null | grep -iE "caddy|traefik|nginx" || true
 
-            echo "=== nginx -t ==="
-            sudo nginx -t 2>&1 || true
+            echo "=== docker ps -a (all, in case proxy is containerized) ==="
+            docker ps -a || true
+
+            echo "=== curl with Host header to localhost (simulate domain routing) ==="
+            curl -v -H "Host: kok.ryanprayoga.dev" http://127.0.0.1:8200/api/health 2>&1 || true
+            curl -v -H "Host: kok.ryanprayoga.dev" http://127.0.0.1:80/api/health 2>&1 || true
+            curl -v -H "Host: kok.ryanprayoga.dev" https://127.0.0.1:443/api/health -k 2>&1 || true
