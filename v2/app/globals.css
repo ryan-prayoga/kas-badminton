@@ -1,0 +1,215 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-hanken), ui-sans-serif, system-ui, sans-serif;
+  --font-display: var(--font-archivo), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-jbmono), ui-monospace, monospace;
+
+  /* shadcn semantic (dipetakan ke Court Ledger, light) */
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+
+  /* palette bespoke — Court Ledger */
+  --color-bg: #eef2f8;
+  --color-surface: #ffffff;
+  --color-surface-2: #f4f7fc;
+  --color-ink: #0f1b2d;
+  --color-ink-soft: #55647b;
+  --color-ink-faint: #92a0b4;
+  --color-line: #e4eaf3;
+  --color-line-strong: #d3dcea;
+  --color-court: #1560d6;
+  --color-court-deep: #0e48a8;
+  --color-paid: #0f8a5b;
+  --color-owe: #b96608;
+  --color-danger: #dc2626;
+
+  --radius-lg: 0.75rem;
+  --radius-xl: 1rem;
+  --radius-xl2: 1.25rem;
+
+  --shadow-card: 0 1px 2px rgba(15, 27, 45, 0.04), 0 8px 24px -14px rgba(15, 27, 45, 0.18);
+  --shadow-pop: 0 12px 40px -12px rgba(15, 27, 45, 0.28);
+  --shadow-court: 0 10px 30px -12px rgba(21, 96, 214, 0.35);
+}
+
+:root {
+  --safe-b: env(safe-area-inset-bottom, 0px);
+  --safe-t: env(safe-area-inset-top, 0px);
+
+  --background: #eef2f8;
+  --foreground: #0f1b2d;
+  --card: #ffffff;
+  --card-foreground: #0f1b2d;
+  --popover: #ffffff;
+  --popover-foreground: #0f1b2d;
+  --primary: #1560d6;
+  --primary-foreground: #ffffff;
+  --secondary: #f4f7fc;
+  --secondary-foreground: #0f1b2d;
+  --muted: #f4f7fc;
+  --muted-foreground: #55647b;
+  --accent: #eaf1fd;
+  --accent-foreground: #0e48a8;
+  --destructive: #dc2626;
+  --border: #e4eaf3;
+  --input: #dbe3ef;
+  --ring: #1560d6;
+}
+
+@layer base {
+  * {
+    @apply border-border;
+    box-sizing: border-box;
+  }
+  html {
+    -webkit-text-size-adjust: 100%;
+    height: 100%;
+  }
+  body {
+    margin: 0;
+    min-height: 100%;
+    color: var(--color-ink);
+    background:
+      radial-gradient(120% 80% at 50% -20%, rgba(21, 96, 214, 0.08), transparent 55%),
+      var(--color-bg);
+    background-attachment: fixed;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+  input[type="date"],
+  input[type="number"],
+  input[type="text"] {
+    color-scheme: light;
+  }
+}
+
+@layer utilities {
+  .tabular {
+    font-variant-numeric: tabular-nums;
+  }
+  .font-display {
+    font-family: var(--font-display);
+  }
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+  .no-scrollbar {
+    scrollbar-width: none;
+  }
+}
+
+/* ── Court motif: garis lapangan halus di kartu matchup ── */
+.court-surface {
+  background-color: rgba(21, 96, 214, 0.05);
+  background-image:
+    linear-gradient(rgba(21, 96, 214, 0.14) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(21, 96, 214, 0.14) 1px, transparent 1px);
+  background-size: 100% 50%, 50% 100%;
+  background-position: 0 0;
+}
+.court-net {
+  background-image: repeating-linear-gradient(
+    to bottom,
+    var(--color-court) 0 4px,
+    transparent 4px 9px
+  );
+}
+
+/* ── Smooth accordion (grid-rows trick) ── */
+.acc-panel {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows 0.28s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.acc-panel[data-open="true"] {
+  grid-template-rows: 1fr;
+}
+.acc-panel > .acc-inner {
+  overflow: hidden;
+  min-height: 0;
+}
+.acc-chevron {
+  transition: transform 0.25s ease;
+}
+.acc-chevron[data-open="true"] {
+  transform: rotate(180deg);
+}
+
+/* ── Motion ── */
+@keyframes rise-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.animate-rise {
+  animation: rise-in 0.34s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@keyframes shimmer {
+  100% {
+    transform: translateX(100%);
+  }
+}
+.skeleton {
+  position: relative;
+  overflow: hidden;
+  background: var(--color-line);
+  border-radius: 0.5rem;
+}
+.skeleton::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  transform: translateX(-100%);
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.65), transparent);
+  animation: shimmer 1.4s infinite;
+}
+
+@keyframes court-flash {
+  0% {
+    box-shadow: 0 0 0 0 rgba(21, 96, 214, 0.5);
+    background-color: rgba(21, 96, 214, 0.1);
+  }
+  100% {
+    box-shadow: 0 0 0 6px rgba(21, 96, 214, 0);
+    background-color: transparent;
+  }
+}
+.flash-update {
+  animation: court-flash 1.6s ease-out;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    transition-duration: 0.001ms !important;
+  }
+}

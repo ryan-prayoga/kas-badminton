@@ -1,0 +1,73 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../lib/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model expenses {
+  id         String   @id
+  type_id    String?
+  type_name  String?
+  slops      Int      @default(0)
+  amount     Int
+  created_at DateTime @default(now()) @db.Timestamptz(6)
+}
+
+model games {
+  id          String   @id
+  date        String
+  players     Json     @default("[]")
+  scores      Json     @default("{}")
+  koks        Json     @default("[]")
+  notes       String?
+  created_at  DateTime @default(now()) @db.Timestamptz(6)
+  updated_at  DateTime @default(now()) @db.Timestamptz(6)
+  recorded_by String?
+}
+
+/// This model contains an expression index which requires additional setup for migrations. Visit https://pris.ly/d/expression-indexes for more info.
+model kok_types {
+  id               String   @id
+  name             String
+  price_per_person Int      @default(3000)
+  active           Boolean  @default(true)
+  created_at       DateTime @default(now()) @db.Timestamptz(6)
+  updated_at       DateTime @default(now()) @db.Timestamptz(6)
+  stock            Int      @default(0)
+  price_per_slop   Int      @default(0)
+}
+
+model operators {
+  id         String    @id
+  name       String
+  pin_hash   String
+  expires_at DateTime  @db.Timestamptz(6)
+  created_at DateTime  @default(now()) @db.Timestamptz(6)
+  revoked_at DateTime? @db.Timestamptz(6)
+}
+
+model payments {
+  id         String   @id
+  name       String
+  amount     Int
+  created_at DateTime @default(now()) @db.Timestamptz(6)
+}
+
+model player_carry {
+  name  String @id
+  carry Int    @default(0)
+}
+
+model players {
+  name  String  @id
+  photo String?
+}
+
+model settings {
+  id                       Int     @id
+  default_price_per_person Int     @default(3000)
+  merchant_qris            String?
+}

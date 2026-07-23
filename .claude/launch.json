@@ -14,6 +14,13 @@
       "runtimeArgs": ["start"],
       "port": 8200,
       "autoPort": true
+    },
+    {
+      "name": "kok-v2 (dev)",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["--prefix", "v2", "run", "dev"],
+      "port": 3000,
+      "autoPort": true
     }
   ]
 }

@@ -1,0 +1,12 @@
+services:
+  app:
+    build: .
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8200:8200"
+    environment:
+      - DATABASE_URL=${DATABASE_URL}
+      - ADMIN_PIN=${ADMIN_PIN:-}
+      - NODE_ENV=production
+    volumes:
+      - ./data:/app/data
