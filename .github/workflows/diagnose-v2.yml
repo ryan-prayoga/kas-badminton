@@ -15,27 +15,22 @@ jobs:
           key: ${{ secrets.SERVER_DEPLOY_KEY }}
           port: 22
           script: |
-            echo "=== nginx sites-enabled (list all) ==="
-            sudo ls -la /etc/nginx/sites-enabled/ 2>/dev/null || true
+            echo "=== caddy config path ==="
+            systemctl show caddy -p FragmentPath -p ExecStart 2>/dev/null || true
+            cat /etc/systemd/system/caddy.service 2>/dev/null || true
 
-            echo "=== grep ryanprayoga.dev across nginx configs ==="
-            sudo grep -rl "ryanprayoga" /etc/nginx/ 2>/dev/null || true
+            echo "=== find Caddyfile ==="
+            sudo find /etc/caddy -type f 2>/dev/null || true
 
-            echo "=== grep 8200 across nginx configs (port v1/v2 pake) ==="
-            sudo grep -rl "8200" /etc/nginx/ 2>/dev/null || true
-            for f in $(sudo grep -rl "8200" /etc/nginx/ 2>/dev/null); do
+            echo "=== grep kok across caddy config ==="
+            sudo grep -rl "kok" /etc/caddy/ 2>/dev/null || true
+            for f in $(sudo grep -rl "kok" /etc/caddy/ 2>/dev/null); do
               echo "--- $f ---"
               sudo cat "$f"
             done
 
-            echo "=== is there caddy / other reverse proxy? ==="
-            which caddy 2>/dev/null || true
-            systemctl list-units --type=service --all 2>/dev/null | grep -iE "caddy|traefik|nginx" || true
+            echo "=== caddy adapt/validate ==="
+            sudo caddy validate --config /etc/caddy/Caddyfile 2>&1 || true
 
-            echo "=== docker ps -a (all, in case proxy is containerized) ==="
-            docker ps -a || true
-
-            echo "=== curl with Host header to localhost (simulate domain routing) ==="
-            curl -v -H "Host: kok.ryanprayoga.dev" http://127.0.0.1:8200/api/health 2>&1 || true
-            curl -v -H "Host: kok.ryanprayoga.dev" http://127.0.0.1:80/api/health 2>&1 || true
-            curl -v -H "Host: kok.ryanprayoga.dev" https://127.0.0.1:443/api/health -k 2>&1 || true
+            echo "=== journalctl caddy tail (last 5 min) ==="
+            sudo journalctl -u caddy --since "-15 min" --no-pager 2>/dev/null | tail -100 || true
