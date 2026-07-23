@@ -66,6 +66,7 @@ function DebtCard({
   const [cicil, setCicil] = useState(false);
   const [amount, setAmount] = useState("");
   const grouped = groupItems(d.items);
+  const totalKoks = d.items.reduce((s, it) => s + (Number(it.kokCount) || 0), 0);
 
   const settle = () =>
     start(async () => {
@@ -99,8 +100,13 @@ function DebtCard({
           <Avatar name={d.name} photo={photoMap[d.name]} tone="owe" />
           <div className="min-w-0">
             <div className="font-display truncate font-bold text-ink">{d.name}</div>
-            <div className="inline-flex items-center gap-1 text-xs text-ink-soft">
-              <KIcon name="racket" className="size-3.5" /> {d.items.length} main
+            <div className="inline-flex items-center gap-2.5 text-xs text-ink-soft">
+              <span className="inline-flex items-center gap-1">
+                <KIcon name="racket" className="size-3.5" /> {d.items.length} main
+              </span>
+              <span className="inline-flex items-center gap-1">
+                <KIcon name="shuttle" className="size-3" /> {totalKoks} kok
+              </span>
             </div>
             {d.carry > 0 && (
               <div className="mt-0.5 text-[11px] font-medium text-paid">
@@ -257,12 +263,6 @@ export function DebtView({
         <EmptyPanel icon="happy" text="Semua sudah bayar 🎉" />
       ) : (
         <div className="flex flex-col gap-3">
-          <div className="flex items-center justify-between rounded-xl bg-owe/[0.08] px-3.5 py-2.5">
-            <span className="flex items-center gap-1.5 text-sm font-medium text-ink-soft">
-              <KIcon name="users" className="size-4 text-owe" /> {debts.length} orang nunggak
-            </span>
-            <span className="tabular font-mono text-base font-bold text-owe">{fmt(total)}</span>
-          </div>
           {debts.map((d) => (
             <DebtCard key={d.name} d={d} photoMap={photoMap} editable={editable} qrisEnabled={qrisEnabled} />
           ))}
