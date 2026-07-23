@@ -25,11 +25,24 @@ export const viewport: Viewport = {
 
 export default async function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   const data = await getData();
+  const canRecord = data.me.role === "admin" || data.me.role === "operator";
+
   return (
     <html lang="id" className={`${archivo.variable} ${hanken.variable} ${mono.variable} h-full`}>
       <body className="min-h-full font-sans antialiased">
         {children}
-        <BottomNav role={data.me.role} />
+        <BottomNav
+          role={data.me.role}
+          recordGame={
+            canRecord
+              ? {
+                  kokTypes: data.kokTypes,
+                  players: data.players,
+                  defaultPrice: data.settings.defaultPricePerPerson,
+                }
+              : undefined
+          }
+        />
         <Toaster position="top-center" richColors />
         <RealtimeRefresher />
       </body>

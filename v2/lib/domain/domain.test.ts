@@ -8,7 +8,13 @@ import {
   validatePlayers,
 } from "./game";
 import { buildDebtSummary, planInstallment, planSettle } from "./debt";
-import { countKoksByType, stockDeltas, stockDiffError } from "./stock";
+import {
+  countKoksByType,
+  expenseFromInitialStock,
+  slopsFromStock,
+  stockDeltas,
+  stockDiffError,
+} from "./stock";
 import { summarize } from "./summary";
 import type { CarryMap, Kok, KokType, StoredGame } from "./types";
 
@@ -240,6 +246,16 @@ describe("stock", () => {
   });
   it("stockDiffError null kalau cukup", () => {
     expect(stockDiffError(types, [], [kok(1, "t1"), kok(1, "t1")])).toBeNull();
+  });
+  it("expenseFromInitialStock: 12 pcs @ 130rb/slop → kas −130rb", () => {
+    expect(expenseFromInitialStock(12, 130_000)).toBe(130_000);
+    expect(slopsFromStock(12)).toBe(1);
+  });
+  it("expenseFromInitialStock: 24 pcs @ 130rb → 2 slop", () => {
+    expect(expenseFromInitialStock(24, 130_000)).toBe(260_000);
+  });
+  it("expenseFromInitialStock: tanpa harga/slop → 0", () => {
+    expect(expenseFromInitialStock(12, 0)).toBe(0);
   });
 });
 

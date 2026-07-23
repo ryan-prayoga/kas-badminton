@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
+import { useMemo, useState, useTransition, type ReactElement } from "react";
 import { useRouter } from "next/navigation";
 import { Loader2, Plus } from "lucide-react";
 import { toast } from "sonner";
@@ -46,10 +46,13 @@ export function RecordGameSheet({
   kokTypes,
   players,
   defaultPrice,
+  trigger,
 }: {
   kokTypes: KokType[];
   players: PlayerRow[];
   defaultPrice: number;
+  /** Custom trigger (mis. FAB bulat di nav). Default: tombol full-width. */
+  trigger?: ReactElement;
 }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
@@ -133,11 +136,15 @@ export function RecordGameSheet({
     });
   };
 
+  const defaultTrigger = (
+    <Button className="w-full gap-1.5 rounded-xl">
+      <Plus className="size-4" /> Catat main
+    </Button>
+  );
+
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetTrigger render={<Button className="w-full gap-1.5 rounded-xl" />}>
-        <Plus className="size-4" /> Catat main
-      </SheetTrigger>
+      <SheetTrigger render={trigger ?? defaultTrigger} />
       <SheetContent
         side="bottom"
         className="mx-auto max-h-[92dvh] max-w-lg overflow-y-auto rounded-t-[1.75rem] border-line pb-[max(1rem,env(safe-area-inset-bottom))]"

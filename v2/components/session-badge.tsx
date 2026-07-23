@@ -13,6 +13,8 @@ export function SessionBadge({ role, name }: { role: "admin" | "operator" | null
   const doLogout = () =>
     startTransition(async () => {
       await logout();
+      // Langsung ke halaman publik, bukan lockscreen PIN
+      router.push("/");
       router.refresh();
     });
 

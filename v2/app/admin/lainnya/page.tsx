@@ -3,11 +3,7 @@ import { getData } from "@/lib/data";
 import { listOperators } from "@/lib/repo/operators";
 import { AppFrame } from "@/components/kok/app-frame";
 import { SessionBadge } from "@/components/session-badge";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { KokTypesPanel } from "@/components/admin/kok-types-panel";
-import { OperatorsPanel } from "@/components/admin/operators-panel";
-import { SettingsPanel } from "@/components/admin/settings-panel";
-import { PlayersPanel } from "@/components/admin/players-panel";
+import { LainnyaMenu } from "@/components/admin/lainnya-menu";
 
 export const dynamic = "force-dynamic";
 
@@ -21,42 +17,19 @@ export default async function LainnyaPage() {
       eyebrow="Kas · Admin"
       right={<SessionBadge role={data.me.role} name={data.me.name} />}
     >
-      <Tabs defaultValue="kok">
-        <TabsList className="flex h-auto w-full items-center gap-1 rounded-full border border-line bg-surface/85 p-1.5 shadow-card">
-          {(
-            [
-              ["kok", "Kok"],
-              ["pemain", "Pemain"],
-              ["delegasi", "Delegasi"],
-              ["setelan", "Setelan"],
-            ] as const
-          ).map(([value, label]) => (
-            <TabsTrigger
-              key={value}
-              value={value}
-              className="flex-1 rounded-full border-0 px-2 py-2 text-sm font-semibold text-ink-soft shadow-none transition data-active:bg-court data-active:text-white data-active:shadow-court"
-            >
-              {label}
-            </TabsTrigger>
-          ))}
-        </TabsList>
-
-        <TabsContent value="kok" className="mt-4">
-          <KokTypesPanel kokTypes={data.kokTypes} />
-        </TabsContent>
-        <TabsContent value="pemain" className="mt-4">
-          <PlayersPanel players={data.players} />
-        </TabsContent>
-        <TabsContent value="delegasi" className="mt-4">
-          <OperatorsPanel operators={operators} />
-        </TabsContent>
-        <TabsContent value="setelan" className="mt-4">
-          <SettingsPanel
-            defaultPrice={data.settings.defaultPricePerPerson}
-            merchantQris={data.settings.merchantQris ?? ""}
-          />
-        </TabsContent>
-      </Tabs>
+      <div className="flex flex-col gap-3">
+        <div className="px-0.5">
+          <h2 className="font-display text-base font-bold tracking-tight text-ink">Lainnya</h2>
+          <p className="mt-0.5 text-xs text-ink-soft">Kelola stok, pemain, delegasi, dan setelan.</p>
+        </div>
+        <LainnyaMenu
+          kokTypes={data.kokTypes}
+          players={data.players}
+          operators={operators}
+          defaultPrice={data.settings.defaultPricePerPerson}
+          merchantQris={data.settings.merchantQris ?? ""}
+        />
+      </div>
     </AppFrame>
   );
 }

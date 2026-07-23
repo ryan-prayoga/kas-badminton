@@ -59,3 +59,17 @@ export function stockDiffError(
   }
   return null;
 }
+
+/** Jumlah slop untuk stok pcs (ceil, min 1 kalau stock > 0). 1 slop = 12 kok. */
+export function slopsFromStock(stock: number): number {
+  const s = Number(stock) || 0;
+  if (!(s > 0)) return 0;
+  return Math.max(1, Math.ceil(s / 12));
+}
+
+/** Kas keluar dari stok awal (pcs) + harga/slop. */
+export function expenseFromInitialStock(stock: number, pricePerSlop: number): number {
+  const p = Math.round(Number(pricePerSlop) || 0);
+  if (!(p > 0)) return 0;
+  return slopsFromStock(stock) * p;
+}

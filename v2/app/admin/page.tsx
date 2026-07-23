@@ -3,7 +3,6 @@ import { AppFrame } from "@/components/kok/app-frame";
 import { HistoryView } from "@/components/kok/history-view";
 import { buildPhotoMap } from "@/components/kok/avatar";
 import { Lockscreen } from "@/components/lockscreen";
-import { RecordGameSheet } from "@/components/record-game-sheet";
 import { SessionBadge } from "@/components/session-badge";
 
 export const dynamic = "force-dynamic";
@@ -19,22 +18,14 @@ export default async function AdminPage() {
       eyebrow={isAdmin ? "Kas · Admin" : `Operator · ${data.me.name}`}
       right={<SessionBadge role={data.me.role} name={data.me.name} />}
     >
-      <div className="flex flex-col gap-4">
-        <RecordGameSheet
-          kokTypes={data.kokTypes}
-          players={data.players}
-          defaultPrice={data.settings.defaultPricePerPerson}
-        />
-
-        <HistoryView
-          games={data.games}
-          photoMap={buildPhotoMap(data.players)}
-          editable
-          kokTypes={data.kokTypes}
-          players={data.players}
-          defaultPrice={data.settings.defaultPricePerPerson}
-        />
-      </div>
+      <HistoryView
+        games={data.games}
+        photoMap={buildPhotoMap(data.players)}
+        editable
+        kokTypes={data.kokTypes}
+        players={data.players}
+        defaultPrice={data.settings.defaultPricePerPerson}
+      />
     </AppFrame>
   );
 }

@@ -3,7 +3,7 @@
 import { prisma } from "@/lib/db";
 import { DomainError } from "@/lib/domain/errors";
 import { normalizeNameType } from "@/lib/domain/game";
-import { parseStock } from "@/lib/domain/stock";
+import { expenseFromInitialStock, parseStock, slopsFromStock } from "@/lib/domain/stock";
 import type { KokType } from "@/lib/domain/types";
 import { uid } from "@/lib/domain/util";
 import { rowToKokType } from "./mappers";
@@ -36,8 +36,9 @@ export async function createKokType(input: {
   const id = uid();
 
   // Stok awal + harga slop → catat pengeluaran (kas keluar), biar "beli" konsisten.
-  // 1 slop = 12 kok; stok non-kelipatan dihitung ceil slop.
-  const initialSlops = stock > 0 && pricePerSlop > 0 ? Math.max(1, Math.ceil(stock / 12)) : 0;
+  // Contoh: stok 12 + harga/slop 130_000 → 1 slop → kas −130_000.
+  const initialSlops = slopsFromStock(stock);
+  const amount = expenseFromInitialStock(stock, pricePerSlop);
 
   const row = await prisma.$transaction(async (tx) => {
     const created = await tx.kok_types.create({
@@ -52,14 +53,14 @@ export async function createKokType(input: {
         updated_at: now,
       },
     });
-    if (initialSlops > 0) {
+    if (amount > 0 && initialSlops > 0) {
       await tx.expenses.create({
         data: {
           id: uid(),
           type_id: id,
           type_name: name,
           slops: initialSlops,
-          amount: initialSlops * pricePerSlop,
+          amount,
         },
       });
     }
