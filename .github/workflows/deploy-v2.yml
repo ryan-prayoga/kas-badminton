@@ -62,6 +62,12 @@ jobs:
             cd v2
             printf 'DATABASE_URL=%s\nPORT=8200\n' "$DATABASE_URL" > .env
 
+            # data/ di-bind-mount ke /app/data, container jalan sbg uid 1001 (nextjs) bukan root.
+            # kalo dir baru dibuat (mkdir) atau kepeleset ke root:root, container gak bisa nulis
+            # admin-pin.txt -> crash EACCES tiap request /admin. paksa ownership tiap deploy.
+            mkdir -p data
+            sudo chown -R 1001:65533 data
+
             # bersihin sisa container lama (mis. dari attempt yang gagal/crash-loop)
             docker compose down || true
 
