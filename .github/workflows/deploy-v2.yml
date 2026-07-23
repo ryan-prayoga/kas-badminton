@@ -1,0 +1,79 @@
+name: Deploy kas-badminton v2 (cutover)
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "v2/**"
+      - ".github/workflows/deploy-v2.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: kas-badminton-production-deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy v2 to server (docker) & retire v1 (pm2)
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: ubuntu
+          key: ${{ secrets.SERVER_DEPLOY_KEY }}
+          port: 22
+          script: |
+            set -e
+            export NVM_DIR="$HOME/.nvm"
+            [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"
+            export PATH="/usr/bin:$HOME/.nvm/versions/node/v24.14.0/bin:$PATH"
+
+            V1_DIR="/home/ubuntu/projects/kok-badminton"
+            PROJECT_DIR="/home/ubuntu/projects/kok-badminton-v2"
+            REPO_URL="https://github.com/ryan-prayoga/kas-badminton.git"
+            BRANCH="${{ github.ref_name }}"
+
+            # v2 pake DB prod yang sama kayak v1 - ambil DATABASE_URL dari .env v1, jangan simpan ulang di tempat lain
+            if [ ! -f "$V1_DIR/.env" ]; then
+              echo "$V1_DIR/.env gak ketemu, gak bisa ambil DATABASE_URL" >&2
+              exit 1
+            fi
+            DATABASE_URL="$(grep -E '^DATABASE_URL=' "$V1_DIR/.env" | head -1 | cut -d '=' -f2- | tr -d '"')"
+            if [ -z "$DATABASE_URL" ]; then
+              echo "DATABASE_URL kosong di $V1_DIR/.env" >&2
+              exit 1
+            fi
+
+            mkdir -p "$PROJECT_DIR"
+            cd "$PROJECT_DIR"
+
+            if [ ! -d ".git" ]; then
+              git init -b "$BRANCH"
+              git remote add origin "$REPO_URL"
+            fi
+
+            git fetch origin
+            git checkout -f "$BRANCH" 2>/dev/null || git checkout -b "$BRANCH" "origin/$BRANCH"
+            git reset --hard "origin/$BRANCH"
+            git clean -fd -e v2/data -e v2/.env
+
+            cd v2
+            printf 'DATABASE_URL=%s\nPORT=8200\n' "$DATABASE_URL" > .env
+
+            docker compose build
+
+            # pertama kali: tandai skema existing (dari v1) sebagai udah "applied" biar
+            # migrate deploy gak nabrak CREATE TABLE ke tabel yang udah ada isinya.
+            # --entrypoint "" skip docker-entrypoint.sh (yang otomatis migrate deploy + start server).
+            # aman diulang - kalau udah pernah di-resolve, prisma exit non-zero, ditelan || true.
+            docker compose run --rm --entrypoint "" app \
+              sh -c "node node_modules/prisma/build/index.js migrate resolve --applied 0_init || npx prisma migrate resolve --applied 0_init" || true
+
+            # matiin v1 biar port 8200 kosong buat v2 ambil alih
+            pm2 stop kok-badminton || true
+
+            docker compose down
+            docker compose up -d
+
+            echo "Deploy v2 complete: $(git rev-parse --short HEAD) ($(date))"
