@@ -65,6 +65,9 @@ jobs:
             # bersihin sisa container lama (mis. dari attempt yang gagal/crash-loop)
             docker compose down || true
 
+            # proses test manual lama yang mungkin masih nyangkut di port validasi
+            pm2 stop kok-badminton-v2 || true
+
             docker compose build
 
             # tandai skema existing (dari v1) sebagai udah "applied" biar migrate deploy
@@ -74,7 +77,7 @@ jobs:
               npx prisma migrate resolve --applied 0_init || true
 
             # --- validasi dulu di port sementara (8201), JANGAN sentuh v1 sebelum ini lolos ---
-            export HOST_PORT=8201
+            export PORT=8201
             docker compose up -d
             ok=0
             for i in $(seq 1 15); do
@@ -93,7 +96,7 @@ jobs:
             fi
 
             # --- lolos validasi, baru cutover: matiin v1, naikin v2 di port 8200 ---
-            unset HOST_PORT
+            export PORT=8200
             pm2 stop kok-badminton || true
             docker compose up -d
 

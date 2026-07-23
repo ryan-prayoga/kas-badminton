@@ -2,11 +2,13 @@ services:
   app:
     build: .
     restart: unless-stopped
-    ports:
-      - "127.0.0.1:${HOST_PORT:-8200}:8200"
+    # host networking - DATABASE_URL prod nunjuk ke localhost/127.0.0.1 (postgres di host
+    # yang sama kayak v1), container perlu network host biar "localhost" nunjuk ke host asli
+    network_mode: host
     environment:
       - DATABASE_URL=${DATABASE_URL}
       - ADMIN_PIN=${ADMIN_PIN:-}
       - NODE_ENV=production
+      - PORT=${PORT:-8200}
     volumes:
       - ./data:/app/data
