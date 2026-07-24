@@ -9,7 +9,7 @@ import {
   type ReactNode,
 } from "react";
 import { AlertTriangle } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 import {
   Dialog,
   DialogContent,
@@ -69,7 +69,10 @@ export function ConfirmProvider({ children }: { children: ReactNode }) {
           if (!next) finish(false);
         }}
       >
-        <DialogContent showCloseButton={false} className="max-w-[360px] gap-0 p-0 sm:max-w-[360px]">
+        <DialogContent
+          showCloseButton={false}
+          className="max-w-[340px] gap-0 rounded-xl2 border border-line bg-surface p-0 shadow-pop ring-0 sm:max-w-[340px]"
+        >
           <DialogHeader className="gap-3 p-4 pb-2">
             <div className="flex items-start gap-2.5">
               <span
@@ -82,7 +85,7 @@ export function ConfirmProvider({ children }: { children: ReactNode }) {
                 <AlertTriangle className="size-4" />
               </span>
               <div className="min-w-0 space-y-1">
-                <DialogTitle className="text-base font-bold tracking-tight">
+                <DialogTitle className="font-display text-base font-bold tracking-tight text-ink">
                   {opts.title ?? "Konfirmasi"}
                 </DialogTitle>
                 <DialogDescription className="text-sm leading-relaxed text-ink-soft">
@@ -91,23 +94,24 @@ export function ConfirmProvider({ children }: { children: ReactNode }) {
               </div>
             </div>
           </DialogHeader>
-          <DialogFooter className="flex-row gap-2 border-t-0 bg-transparent p-4 sm:justify-stretch">
-            <Button
+          <DialogFooter className="mx-0 mb-0 flex-row gap-2 border-t-0 bg-transparent p-4 pt-2 sm:justify-stretch">
+            <button
               type="button"
-              variant="outline"
-              className="h-10 flex-1 rounded-xl"
               onClick={() => finish(false)}
+              className="inline-flex h-10 flex-1 items-center justify-center rounded-xl border border-line bg-surface text-sm font-semibold text-ink shadow-card transition active:scale-95"
             >
               {opts.cancelLabel ?? "Batal"}
-            </Button>
-            <Button
+            </button>
+            <button
               type="button"
-              variant={destructive ? "destructive" : "default"}
-              className="h-10 flex-1 rounded-xl font-bold"
               onClick={() => finish(true)}
+              className={cn(
+                "inline-flex h-10 flex-1 items-center justify-center rounded-xl text-sm font-bold text-white transition active:scale-95",
+                destructive ? "bg-danger shadow-card" : "bg-court shadow-court",
+              )}
             >
               {opts.confirmLabel ?? "Ya, lanjut"}
-            </Button>
+            </button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
