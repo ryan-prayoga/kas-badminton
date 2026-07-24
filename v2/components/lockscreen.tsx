@@ -96,14 +96,7 @@ export function Lockscreen() {
   const keys = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "", "0", "back"] as const;
 
   return (
-    <div className="relative mx-auto flex min-h-dvh max-w-md flex-col items-center justify-center gap-5 px-6 pb-[calc(28px+env(safe-area-inset-bottom))] pt-[calc(28px+env(safe-area-inset-top))] text-center">
-      <Link
-        href="/"
-        className="absolute left-4 top-[calc(16px+env(safe-area-inset-top))] inline-flex items-center gap-1.5 rounded-full border border-line bg-surface px-3 py-2 text-sm font-semibold text-ink-soft shadow-card transition hover:text-court active:scale-95"
-      >
-        <KIcon name="back" className="size-4" /> Kembali
-      </Link>
-
+    <div className="mx-auto flex min-h-dvh max-w-md flex-col items-center justify-center gap-5 px-6 pb-[calc(28px+env(safe-area-inset-bottom))] pt-[calc(28px+env(safe-area-inset-top))] text-center">
       <span className="grid size-14 place-items-center rounded-2xl bg-court/15 text-court ring-1 ring-court/30">
         <KIcon name="lock" className="size-7" />
       </span>
