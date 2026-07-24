@@ -117,7 +117,7 @@ const TONE_BORDER: Record<ShareCardTone, string> = {
 };
 
 const FONT_SANS = 'var(--font-hanken), "Hanken Grotesk", ui-sans-serif, system-ui, sans-serif';
-const FONT_DISPLAY = 'var(--font-archivo), Archivo, ui-sans-serif, system-ui, sans-serif';
+const FONT_DISPLAY = "var(--font-archivo), Archivo, ui-sans-serif, system-ui, sans-serif";
 const FONT_MONO = 'var(--font-jbmono), "JetBrains Mono", ui-monospace, monospace';
 const SHADOW_CARD = "0 1px 2px rgba(15,27,45,0.04), 0 8px 24px -14px rgba(15,27,45,0.18)";
 
@@ -272,6 +272,70 @@ function chipRow(chips: ShareChip[], color: string, fontSize = "11px"): HTMLElem
   return row;
 }
 
+/** Diameter avatar (px CSS) — dipakai buat crop foto sekalian render. */
+const AVATAR_HERO = 64;
+const AVATAR_ROW = 36;
+
+/**
+ * Potong foto jadi lingkaran persegi lewat canvas.
+ *
+ * Ini kunci biar fotonya gak meluber: hasilnya sudah 1:1 dan sudah bulat,
+ * jadi kartu share cukup naruh gambarnya apa adanya tanpa object-fit atau
+ * background-size — dua properti yang gak konsisten di dalam foreignObject.
+ * Balikin null kalau fotonya gagal dimuat, biar jatuh ke avatar inisial.
+ */
+async function circlePhoto(src: string, size: number): Promise<string | null> {
+  try {
+    const img = new Image();
+    img.crossOrigin = "anonymous";
+    await new Promise<void>((res, rej) => {
+      img.onload = () => res();
+      img.onerror = () => rej(new Error("foto gagal dimuat"));
+      img.src = src;
+    });
+
+    const w = img.naturalWidth;
+    const h = img.naturalHeight;
+    if (!w || !h) return null;
+
+    // 3x biar tetap tajam waktu kartu dirender pixelRatio 2
+    const px = size * 3;
+    const canvas = document.createElement("canvas");
+    canvas.width = px;
+    canvas.height = px;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return null;
+
+    ctx.beginPath();
+    ctx.arc(px / 2, px / 2, px / 2, 0, Math.PI * 2);
+    ctx.closePath();
+    ctx.clip();
+
+    // cover: sisi terpendek yang nutup penuh, sisanya kepotong rata tengah
+    const scale = Math.max(px / w, px / h);
+    const dw = w * scale;
+    const dh = h * scale;
+    ctx.drawImage(img, (px - dw) / 2, (px - dh) / 2, dw, dh);
+
+    return canvas.toDataURL("image/png");
+  } catch {
+    return null;
+  }
+}
+
+/** Ganti semua foto di blocks dengan versi bulat siap tempel. */
+async function preparePhotos(blocks: ShareCardBlock[]): Promise<ShareCardBlock[]> {
+  return Promise.all(
+    blocks.map(async (b) => {
+      if (b.kind === "hero" && b.photo)
+        return { ...b, photo: await circlePhoto(b.photo, AVATAR_HERO) };
+      if (b.kind === "person" && b.photo)
+        return { ...b, photo: await circlePhoto(b.photo, AVATAR_ROW) };
+      return b;
+    }),
+  );
+}
+
 /** Avatar bulat — pakai foto kalau ada, fallback inisial (persis komponen Avatar web). */
 function avatarNode(opts: {
   name: string;
@@ -283,27 +347,23 @@ function avatarNode(opts: {
 }): HTMLElement {
   const { name, photo, initial, size, tone } = opts;
   if (photo) {
-    // Sengaja pakai div + background-image, bukan <img> + object-fit:
-    // sebagian engine (WebKit) gak nerapin object-fit di dalam foreignObject,
-    // jadi fotonya kerender seukuran aslinya dan meluber keluar avatar.
-    // `overflow: hidden` dipasang sebagai jaring pengaman terakhir.
-    const box = el("div", {
+    // Foto di sini sudah dipotong bulat & persegi 1:1 sama `circlePhoto()`,
+    // jadi kartunya gak butuh object-fit / background-size sama sekali —
+    // dua-duanya diabaikan sebagian engine (WebKit) waktu html-to-image
+    // rasterisasi lewat foreignObject, dan fotonya kerender seukuran aslinya.
+    // Ukuran dikunci lewat atribut width/height sekalian CSS-nya.
+    const img = el("img", {
       width: `${size}px`,
       height: `${size}px`,
-      minWidth: `${size}px`,
-      minHeight: `${size}px`,
       borderRadius: "999px",
-      overflow: "hidden",
       flexShrink: "0",
-      backgroundImage: `url("${photo}")`,
-      backgroundSize: "cover",
-      backgroundPosition: "center",
-      backgroundRepeat: "no-repeat",
-      backgroundColor: C.surface2,
-      boxShadow: `0 0 0 1px ${C.lineStrong}`,
       display: "block",
-    });
-    return box;
+    }) as HTMLImageElement;
+    img.width = size;
+    img.height = size;
+    img.src = photo;
+    img.alt = "";
+    return img;
   }
   const safeTone: ShareCardTone = tone === "default" || tone === "muted" ? "court" : tone;
   const box = el("div", {
@@ -326,8 +386,7 @@ function avatarNode(opts: {
 
 function buildShareDom(blocks: ShareCardBlock[]): HTMLElement {
   const header = blocks.find((b) => b.kind === "header") as
-    | Extract<ShareCardBlock, { kind: "header" }>
-    | undefined;
+    Extract<ShareCardBlock, { kind: "header" }> | undefined;
   const body = blocks.filter((b) => b.kind !== "header");
   const hasFooter = body.some((b) => b.kind === "footer");
 
@@ -511,7 +570,7 @@ function buildShareDom(blocks: ShareCardBlock[]): HTMLElement {
       });
 
       box.appendChild(
-        avatarNode({ name: b.name, photo: b.photo, size: 64, tone, fontSize: 26 }),
+        avatarNode({ name: b.name, photo: b.photo, size: AVATAR_HERO, tone, fontSize: 26 }),
       );
 
       const mid = el("div", { minWidth: "0", flex: "1" });
@@ -739,7 +798,7 @@ function buildShareDom(blocks: ShareCardBlock[]): HTMLElement {
           name: b.name,
           photo: b.photo,
           initial: b.initial,
-          size: 36,
+          size: AVATAR_ROW,
           tone,
           fontSize: 15,
         }),
@@ -887,7 +946,7 @@ function footerNode(text?: string): HTMLElement {
 export async function renderShareCard(blocks: ShareCardBlock[]): Promise<Blob> {
   if (typeof document === "undefined") throw new Error("Hanya di browser");
 
-  const card = buildShareDom(blocks);
+  const card = buildShareDom(await preparePhotos(blocks));
   // Wrapper off-screen: card sendiri tetap `position: static` biar hasil
   // snapshot-nya gak kegeser (lihat catatan di buildShareDom).
   const host = document.createElement("div");
@@ -898,18 +957,14 @@ export async function renderShareCard(blocks: ShareCardBlock[]): Promise<Blob> {
   try {
     // pastikan font + foto ter-decode sebelum snapshot
     if (document.fonts?.ready) await document.fonts.ready;
-    const photoUrls = [...card.querySelectorAll<HTMLElement>("[style*='background-image']")]
-      .map((n) => /url\("?(.*?)"?\)/.exec(n.style.backgroundImage)?.[1])
-      .filter((u): u is string => Boolean(u));
     await Promise.all(
-      photoUrls.map(
-        (src) =>
-          new Promise<void>((r) => {
-            const probe = new Image();
-            probe.onload = () => r();
-            probe.onerror = () => r();
-            probe.src = src;
-          }),
+      [...card.querySelectorAll("img")].map((img) =>
+        img.complete
+          ? Promise.resolve()
+          : new Promise<void>((r) => {
+              img.onload = () => r();
+              img.onerror = () => r();
+            }),
       ),
     );
     // double rAF biar layout stabil
