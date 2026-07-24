@@ -7,5 +7,5 @@ data/
 
 # Local tooling / agent sessions
 .omo/
-.opencode/
+.opencode
 .playwright-mcp/
