@@ -5,15 +5,11 @@ import { toast } from "sonner";
 import type { EnrichedGame, KokType, PlayerRow } from "@/lib/domain/types";
 import { fmt } from "@/lib/format";
 import { cn } from "@/lib/utils";
-import {
-  addKokAction,
-  deleteGameAction,
-  markAllPaidAction,
-  setPaidAction,
-} from "@/server/actions/games";
+import { deleteGameAction, markAllPaidAction, setPaidAction } from "@/server/actions/games";
 import { useConfirm } from "@/components/confirm-dialog";
 import type { PhotoMap } from "@/components/kok/avatar";
 import { KIcon } from "@/components/kok/icons";
+import { AddKokDialog } from "@/components/kok/add-kok-dialog";
 import { EditGameSheet } from "@/components/kok/edit-game-sheet";
 
 function kokSummaryLabel(g: EnrichedGame): string {
@@ -143,20 +139,6 @@ export function GameCard({
     });
   };
 
-  const addKok = () => {
-    // Kok baru ikut jenis + harga snapshot kok terakhir di game ini.
-    const last = game.koks[game.koks.length - 1];
-    start(async () => {
-      const res = await addKokAction(game.id, {
-        typeId: last?.typeId ?? null,
-        typeName: last?.typeName ?? null,
-        pricePerPerson: last?.pricePerPerson,
-      });
-      if (res.ok) toast.success("Kok ditambah");
-      else toast.error(res.error);
-    });
-  };
-
   const remove = async () => {
     const ok = await confirm({
       title: "Hapus game?",
@@ -243,20 +225,15 @@ export function GameCard({
                 type="button"
                 onClick={markAll}
                 disabled={pending}
-                className="inline-flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-xs font-semibold text-court transition hover:bg-court/8"
+                aria-label="Centang semua"
+                className="grid size-8 place-items-center rounded-lg text-court transition hover:bg-court/10"
               >
-                <KIcon name="check" className="size-3.5" /> Lunasin semua
+                <KIcon name="checkAll" className="size-4" />
               </button>
             )}
-            <button
-              type="button"
-              onClick={addKok}
-              disabled={pending}
-              aria-label="Tambah kok"
-              className="grid size-8 place-items-center rounded-lg text-ink-faint transition hover:bg-court/10 hover:text-court"
-            >
-              <KIcon name="plus" className="size-4" />
-            </button>
+            {kokTypes && (
+              <AddKokDialog game={game} kokTypes={kokTypes} defaultPrice={defaultPrice ?? 0} />
+            )}
             {kokTypes && players && defaultPrice !== undefined && (
               <EditGameSheet
                 game={game}

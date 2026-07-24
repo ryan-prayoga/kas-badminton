@@ -9,6 +9,7 @@ import calendar from "@iconify-icons/mdi/calendar-blank-outline";
 import chevronDown from "@iconify-icons/mdi/chevron-down";
 import checkCircle from "@iconify-icons/mdi/check-circle";
 import check from "@iconify-icons/mdi/check";
+import checkAll from "@iconify-icons/mdi/check-all";
 import clock from "@iconify-icons/mdi/clock-outline";
 import refresh from "@iconify-icons/mdi/refresh";
 import shield from "@iconify-icons/mdi/shield-account-outline";
@@ -50,6 +51,7 @@ export const ICONS = {
   chevronDown,
   checkCircle,
   check,
+  checkAll,
   clock,
   refresh,
   shield,
