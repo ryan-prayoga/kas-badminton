@@ -4,3 +4,8 @@ data/
 .env.*
 *.log
 .DS_Store
+
+# Local tooling / agent sessions
+.omo/
+.opencode/
+.playwright-mcp/
