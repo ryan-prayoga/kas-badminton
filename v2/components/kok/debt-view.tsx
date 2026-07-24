@@ -39,17 +39,45 @@ function groupItems(items: DebtItem[]): DateGroup[] {
 }
 
 function debtShareText(d: DebtEntry): string {
-  const lines = [`Tagihan kok badminton — ${d.name}`, `Sisa: ${fmt(d.total)}`];
-  if (d.carry > 0) lines.push(`(sudah dicicil ${fmt(d.carry)} dari ${fmt(d.owedGross)})`);
-  for (const g of groupItems(d.items)) lines.push(`• ${fmtDate(g.date)} — ${fmt(g.total)} (${g.count} main)`);
+  const grouped = groupItems(d.items);
+  const totalKoks = d.items.reduce((s, it) => s + (Number(it.kokCount) || 0), 0);
+  const lines = [
+    `🏸 Tagihan Kok Badminton`,
+    `👤 ${d.name}`,
+    "",
+    `⏳ Sisa tagihan: ${fmt(d.total)}`,
+  ];
+  if (d.carry > 0) {
+    lines.push(`✅ Sudah dicicil: ${fmt(d.carry)} / ${fmt(d.owedGross)}`);
+  }
+  lines.push(
+    `📝 ${d.items.length} main · ${totalKoks} kok belum lunas`,
+    "",
+    "—— Rincian ——",
+  );
+  for (const g of grouped) {
+    const rel = relativeDay(g.date);
+    lines.push(
+      `• ${fmtDate(g.date)}${rel ? ` (${rel})` : ""}`,
+      `  ${g.count} main · ${g.koks} kok · ${fmt(g.total)}`,
+    );
+  }
+  lines.push("", "— kok.ryanprayoga.dev —");
   return lines.join("\n");
 }
 
 function debtShareBlocks(d: DebtEntry): ShareCardBlock[] {
   const grouped = groupItems(d.items);
+  const totalKoks = d.items.reduce((s, it) => s + (Number(it.kokCount) || 0), 0);
   const blocks: ShareCardBlock[] = [
     { kind: "header", title: d.name, subtitle: "Tagihan belum lunas" },
-    { kind: "kv", label: "Sisa tagihan", value: fmt(d.total), tone: "owe" },
+    {
+      kind: "highlight",
+      label: "Sisa tagihan",
+      value: fmt(d.total),
+      tone: "owe",
+      hint: `${d.items.length} main · ${totalKoks} kok`,
+    },
   ];
   if (d.carry > 0) {
     blocks.push({
@@ -60,32 +88,45 @@ function debtShareBlocks(d: DebtEntry): ShareCardBlock[] {
     });
   }
   blocks.push({ kind: "section", title: "Rincian main" });
-  for (const g of grouped) {
+  grouped.forEach((g, i) => {
+    const rel = relativeDay(g.date);
     blocks.push({
       kind: "person",
-      rank: 0,
+      rank: i + 1,
       name: fmtDate(g.date),
-      detail: `${g.count} main · ${g.koks} kok`,
+      detail: `${g.count} main · ${g.koks} kok${rel ? ` · ${rel}` : ""}`,
       right: fmt(g.total),
       rightTone: "owe",
+      initial: String(Number(g.date.slice(8, 10)) || i + 1),
     });
-  }
-  // Fix rank display: use index 1..n
-  let i = 0;
-  for (const b of blocks) {
-    if (b.kind === "person") {
-      i += 1;
-      b.rank = i;
-    }
-  }
-  blocks.push({ kind: "footer", text: "kok.ryanprayoga.dev" });
+  });
+  blocks.push({ kind: "footer", text: "kok.ryanprayoga.dev · patungan rapi" });
   return blocks;
 }
 
 function rekapShareText(debts: DebtEntry[], total: number): string {
-  if (!debts.length) return "Semua sudah lunas 🎉";
-  const lines = ["Rekap tagihan kok badminton", `Total belum bayar: ${fmt(total)}`, ""];
-  for (const d of debts) lines.push(`• ${d.name}: ${fmt(d.total)}`);
+  if (!debts.length) {
+    return ["🏸 Rekap tagihan Kok Badminton", "", "✅ Semua sudah lunas 🎉", "", "— kok.ryanprayoga.dev —"].join(
+      "\n",
+    );
+  }
+  const lines = [
+    "🏸 Rekap tagihan Kok Badminton",
+    "⏳ Status: belum bayar",
+    "",
+    `💰 Total belum bayar: ${fmt(total)}`,
+    `👥 ${debts.length} orang`,
+    "",
+    "—— Rincian ——",
+  ];
+  debts.forEach((d, i) => {
+    const koks = d.items.reduce((s, it) => s + (Number(it.kokCount) || 0), 0);
+    lines.push(
+      `${i + 1}. ${d.name} — ${fmt(d.total)}`,
+      `   ${d.items.length} main · ${koks} kok`,
+    );
+  });
+  lines.push("", "— kok.ryanprayoga.dev —");
   return lines.join("\n");
 }
 
@@ -93,10 +134,11 @@ function rekapShareBlocks(debts: DebtEntry[], total: number): ShareCardBlock[] {
   const blocks: ShareCardBlock[] = [
     { kind: "header", title: "Rekap tagihan", subtitle: "Belum bayar" },
     {
-      kind: "kv",
+      kind: "highlight",
       label: "Total belum bayar",
       value: fmt(total),
       tone: total > 0 ? "owe" : "paid",
+      hint: debts.length ? `${debts.length} orang masih nunggak` : "Semua lunas",
     },
     { kind: "section", title: `Orang (${debts.length})` },
   ];
@@ -112,10 +154,11 @@ function rekapShareBlocks(debts: DebtEntry[], total: number): ShareCardBlock[] {
         detail: `${d.items.length} main · ${koks} kok`,
         right: fmt(d.total),
         rightTone: "owe",
+        initial: d.name.slice(0, 1),
       });
     });
   }
-  blocks.push({ kind: "footer", text: "kok.ryanprayoga.dev" });
+  blocks.push({ kind: "footer", text: "kok.ryanprayoga.dev · patungan rapi" });
   return blocks;
 }
 
