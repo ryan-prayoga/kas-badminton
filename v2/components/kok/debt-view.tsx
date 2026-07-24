@@ -42,27 +42,27 @@ function debtShareText(d: DebtEntry): string {
   const grouped = groupItems(d.items);
   const totalKoks = d.items.reduce((s, it) => s + (Number(it.kokCount) || 0), 0);
   const lines = [
-    `🏸 Tagihan Kok Badminton`,
-    `👤 ${d.name}`,
+    `*Kok Badminton · Tagihan*`,
+    `Untuk: *${d.name}*`,
     "",
-    `⏳ Sisa tagihan: ${fmt(d.total)}`,
+    `*Sisa tagihan: ${fmt(d.total)}*`,
   ];
   if (d.carry > 0) {
-    lines.push(`✅ Sudah dicicil: ${fmt(d.carry)} / ${fmt(d.owedGross)}`);
+    lines.push(`Sudah dicicil: ${fmt(d.carry)} dari ${fmt(d.owedGross)}`);
   }
   lines.push(
-    `📝 ${d.items.length} main · ${totalKoks} kok belum lunas`,
+    `${d.items.length} main · ${totalKoks} kok belum lunas`,
     "",
-    "—— Rincian ——",
+    "*Rincian main*",
   );
   for (const g of grouped) {
     const rel = relativeDay(g.date);
     lines.push(
-      `• ${fmtDate(g.date)}${rel ? ` (${rel})` : ""}`,
+      `• *${fmtDate(g.date)}*${rel ? ` · ${rel}` : ""}`,
       `  ${g.count} main · ${g.koks} kok · ${fmt(g.total)}`,
     );
   }
-  lines.push("", "— kok.ryanprayoga.dev —");
+  lines.push("", "Mohon dilunasi ya 🙏", "", "_kok.ryanprayoga.dev_");
   return lines.join("\n");
 }
 
@@ -76,7 +76,7 @@ function debtShareBlocks(d: DebtEntry): ShareCardBlock[] {
       label: "Sisa tagihan",
       value: fmt(d.total),
       tone: "owe",
-      hint: `${d.items.length} main · ${totalKoks} kok`,
+      hint: `${d.items.length} main · ${totalKoks} kok belum lunas`,
     },
   ];
   if (d.carry > 0) {
@@ -100,33 +100,37 @@ function debtShareBlocks(d: DebtEntry): ShareCardBlock[] {
       initial: String(Number(g.date.slice(8, 10)) || i + 1),
     });
   });
-  blocks.push({ kind: "footer", text: "kok.ryanprayoga.dev · patungan rapi" });
+  blocks.push({ kind: "footer", text: "Kok Badminton · dibuat buat patungan yang rapi" });
   return blocks;
 }
 
 function rekapShareText(debts: DebtEntry[], total: number): string {
   if (!debts.length) {
-    return ["🏸 Rekap tagihan Kok Badminton", "", "✅ Semua sudah lunas 🎉", "", "— kok.ryanprayoga.dev —"].join(
-      "\n",
-    );
+    return [
+      "*Kok Badminton · Rekap tagihan*",
+      "",
+      "Semua sudah lunas ✅",
+      "",
+      "_kok.ryanprayoga.dev_",
+    ].join("\n");
   }
   const lines = [
-    "🏸 Rekap tagihan Kok Badminton",
-    "⏳ Status: belum bayar",
+    "*Kok Badminton · Rekap tagihan*",
+    "Status: belum bayar",
     "",
-    `💰 Total belum bayar: ${fmt(total)}`,
-    `👥 ${debts.length} orang`,
+    `*Total belum bayar: ${fmt(total)}*`,
+    `${debts.length} orang`,
     "",
-    "—— Rincian ——",
+    "*Rincian*",
   ];
   debts.forEach((d, i) => {
     const koks = d.items.reduce((s, it) => s + (Number(it.kokCount) || 0), 0);
     lines.push(
-      `${i + 1}. ${d.name} — ${fmt(d.total)}`,
+      `${i + 1}. *${d.name}* — ${fmt(d.total)}`,
       `   ${d.items.length} main · ${koks} kok`,
     );
   });
-  lines.push("", "— kok.ryanprayoga.dev —");
+  lines.push("", "Mohon dilunasi ya 🙏", "", "_kok.ryanprayoga.dev_");
   return lines.join("\n");
 }
 
@@ -140,10 +144,10 @@ function rekapShareBlocks(debts: DebtEntry[], total: number): ShareCardBlock[] {
       tone: total > 0 ? "owe" : "paid",
       hint: debts.length ? `${debts.length} orang masih nunggak` : "Semua lunas",
     },
-    { kind: "section", title: `Orang (${debts.length})` },
+    { kind: "section", title: debts.length ? `Orang (${debts.length})` : "Status" },
   ];
   if (!debts.length) {
-    blocks.push({ kind: "kv", label: "Status", value: "Semua lunas 🎉", tone: "paid" });
+    blocks.push({ kind: "kv", label: "Status", value: "Semua lunas", tone: "paid" });
   } else {
     debts.forEach((d, i) => {
       const koks = d.items.reduce((s, it) => s + (Number(it.kokCount) || 0), 0);
@@ -158,7 +162,7 @@ function rekapShareBlocks(debts: DebtEntry[], total: number): ShareCardBlock[] {
       });
     });
   }
-  blocks.push({ kind: "footer", text: "kok.ryanprayoga.dev · patungan rapi" });
+  blocks.push({ kind: "footer", text: "Kok Badminton · dibuat buat patungan yang rapi" });
   return blocks;
 }
 

@@ -48,6 +48,7 @@ interface PlayerStat {
   nunggak: number;
 }
 
+/** Teks share WhatsApp-friendly (*bold*, rapi, mudah dibaca). */
 function buildStatsShareText({
   periodName,
   totalGames,
@@ -58,6 +59,7 @@ function buildStatsShareText({
   showKas,
   players,
   stockLeft,
+  debtPeople,
 }: {
   periodName: string;
   totalGames: number;
@@ -68,42 +70,59 @@ function buildStatsShareText({
   showKas: boolean;
   players: PlayerStat[];
   stockLeft?: number;
+  debtPeople?: number;
 }): string {
   const net = paid - expense;
   const nunggak = players.filter((p) => p.nunggak > 0);
+  const lunas = players.filter((p) => p.nunggak <= 0);
+  const orangNunggak = debtPeople ?? nunggak.length;
+
   const lines: string[] = [
-    "🏸 Statistik Kok Badminton",
-    `📅 Periode: ${periodName}`,
+    "*Kok Badminton · Statistik*",
+    `Periode: ${periodName}`,
     "",
-    "—— Ringkasan ——",
-    `🎮 Total game: ${totalGames}`,
-    `🪶 Total kok: ${totalKok}`,
-    `✅ Masuk (lunas): ${fmt(paid)}`,
-    `⏳ Belum bayar: ${fmt(unpaid)}${nunggak.length ? ` · ${nunggak.length} orang` : ""}`,
+    "*Ringkasan*",
+    `• Total main: ${totalGames} game`,
+    `• Kok terpakai: ${totalKok}`,
+    `• Masuk (lunas): ${fmt(paid)}`,
+    `• Belum bayar: ${fmt(unpaid)}${orangNunggak ? ` (${orangNunggak} orang)` : " — semua lunas"}`,
   ];
 
   if (showKas) {
-    lines.push(`💸 Keluar (beli stok): ${fmt(expense)}`);
-    lines.push(`💰 Saldo bersih: ${fmt(net)}`);
+    lines.push(`• Beli / keluar: ${fmt(expense)}`);
+    lines.push(`• Saldo bersih: ${fmt(net)}`);
   }
   if (stockLeft !== undefined) {
-    lines.push(`📦 Stok sisa: ${stockLeft} kok`);
+    lines.push(`• Stok sisa: ${stockLeft} kok`);
   }
 
-  lines.push("", `—— Pemain (${players.length} orang) ——`);
-  if (players.length === 0) {
-    lines.push("Belum ada yang main.");
-  } else {
-    players.forEach((p, i) => {
-      const status = p.nunggak > 0 ? `nunggak ${fmt(p.nunggak)}` : "✓ Lunas";
+  if (nunggak.length) {
+    lines.push("", `*Belum lunas (${nunggak.length})*`);
+    nunggak.forEach((p, i) => {
       lines.push(
-        `${i + 1}. ${p.name}`,
-        `   ${p.main} main · ${p.kok} kok · keluar ${fmt(p.keluar)} · ${status}`,
+        `${i + 1}. *${p.name}* — ${fmt(p.nunggak)}`,
+        `   ${p.main} main · ${p.kok} kok · total keluar ${fmt(p.keluar)}`,
       );
     });
   }
 
-  lines.push("", "— kok.ryanprayoga.dev —");
+  if (lunas.length) {
+    lines.push("", `*Sudah lunas (${lunas.length})*`);
+    // ringkas: max 12 nama, sisanya digabung
+    const show = lunas.slice(0, 12);
+    show.forEach((p, i) => {
+      lines.push(`${i + 1}. ${p.name} — ${p.main} main · ${p.kok} kok`);
+    });
+    if (lunas.length > 12) {
+      lines.push(`… +${lunas.length - 12} pemain lain`);
+    }
+  }
+
+  if (!players.length) {
+    lines.push("", "_Belum ada yang main di periode ini._");
+  }
+
+  lines.push("", "_kok.ryanprayoga.dev_");
   return lines.join("\n");
 }
 
@@ -117,6 +136,7 @@ function buildStatsShareBlocks({
   showKas,
   players,
   stockLeft,
+  debtPeople,
 }: {
   periodName: string;
   totalGames: number;
@@ -127,32 +147,51 @@ function buildStatsShareBlocks({
   showKas: boolean;
   players: PlayerStat[];
   stockLeft?: number;
+  debtPeople?: number;
 }): ShareCardBlock[] {
   const net = paid - expense;
-  const nunggakCount = players.filter((p) => p.nunggak > 0).length;
+  const nunggakCount = debtPeople ?? players.filter((p) => p.nunggak > 0).length;
 
-  const metricItems: ShareMetric[] = [
-    { label: "Total game", value: String(totalGames), tone: "court" },
-    { label: "Total kok", value: String(totalKok), tone: "court" },
-    { label: "Masuk (lunas)", value: fmt(paid), tone: "paid" },
+  // Urutan mirip grid StatCard di web
+  const metricItems: ShareMetric[] = [];
+  if (showKas) {
+    metricItems.push(
+      {
+        label: "Total kas",
+        value: fmt(net),
+        tone: net >= 0 ? "paid" : "danger",
+        sub: periodName === "Semua waktu" ? "saldo bersih" : `bersih · ${periodName}`,
+      },
+      { label: "Masuk", value: fmt(paid), tone: "paid", sub: "pembayaran lunas" },
+      { label: "Beli / keluar", value: fmt(expense), tone: "danger", sub: "beli stok kok" },
+    );
+  }
+  metricItems.push(
     {
       label: "Belum bayar",
       value: fmt(unpaid),
       tone: unpaid > 0 ? "owe" : "paid",
+      sub: nunggakCount ? `${nunggakCount} orang` : "Semua lunas",
     },
-  ];
-
-  if (showKas) {
-    metricItems.push(
-      { label: "Keluar stok", value: fmt(expense), tone: "danger" },
-      { label: "Saldo bersih", value: fmt(net), tone: net >= 0 ? "paid" : "danger" },
-    );
-  }
+    {
+      label: "Total main",
+      value: String(totalGames),
+      tone: "court",
+      sub: totalGames ? "game tercatat" : "belum ada",
+    },
+    {
+      label: "Kok terpakai",
+      value: String(totalKok),
+      tone: "court",
+      sub: "total kok",
+    },
+  );
   if (stockLeft !== undefined) {
     metricItems.push({
       label: "Stok sisa",
       value: String(stockLeft),
       tone: stockLeft > 0 ? "paid" : "danger",
+      sub: stockLeft > 0 ? "tersedia" : "stok habis",
     });
   }
 
@@ -161,26 +200,16 @@ function buildStatsShareBlocks({
     { kind: "metrics", items: metricItems },
   ];
 
-  if (unpaid > 0) {
-    blocks.push({
-      kind: "highlight",
-      label: "Total belum bayar",
-      value: fmt(unpaid),
-      tone: "owe",
-      hint: nunggakCount ? `${nunggakCount} orang masih nunggak` : undefined,
-    });
-  }
-
-  blocks.push({ kind: "section", title: `Pemain (${players.length})` });
+  blocks.push({ kind: "section", title: "Statistik pemain" });
   if (players.length === 0) {
-    blocks.push({ kind: "kv", label: "Status", value: "Belum ada yang main", tone: "muted" });
+    blocks.push({ kind: "kv", label: "Status", value: "Belum ada pemain", tone: "muted" });
   } else {
     for (const [i, p] of players.entries()) {
       blocks.push({
         kind: "person",
         rank: i + 1,
         name: p.name,
-        detail: `${p.main} main · ${p.kok} kok · keluar ${fmt(p.keluar)}`,
+        detail: `${p.main} main · ${p.kok} kok · ${fmt(p.keluar)}`,
         right: p.nunggak > 0 ? fmt(p.nunggak) : "Lunas",
         rightTone: p.nunggak > 0 ? "owe" : "paid",
         initial: p.name.slice(0, 1),
@@ -188,7 +217,7 @@ function buildStatsShareBlocks({
     }
   }
 
-  blocks.push({ kind: "footer", text: "kok.ryanprayoga.dev · patungan rapi" });
+  blocks.push({ kind: "footer", text: "Kok Badminton · dibuat buat patungan yang rapi" });
   return blocks;
 }
 
@@ -282,12 +311,24 @@ export function StatsView({
       showKas: Boolean(kas),
       players,
       stockLeft,
+      debtPeople,
     };
     return {
       text: buildStatsShareText(args),
       blocks: buildStatsShareBlocks(args),
     };
-  }, [periodName, scoped.length, totalKok, paidIn, totalDebt, expenseIn, kas, players, stockLeft]);
+  }, [
+    periodName,
+    scoped.length,
+    totalKok,
+    paidIn,
+    totalDebt,
+    expenseIn,
+    kas,
+    players,
+    stockLeft,
+    debtPeople,
+  ]);
 
   return (
     <section className="flex flex-col gap-4">

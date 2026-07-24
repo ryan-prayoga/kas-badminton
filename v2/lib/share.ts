@@ -1,5 +1,6 @@
-// Share teks / gambar (Web Share API + fallback).
-// Kartu PNG mengikuti Court Ledger (warna, radius, hierarki web).
+// Share teks / gambar — kartu PNG di-render dari DOM senada UI web (Court Ledger).
+
+import { toBlob } from "html-to-image";
 
 export type ShareCardTone = "default" | "paid" | "owe" | "danger" | "muted" | "court";
 
@@ -7,13 +8,13 @@ export type ShareMetric = {
   label: string;
   value: string;
   tone?: ShareCardTone;
+  /** Subteks kecil di bawah value (mirip StatCard web). */
+  sub?: string;
 };
 
 export type ShareCardBlock =
   | { kind: "header"; title: string; subtitle?: string }
-  /** Grid kartu ringkas (2 kolom) — mirip StatCard di web. */
   | { kind: "metrics"; items: ShareMetric[] }
-  /** Banner angka besar (total tagihan, dll). */
   | { kind: "highlight"; label: string; value: string; tone?: ShareCardTone; hint?: string }
   | { kind: "kv"; label: string; value: string; tone?: ShareCardTone }
   | { kind: "section"; title: string }
@@ -24,13 +25,13 @@ export type ShareCardBlock =
       detail: string;
       right: string;
       rightTone?: ShareCardTone;
-      /** Inisial avatar; default huruf pertama nama. */
       initial?: string;
     }
   | { kind: "footer"; text: string };
 
+/** Palet Court Ledger — 1:1 globals.css */
 const C = {
-  bg: "#e8eef7",
+  bg: "#eef2f8",
   surface: "#ffffff",
   surface2: "#f4f7fc",
   ink: "#0f1b2d",
@@ -40,16 +41,16 @@ const C = {
   lineStrong: "#d3dcea",
   court: "#1560d6",
   courtDeep: "#0e48a8",
-  courtSoft: "#eaf1fd",
+  courtSoft: "rgba(21, 96, 214, 0.10)",
   paid: "#0f8a5b",
-  paidSoft: "#e8f7f0",
+  paidSoft: "rgba(15, 138, 91, 0.12)",
   owe: "#b96608",
-  oweSoft: "#fff4e5",
+  oweSoft: "rgba(185, 102, 8, 0.12)",
   danger: "#dc2626",
-  dangerSoft: "#fee2e2",
+  dangerSoft: "rgba(220, 38, 38, 0.12)",
 } as const;
 
-const TONE_FG: Record<ShareCardTone, string> = {
+const TONE: Record<ShareCardTone, string> = {
   default: C.ink,
   paid: C.paid,
   owe: C.owe,
@@ -58,14 +59,9 @@ const TONE_FG: Record<ShareCardTone, string> = {
   court: C.court,
 };
 
-const TONE_SOFT: Record<ShareCardTone, string> = {
-  default: C.surface2,
-  paid: C.paidSoft,
-  owe: C.oweSoft,
-  danger: C.dangerSoft,
-  muted: C.surface2,
-  court: C.courtSoft,
-};
+const FONT_SANS = 'var(--font-hanken), "Hanken Grotesk", ui-sans-serif, system-ui, sans-serif';
+const FONT_DISPLAY = 'var(--font-archivo), Archivo, ui-sans-serif, system-ui, sans-serif';
+const FONT_MONO = 'var(--font-jbmono), "JetBrains Mono", ui-monospace, monospace';
 
 /** Bagikan teks — Web Share, fallback WhatsApp. */
 export async function shareText(text: string, title = "Kok Badminton"): Promise<void> {
@@ -116,426 +112,546 @@ export async function shareImage(
   return "downloaded";
 }
 
-function roundRect(
-  ctx: CanvasRenderingContext2D,
-  x: number,
-  y: number,
-  w: number,
-  h: number,
-  r: number,
-) {
-  const rr = Math.min(r, w / 2, h / 2);
-  ctx.beginPath();
-  ctx.moveTo(x + rr, y);
-  ctx.arcTo(x + w, y, x + w, y + h, rr);
-  ctx.arcTo(x + w, y + h, x, y + h, rr);
-  ctx.arcTo(x, y + h, x, y, rr);
-  ctx.arcTo(x, y, x + w, y, rr);
-  ctx.closePath();
-}
-
-function fillRound(
-  ctx: CanvasRenderingContext2D,
-  x: number,
-  y: number,
-  w: number,
-  h: number,
-  r: number,
-  fill: string,
-) {
-  roundRect(ctx, x, y, w, h, r);
-  ctx.fillStyle = fill;
-  ctx.fill();
-}
-
-function strokeRound(
-  ctx: CanvasRenderingContext2D,
-  x: number,
-  y: number,
-  w: number,
-  h: number,
-  r: number,
-  stroke: string,
-  lineWidth = 2,
-) {
-  roundRect(ctx, x, y, w, h, r);
-  ctx.strokeStyle = stroke;
-  ctx.lineWidth = lineWidth;
-  ctx.stroke();
-}
-
-function drawShadowCard(
-  ctx: CanvasRenderingContext2D,
-  x: number,
-  y: number,
-  w: number,
-  h: number,
-  r: number,
-) {
-  ctx.save();
-  ctx.shadowColor = "rgba(15, 27, 45, 0.14)";
-  ctx.shadowBlur = 28;
-  ctx.shadowOffsetY = 10;
-  fillRound(ctx, x, y, w, h, r, C.surface);
-  ctx.restore();
-  strokeRound(ctx, x, y, w, h, r, C.line, 1.5);
-}
-
-/** Ikon raket sederhana (siluet) di header. */
-function drawRacketMark(ctx: CanvasRenderingContext2D, cx: number, cy: number, s: number) {
-  ctx.save();
-  ctx.translate(cx, cy);
-  ctx.strokeStyle = "rgba(255,255,255,0.9)";
-  ctx.fillStyle = "rgba(255,255,255,0.18)";
-  ctx.lineWidth = Math.max(2.5, s * 0.08);
-  ctx.lineCap = "round";
-  // head oval
-  ctx.beginPath();
-  ctx.ellipse(0, -s * 0.18, s * 0.38, s * 0.48, 0, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.stroke();
-  // strings
-  ctx.strokeStyle = "rgba(255,255,255,0.35)";
-  ctx.lineWidth = 1.5;
-  for (let i = -2; i <= 2; i++) {
-    ctx.beginPath();
-    ctx.moveTo(i * s * 0.1, -s * 0.52);
-    ctx.lineTo(i * s * 0.1, s * 0.12);
-    ctx.stroke();
-  }
-  for (let i = -2; i <= 2; i++) {
-    ctx.beginPath();
-    ctx.moveTo(-s * 0.32, -s * 0.18 + i * s * 0.1);
-    ctx.lineTo(s * 0.32, -s * 0.18 + i * s * 0.1);
-    ctx.stroke();
-  }
-  // shaft
-  ctx.strokeStyle = "rgba(255,255,255,0.9)";
-  ctx.lineWidth = Math.max(3, s * 0.1);
-  ctx.beginPath();
-  ctx.moveTo(0, s * 0.12);
-  ctx.lineTo(0, s * 0.55);
-  ctx.stroke();
-  // grip
-  ctx.lineWidth = Math.max(5, s * 0.14);
-  ctx.beginPath();
-  ctx.moveTo(0, s * 0.4);
-  ctx.lineTo(0, s * 0.62);
-  ctx.stroke();
-  ctx.restore();
-}
-
-function metricsRows(n: number): number {
-  return Math.ceil(Math.max(n, 1) / 2);
-}
-
-function measureBlocks(blocks: ShareCardBlock[]): number {
-  let h = 28; // top pad body
-  for (const b of blocks) {
-    if (b.kind === "header") h += 0;
-    else if (b.kind === "metrics") {
-      const rows = metricsRows(b.items.length);
-      h += rows * 118 + (rows - 1) * 16 + 20;
-    } else if (b.kind === "highlight") h += b.hint ? 128 : 112;
-    else if (b.kind === "kv") h += 44;
-    else if (b.kind === "section") h += 56;
-    else if (b.kind === "person") h += 88;
-    else if (b.kind === "footer") h += 52;
-  }
-  return h + 28; // bottom pad
-}
-
-function truncateText(ctx: CanvasRenderingContext2D, text: string, maxW: number): string {
-  if (ctx.measureText(text).width <= maxW) return text;
-  let t = text;
-  while (t.length > 1 && ctx.measureText(`${t}…`).width > maxW) t = t.slice(0, -1);
-  return `${t}…`;
+function esc(s: string): string {
+  return s
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
 }
 
 function isLunas(right: string): boolean {
   return /^lunas$/i.test(right.trim());
 }
 
-/** Render kartu share ke PNG blob (1080px lebar, retina-friendly). */
-export async function renderShareCard(blocks: ShareCardBlock[]): Promise<Blob> {
-  const W = 1080;
-  const outer = 36;
-  const padX = 56;
+/** SVG ikon sederhana (inline) — senada mdi outline di web. */
+const ICONS = {
+  racket: `<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><ellipse cx="12" cy="8" rx="6" ry="7"/><path d="M12 15v6M9 21h6"/><path d="M9 6h6M12 3v10" opacity=".35"/></svg>`,
+  cash: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="12" cy="12" r="2.5"/><path d="M6 12h.01M18 12h.01"/></svg>`,
+  trophy: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M8 21h8M12 17v4M7 4h10v5a5 5 0 01-10 0V4z"/><path d="M17 5h2a2 2 0 012 2v1a4 4 0 01-4 4M7 5H5a2 2 0 00-2 2v1a4 4 0 004 4"/></svg>`,
+  check: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M20 6L9 17l-5-5"/></svg>`,
+  calendar: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M16 3v4M8 3v4M3 11h18"/></svg>`,
+};
+
+function toneIconColor(tone: ShareCardTone): string {
+  return TONE[tone];
+}
+
+function buildShareDom(blocks: ShareCardBlock[]): HTMLElement {
   const header = blocks.find((b) => b.kind === "header") as
     | Extract<ShareCardBlock, { kind: "header" }>
     | undefined;
   const body = blocks.filter((b) => b.kind !== "header");
 
-  const headerH = header?.subtitle ? 200 : 168;
-  const bodyH = measureBlocks(body);
-  const H = outer * 2 + headerH + bodyH;
+  const root = document.createElement("div");
+  root.setAttribute("data-share-card", "1");
+  // Off-screen tapi di layout (html-to-image butuh ukuran nyata)
+  root.style.cssText = [
+    "position:fixed",
+    "left:-10000px",
+    "top:0",
+    "width:600px",
+    "box-sizing:border-box",
+    "padding:20px",
+    `font-family:${FONT_SANS}`,
+    `color:${C.ink}`,
+    `background:radial-gradient(120% 80% at 50% -20%, rgba(21, 96, 214, 0.10), transparent 55%), ${C.bg}`,
+    "-webkit-font-smoothing:antialiased",
+  ].join(";");
 
-  const canvas = document.createElement("canvas");
-  canvas.width = W;
-  canvas.height = H;
-  const ctx = canvas.getContext("2d");
-  if (!ctx) throw new Error("Canvas tidak tersedia");
+  const stack = document.createElement("div");
+  Object.assign(stack.style, {
+    display: "flex",
+    flexDirection: "column",
+    gap: "16px",
+  });
 
-  // Page bg (soft court wash)
-  const pageGrad = ctx.createLinearGradient(0, 0, W, H);
-  pageGrad.addColorStop(0, "#dfe8f6");
-  pageGrad.addColorStop(0.45, C.bg);
-  pageGrad.addColorStop(1, "#e4ecf8");
-  ctx.fillStyle = pageGrad;
-  ctx.fillRect(0, 0, W, H);
+  // ── App header (mirip AppFrame) ──
+  const appHeader = document.createElement("div");
+  Object.assign(appHeader.style, {
+    display: "flex",
+    alignItems: "center",
+    gap: "12px",
+    padding: "16px",
+    borderRadius: "20px",
+    border: `1px solid ${C.line}`,
+    background: C.surface,
+    boxShadow: "0 1px 2px rgba(15,27,45,0.04), 0 8px 24px -14px rgba(15,27,45,0.18)",
+  });
 
-  const cardX = outer;
-  const cardY = outer;
-  const cardW = W - outer * 2;
-  const cardH = H - outer * 2;
+  const logo = document.createElement("div");
+  Object.assign(logo.style, {
+    width: "44px",
+    height: "44px",
+    borderRadius: "16px",
+    background: C.court,
+    color: "#fff",
+    display: "grid",
+    placeItems: "center",
+    flexShrink: "0",
+    boxShadow: "0 10px 30px -12px rgba(21,96,214,0.45)",
+  });
+  logo.innerHTML = ICONS.racket;
 
-  drawShadowCard(ctx, cardX, cardY, cardW, cardH, 40);
+  const headText = document.createElement("div");
+  headText.style.minWidth = "0";
+  headText.style.flex = "1";
 
-  ctx.save();
-  roundRect(ctx, cardX, cardY, cardW, cardH, 40);
-  ctx.clip();
+  // Samakan AppFrame: eyebrow (konteks) + "Kok Badminton" sebagai judul
+  const eyebrow = document.createElement("div");
+  Object.assign(eyebrow.style, {
+    fontSize: "10px",
+    fontWeight: "700",
+    letterSpacing: "0.18em",
+    textTransform: "uppercase",
+    color: C.inkFaint,
+    marginBottom: "2px",
+  });
+  const eyebrowBits = [header?.title, header?.subtitle].filter(Boolean);
+  eyebrow.textContent = (eyebrowBits.join(" · ") || "Kok Badminton").toUpperCase();
 
-  // ── Header band ──
-  const headGrad = ctx.createLinearGradient(0, cardY, cardW * 0.3, cardY + headerH);
-  headGrad.addColorStop(0, "#1a6ef0");
-  headGrad.addColorStop(0.55, C.court);
-  headGrad.addColorStop(1, C.courtDeep);
-  ctx.fillStyle = headGrad;
-  ctx.fillRect(cardX, cardY, cardW, headerH);
+  const title = document.createElement("div");
+  Object.assign(title.style, {
+    fontFamily: FONT_DISPLAY,
+    fontSize: "22px",
+    fontWeight: "800",
+    letterSpacing: "-0.02em",
+    lineHeight: "1.15",
+    color: C.ink,
+  });
+  title.textContent = "Kok Badminton";
 
-  // Decorative orbs
-  ctx.fillStyle = "rgba(255,255,255,0.1)";
-  ctx.beginPath();
-  ctx.arc(cardX + cardW - 48, cardY + 28, 140, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.beginPath();
-  ctx.arc(cardX + cardW - 180, cardY + headerH - 10, 90, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.fillStyle = "rgba(255,255,255,0.06)";
-  ctx.beginPath();
-  ctx.arc(cardX + 80, cardY + headerH + 20, 100, 0, Math.PI * 2);
-  ctx.fill();
+  headText.append(eyebrow, title);
+  appHeader.append(logo, headText);
+  stack.appendChild(appHeader);
 
-  // Brand mark
-  const markX = padX + 28;
-  const markY = cardY + 58;
-  fillRound(ctx, padX, cardY + 30, 56, 56, 18, "rgba(255,255,255,0.18)");
-  drawRacketMark(ctx, markX, markY, 42);
+  // ── Body blocks ──
+  // object mutable — biar TS gak “mengunci” sectionList ke null lewat closure
+  const section: { wrap: HTMLElement | null; list: HTMLElement | null } = {
+    wrap: null,
+    list: null,
+  };
 
-  if (header) {
-    ctx.fillStyle = "rgba(255,255,255,0.78)";
-    ctx.font = "800 22px system-ui, -apple-system, BlinkMacSystemFont, sans-serif";
-    ctx.fillText("KOK BADMINTON", padX + 72, cardY + 52);
-
-    ctx.fillStyle = "#ffffff";
-    ctx.font = "800 54px system-ui, -apple-system, BlinkMacSystemFont, sans-serif";
-    ctx.fillText(truncateText(ctx, header.title, cardW - padX * 2 - 20), padX + 72, cardY + 112);
-
-    if (header.subtitle) {
-      // pill subtitle
-      const sub = header.subtitle;
-      ctx.font = "700 24px system-ui, -apple-system, sans-serif";
-      const sw = ctx.measureText(sub).width;
-      const pillW = sw + 28;
-      const pillH = 36;
-      const pillX = padX + 72;
-      const pillY = cardY + 132;
-      fillRound(ctx, pillX, pillY, pillW, pillH, 18, "rgba(255,255,255,0.16)");
-      ctx.fillStyle = "rgba(255,255,255,0.95)";
-      ctx.fillText(sub, pillX + 14, pillY + 25);
+  const closeSection = () => {
+    if (section.wrap && section.list) {
+      section.wrap.appendChild(section.list);
+      stack.appendChild(section.wrap);
     }
-  }
+    section.wrap = null;
+    section.list = null;
+  };
 
-  // Body surface
-  ctx.fillStyle = C.surface;
-  ctx.fillRect(cardX, cardY + headerH, cardW, cardH - headerH);
+  const openSection = (sectionTitle: string): HTMLElement => {
+    closeSection();
+    const wrap = document.createElement("div");
+    Object.assign(wrap.style, {
+      borderRadius: "20px",
+      border: `1px solid ${C.line}`,
+      background: C.surface,
+      padding: "16px",
+      boxShadow: "0 1px 2px rgba(15,27,45,0.04), 0 8px 24px -14px rgba(15,27,45,0.18)",
+    });
 
-  // Soft top fade under header
-  const fade = ctx.createLinearGradient(0, cardY + headerH, 0, cardY + headerH + 24);
-  fade.addColorStop(0, "rgba(15,27,45,0.04)");
-  fade.addColorStop(1, "rgba(15,27,45,0)");
-  ctx.fillStyle = fade;
-  ctx.fillRect(cardX, cardY + headerH, cardW, 24);
+    const head = document.createElement("div");
+    Object.assign(head.style, {
+      display: "flex",
+      alignItems: "center",
+      gap: "8px",
+      marginBottom: "12px",
+    });
 
-  let y = cardY + headerH + 36;
-  const contentW = cardW - (padX - cardX) * 2;
-  const leftX = padX;
-  const rightX = cardX + cardW - padX;
+    const iconBox = document.createElement("span");
+    Object.assign(iconBox.style, {
+      width: "28px",
+      height: "28px",
+      borderRadius: "10px",
+      background: C.courtSoft,
+      color: C.court,
+      display: "grid",
+      placeItems: "center",
+      flexShrink: "0",
+    });
+    iconBox.innerHTML = ICONS.trophy;
+
+    const h = document.createElement("div");
+    Object.assign(h.style, {
+      fontFamily: FONT_DISPLAY,
+      fontSize: "16px",
+      fontWeight: "700",
+      letterSpacing: "-0.01em",
+      color: C.ink,
+    });
+    h.textContent = sectionTitle;
+
+    head.append(iconBox, h);
+    wrap.appendChild(head);
+
+    const list = document.createElement("div");
+    Object.assign(list.style, {
+      display: "flex",
+      flexDirection: "column",
+      gap: "8px",
+    });
+
+    section.wrap = wrap;
+    section.list = list;
+    return list;
+  };
 
   for (const b of body) {
     if (b.kind === "metrics") {
-      const cols = 2;
-      const gap = 16;
-      const cellW = (contentW - gap) / cols;
-      const cellH = 108;
-      b.items.forEach((item, i) => {
-        const col = i % cols;
-        const row = Math.floor(i / cols);
-        const x = leftX + col * (cellW + gap);
-        const cy = y + row * (cellH + gap);
-        const tone = item.tone ?? "default";
-
-        fillRound(ctx, x, cy, cellW, cellH, 22, C.surface2);
-        strokeRound(ctx, x, cy, cellW, cellH, 22, C.line, 1.5);
-
-        // left accent bar
-        fillRound(ctx, x, cy + 18, 6, cellH - 36, 3, TONE_FG[tone] === C.ink ? C.court : TONE_FG[tone]);
-
-        ctx.fillStyle = C.inkFaint;
-        ctx.font = "800 18px system-ui, -apple-system, sans-serif";
-        ctx.fillText(item.label.toUpperCase(), x + 22, cy + 36);
-
-        ctx.fillStyle = TONE_FG[tone];
-        ctx.font = "800 34px ui-monospace, SFMono-Regular, Menlo, monospace";
-        const val = truncateText(ctx, item.value, cellW - 36);
-        ctx.fillText(val, x + 22, cy + 78);
+      closeSection();
+      const grid = document.createElement("div");
+      Object.assign(grid.style, {
+        display: "grid",
+        gridTemplateColumns: "1fr 1fr",
+        gap: "12px",
       });
-      y += metricsRows(b.items.length) * (cellH + gap) - gap + 20;
+
+      for (const item of b.items) {
+        const tone = item.tone ?? "default";
+        const card = document.createElement("div");
+        Object.assign(card.style, {
+          borderRadius: "20px",
+          border: `1px solid ${C.line}`,
+          background: C.surface,
+          padding: "14px",
+          boxShadow: "0 1px 2px rgba(15,27,45,0.04), 0 8px 24px -14px rgba(15,27,45,0.18)",
+        });
+
+        const lab = document.createElement("div");
+        Object.assign(lab.style, {
+          display: "flex",
+          alignItems: "center",
+          gap: "6px",
+          fontSize: "11px",
+          fontWeight: "700",
+          letterSpacing: "0.1em",
+          textTransform: "uppercase",
+          color: C.inkFaint,
+        });
+        const ic = document.createElement("span");
+        ic.style.color = toneIconColor(tone);
+        ic.style.display = "grid";
+        ic.innerHTML = ICONS.cash;
+        lab.append(ic, document.createTextNode(item.label));
+
+        const val = document.createElement("div");
+        Object.assign(val.style, {
+          fontFamily: FONT_DISPLAY,
+          fontSize: "24px",
+          fontWeight: "800",
+          letterSpacing: "-0.02em",
+          marginTop: "6px",
+          color: TONE[tone],
+          fontVariantNumeric: "tabular-nums",
+        });
+        val.textContent = item.value;
+
+        card.append(lab, val);
+        if (item.sub) {
+          const sub = document.createElement("div");
+          Object.assign(sub.style, {
+            marginTop: "2px",
+            fontSize: "12px",
+            color: C.inkSoft,
+          });
+          sub.textContent = item.sub;
+          card.appendChild(sub);
+        }
+        grid.appendChild(card);
+      }
+      stack.appendChild(grid);
       continue;
     }
 
     if (b.kind === "highlight") {
+      closeSection();
       const tone = b.tone ?? "owe";
-      const hh = b.hint ? 112 : 96;
-      fillRound(ctx, leftX, y, contentW, hh, 24, TONE_SOFT[tone]);
-      strokeRound(ctx, leftX, y, contentW, hh, 24, TONE_FG[tone] + "33", 2);
+      const soft =
+        tone === "paid"
+          ? C.paidSoft
+          : tone === "danger"
+            ? C.dangerSoft
+            : tone === "court"
+              ? C.courtSoft
+              : C.oweSoft;
+      const border =
+        tone === "paid"
+          ? "rgba(15,138,91,0.25)"
+          : tone === "danger"
+            ? "rgba(220,38,38,0.25)"
+            : "rgba(185,102,8,0.25)";
 
-      ctx.fillStyle = TONE_FG[tone];
-      ctx.font = "800 18px system-ui, -apple-system, sans-serif";
-      ctx.fillText(b.label.toUpperCase(), leftX + 28, y + 34);
+      const box = document.createElement("div");
+      Object.assign(box.style, {
+        borderRadius: "20px",
+        border: `1px solid ${border}`,
+        background: soft,
+        padding: "16px 18px",
+      });
 
-      ctx.font = "800 44px ui-monospace, SFMono-Regular, Menlo, monospace";
-      ctx.fillText(b.value, leftX + 28, y + (b.hint ? 78 : 74));
+      const lab = document.createElement("div");
+      Object.assign(lab.style, {
+        fontSize: "11px",
+        fontWeight: "700",
+        letterSpacing: "0.1em",
+        textTransform: "uppercase",
+        color: TONE[tone],
+        opacity: "0.85",
+      });
+      lab.textContent = b.label;
 
+      const val = document.createElement("div");
+      Object.assign(val.style, {
+        fontFamily: FONT_MONO,
+        fontSize: "32px",
+        fontWeight: "800",
+        marginTop: "6px",
+        color: TONE[tone],
+        fontVariantNumeric: "tabular-nums",
+      });
+      val.textContent = b.value;
+
+      box.append(lab, val);
       if (b.hint) {
-        ctx.fillStyle = C.inkSoft;
-        ctx.font = "600 20px system-ui, -apple-system, sans-serif";
-        ctx.fillText(b.hint, leftX + 28, y + 100);
+        const hint = document.createElement("div");
+        Object.assign(hint.style, {
+          marginTop: "4px",
+          fontSize: "13px",
+          color: C.inkSoft,
+        });
+        hint.textContent = b.hint;
+        box.appendChild(hint);
       }
-      y += hh + 20;
+      stack.appendChild(box);
       continue;
     }
 
     if (b.kind === "section") {
-      y += 4;
-      // accent chip + title
-      fillRound(ctx, leftX, y - 4, 10, 10, 3, C.court);
-      ctx.fillStyle = C.inkFaint;
-      ctx.font = "800 20px system-ui, -apple-system, sans-serif";
-      ctx.fillText(b.title.toUpperCase(), leftX + 20, y + 6);
-      y += 18;
-      ctx.strokeStyle = C.line;
-      ctx.lineWidth = 2;
-      ctx.beginPath();
-      ctx.moveTo(leftX, y);
-      ctx.lineTo(leftX + contentW, y);
-      ctx.stroke();
-      y += 28;
+      openSection(b.title);
       continue;
     }
 
     if (b.kind === "kv") {
-      ctx.fillStyle = C.inkSoft;
-      ctx.font = "600 26px system-ui, -apple-system, sans-serif";
-      ctx.fillText(b.label, leftX, y + 4);
-      ctx.fillStyle = TONE_FG[b.tone ?? "default"];
-      ctx.font = "800 28px ui-monospace, SFMono-Regular, Menlo, monospace";
-      const vw = ctx.measureText(b.value).width;
-      ctx.fillText(b.value, rightX - vw, y + 4);
-      y += 44;
+      // kv di luar section → kartu kecil; di dalam section → baris
+      const activeList = section.list;
+      if (activeList) {
+        const row = document.createElement("div");
+        Object.assign(row.style, {
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          gap: "12px",
+          padding: "10px 12px",
+          borderRadius: "12px",
+          border: `1px solid ${C.line}`,
+          background: C.surface2,
+        });
+        const l = document.createElement("span");
+        Object.assign(l.style, { fontSize: "14px", color: C.inkSoft, fontWeight: "600" });
+        l.textContent = b.label;
+        const v = document.createElement("span");
+        Object.assign(v.style, {
+          fontFamily: FONT_MONO,
+          fontSize: "14px",
+          fontWeight: "700",
+          color: TONE[b.tone ?? "default"],
+          fontVariantNumeric: "tabular-nums",
+        });
+        v.textContent = b.value;
+        row.append(l, v);
+        activeList.appendChild(row);
+      } else {
+        closeSection();
+        const row = document.createElement("div");
+        Object.assign(row.style, {
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          padding: "14px 16px",
+          borderRadius: "16px",
+          border: `1px solid ${C.line}`,
+          background: C.surface,
+          boxShadow: "0 1px 2px rgba(15,27,45,0.04), 0 8px 24px -14px rgba(15,27,45,0.18)",
+        });
+        const l = document.createElement("span");
+        Object.assign(l.style, { fontSize: "14px", color: C.inkSoft, fontWeight: "600" });
+        l.textContent = b.label;
+        const v = document.createElement("span");
+        Object.assign(v.style, {
+          fontFamily: FONT_MONO,
+          fontSize: "16px",
+          fontWeight: "800",
+          color: TONE[b.tone ?? "default"],
+        });
+        v.textContent = b.value;
+        row.append(l, v);
+        stack.appendChild(row);
+      }
       continue;
     }
 
     if (b.kind === "person") {
-      const rowH = 76;
-      const rowY = y;
-      fillRound(ctx, leftX, rowY, contentW, rowH, 20, C.surface2);
-      strokeRound(ctx, leftX, rowY, contentW, rowH, 20, C.line, 1.5);
+      const list = section.list ?? openSection("Daftar");
 
-      // rank
-      ctx.fillStyle = C.inkFaint;
-      ctx.font = "800 22px system-ui, -apple-system, sans-serif";
-      const rankStr = String(b.rank);
-      const rankW = ctx.measureText(rankStr).width;
-      ctx.fillText(rankStr, leftX + 18 + (18 - rankW) / 2, rowY + 44);
+      const row = document.createElement("div");
+      Object.assign(row.style, {
+        display: "flex",
+        alignItems: "center",
+        gap: "12px",
+        padding: "12px",
+        borderRadius: "14px",
+        border: `1px solid ${C.line}`,
+        background: C.surface2,
+      });
 
-      // avatar circle
-      const avX = leftX + 52;
-      const avY = rowY + 14;
-      const avS = 48;
+      const rank = document.createElement("span");
+      Object.assign(rank.style, {
+        fontFamily: FONT_DISPLAY,
+        width: "18px",
+        textAlign: "center",
+        fontSize: "13px",
+        fontWeight: "700",
+        color: C.inkFaint,
+        flexShrink: "0",
+        fontVariantNumeric: "tabular-nums",
+      });
+      rank.textContent = String(b.rank);
+
       const tone = b.rightTone ?? "court";
       const avBg =
         tone === "owe" ? C.oweSoft : tone === "paid" ? C.paidSoft : C.courtSoft;
-      const avFg =
-        tone === "owe" ? C.owe : tone === "paid" ? C.paid : C.court;
-      ctx.beginPath();
-      ctx.arc(avX + avS / 2, avY + avS / 2, avS / 2, 0, Math.PI * 2);
-      ctx.fillStyle = avBg;
-      ctx.fill();
-      ctx.strokeStyle = C.lineStrong;
-      ctx.lineWidth = 1.5;
-      ctx.stroke();
-      const initial = (b.initial || b.name || "?").slice(0, 1).toUpperCase();
-      ctx.fillStyle = avFg;
-      ctx.font = "800 22px system-ui, -apple-system, sans-serif";
-      const iw = ctx.measureText(initial).width;
-      ctx.fillText(initial, avX + (avS - iw) / 2, avY + 32);
+      const avFg = TONE[tone === "default" ? "court" : tone];
 
-      // name + detail
-      const textX = avX + avS + 16;
-      const rightReserve = 200;
-      const nameMax = contentW - (textX - leftX) - rightReserve;
-      ctx.fillStyle = C.ink;
-      ctx.font = "700 28px system-ui, -apple-system, sans-serif";
-      ctx.fillText(truncateText(ctx, b.name, nameMax), textX, rowY + 34);
+      const av = document.createElement("div");
+      Object.assign(av.style, {
+        width: "36px",
+        height: "36px",
+        borderRadius: "999px",
+        background: avBg,
+        color: avFg,
+        display: "grid",
+        placeItems: "center",
+        fontFamily: FONT_DISPLAY,
+        fontWeight: "800",
+        fontSize: "14px",
+        flexShrink: "0",
+        border: `1px solid ${C.lineStrong}`,
+      });
+      av.textContent = (b.initial || b.name || "?").slice(0, 1).toUpperCase();
 
-      ctx.fillStyle = C.inkSoft;
-      ctx.font = "500 20px system-ui, -apple-system, sans-serif";
-      ctx.fillText(truncateText(ctx, b.detail, nameMax), textX, rowY + 58);
+      const mid = document.createElement("div");
+      Object.assign(mid.style, { minWidth: "0", flex: "1" });
 
-      // right status
-      const right = b.right;
-      if (isLunas(right)) {
-        ctx.font = "800 20px system-ui, -apple-system, sans-serif";
-        const label = "Lunas";
-        const tw = ctx.measureText(label).width;
-        const bw = tw + 28;
-        const bh = 34;
-        const bx = rightX - bw - 16;
-        const by = rowY + (rowH - bh) / 2;
-        fillRound(ctx, bx, by, bw, bh, 17, C.paidSoft);
-        ctx.fillStyle = C.paid;
-        ctx.fillText(label, bx + 14, by + 23);
+      const name = document.createElement("div");
+      Object.assign(name.style, {
+        fontWeight: "600",
+        fontSize: "15px",
+        color: C.ink,
+        whiteSpace: "nowrap",
+        overflow: "hidden",
+        textOverflow: "ellipsis",
+      });
+      name.textContent = b.name;
+
+      const detail = document.createElement("div");
+      Object.assign(detail.style, {
+        marginTop: "2px",
+        fontSize: "11px",
+        color: C.inkFaint,
+        whiteSpace: "nowrap",
+        overflow: "hidden",
+        textOverflow: "ellipsis",
+      });
+      detail.textContent = b.detail;
+
+      mid.append(name, detail);
+
+      const right = document.createElement("div");
+      right.style.flexShrink = "0";
+      right.style.marginLeft = "4px";
+
+      if (isLunas(b.right)) {
+        const badge = document.createElement("span");
+        Object.assign(badge.style, {
+          display: "inline-flex",
+          alignItems: "center",
+          gap: "4px",
+          fontSize: "13px",
+          fontWeight: "700",
+          color: C.paid,
+        });
+        badge.innerHTML = `${ICONS.check}<span>Lunas</span>`;
+        right.appendChild(badge);
       } else {
-        ctx.fillStyle = TONE_FG[b.rightTone ?? "default"];
-        ctx.font = "800 26px ui-monospace, SFMono-Regular, Menlo, monospace";
-        const rw = ctx.measureText(right).width;
-        ctx.fillText(right, rightX - rw - 20, rowY + 46);
+        const amt = document.createElement("div");
+        Object.assign(amt.style, {
+          fontFamily: FONT_MONO,
+          fontSize: "14px",
+          fontWeight: "700",
+          color: TONE[b.rightTone ?? "default"],
+          fontVariantNumeric: "tabular-nums",
+          textAlign: "right",
+        });
+        amt.textContent = b.right;
+        right.appendChild(amt);
       }
 
-      y += rowH + 12;
+      row.append(rank, av, mid, right);
+      list.appendChild(row);
       continue;
     }
 
     if (b.kind === "footer") {
-      y += 8;
-      // brand strip
-      fillRound(ctx, leftX, y, contentW, 40, 14, C.surface2);
-      ctx.fillStyle = C.inkFaint;
-      ctx.font = "600 20px system-ui, -apple-system, sans-serif";
-      const ft = b.text;
-      const fw = ctx.measureText(ft).width;
-      ctx.fillText(ft, leftX + (contentW - fw) / 2, y + 26);
-      y += 48;
+      closeSection();
+      const foot = document.createElement("div");
+      Object.assign(foot.style, {
+        textAlign: "center",
+        fontSize: "12px",
+        color: C.inkFaint,
+        padding: "4px 0 2px",
+      });
+      foot.textContent = b.text || "Kok Badminton · dibuat buat patungan yang rapi";
+      stack.appendChild(foot);
     }
   }
 
-  ctx.restore();
+  closeSection();
+  root.appendChild(stack);
 
-  return new Promise((resolve, reject) => {
-    canvas.toBlob(
-      (blob) => (blob ? resolve(blob) : reject(new Error("Gagal encode PNG"))),
-      "image/png",
-    );
-  });
+  // silence unused esc if not needed — keep for future HTML inject
+  void esc;
+  return root;
+}
+
+/** Render kartu share ke PNG blob (DOM → html-to-image, senada web). */
+export async function renderShareCard(blocks: ShareCardBlock[]): Promise<Blob> {
+  if (typeof document === "undefined") throw new Error("Hanya di browser");
+
+  const el = buildShareDom(blocks);
+  document.body.appendChild(el);
+
+  try {
+    // pastikan font + layout settle
+    if (document.fonts?.ready) await document.fonts.ready;
+    // double rAF biar layout stabil
+    await new Promise<void>((r) => requestAnimationFrame(() => requestAnimationFrame(() => r())));
+
+    const blob = await toBlob(el, {
+      pixelRatio: 2,
+      cacheBust: true,
+      backgroundColor: C.bg,
+      // skip external resources yang bisa gagal
+      filter: (node) => {
+        if (node instanceof HTMLElement && node.tagName === "LINK") return false;
+        return true;
+      },
+    });
+
+    if (!blob) throw new Error("Gagal encode PNG");
+    return blob;
+  } finally {
+    el.remove();
+  }
 }
