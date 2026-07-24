@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { Archivo, Hanken_Grotesk, JetBrains_Mono } from "next/font/google";
 import "./globals.css";
 import { ConfirmProvider } from "@/components/confirm-dialog";
+import { ThemeProvider } from "@/components/theme-provider";
 import { Toaster } from "@/components/ui/sonner";
 import { RealtimeRefresher } from "@/components/realtime-refresher";
 import { BottomNav } from "@/components/kok/bottom-nav";
@@ -30,7 +31,10 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  themeColor: "#eef2f8",
+  themeColor: [
+    { media: "(prefers-color-scheme: light)", color: "#eef2f8" },
+    { media: "(prefers-color-scheme: dark)", color: "#0a1120" },
+  ],
   width: "device-width",
   initialScale: 1,
   maximumScale: 1,
@@ -42,25 +46,31 @@ export default async function RootLayout({ children }: Readonly<{ children: Reac
   const canRecord = data.me.role === "admin" || data.me.role === "operator";
 
   return (
-    <html lang="id" className={`${archivo.variable} ${hanken.variable} ${mono.variable}`}>
+    <html
+      lang="id"
+      className={`${archivo.variable} ${hanken.variable} ${mono.variable}`}
+      suppressHydrationWarning
+    >
       <body className="min-h-dvh font-sans antialiased">
-        <ConfirmProvider>
-          {children}
-          <BottomNav
-            role={data.me.role}
-            recordGame={
-              canRecord
-                ? {
-                    kokTypes: data.kokTypes,
-                    players: data.players,
-                    defaultPrice: data.settings.defaultPricePerPerson,
-                  }
-                : undefined
-            }
-          />
-          <Toaster position="top-center" richColors />
-          <RealtimeRefresher />
-        </ConfirmProvider>
+        <ThemeProvider>
+          <ConfirmProvider>
+            {children}
+            <BottomNav
+              role={data.me.role}
+              recordGame={
+                canRecord
+                  ? {
+                      kokTypes: data.kokTypes,
+                      players: data.players,
+                      defaultPrice: data.settings.defaultPricePerPerson,
+                    }
+                  : undefined
+              }
+            />
+            <Toaster position="top-center" richColors />
+            <RealtimeRefresher />
+          </ConfirmProvider>
+        </ThemeProvider>
       </body>
     </html>
   );

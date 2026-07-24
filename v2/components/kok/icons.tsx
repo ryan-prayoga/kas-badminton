@@ -38,6 +38,9 @@ import happy from "@iconify-icons/mdi/emoticon-happy-outline";
 import dotsHorizontal from "@iconify-icons/mdi/dots-horizontal";
 import backspace from "@iconify-icons/mdi/backspace-outline";
 import qrcode from "@iconify-icons/mdi/qrcode";
+import sun from "@iconify-icons/mdi/weather-sunny";
+import moon from "@iconify-icons/mdi/weather-night";
+import themeAuto from "@iconify-icons/mdi/theme-light-dark";
 
 export const ICONS = {
   racket, // "main" / game
@@ -77,6 +80,9 @@ export const ICONS = {
   dotsHorizontal,
   backspace,
   qrcode,
+  sun,
+  moon,
+  themeAuto,
 } satisfies Record<string, IconifyIcon>;
 
 export type IconName = keyof typeof ICONS;

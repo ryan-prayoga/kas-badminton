@@ -29,34 +29,80 @@
   --color-input: var(--input);
   --color-ring: var(--ring);
 
-  /* palette bespoke — Court Ledger */
-  --color-bg: #eef2f8;
-  --color-surface: #ffffff;
-  --color-surface-2: #f4f7fc;
-  --color-ink: #0f1b2d;
-  --color-ink-soft: #55647b;
-  --color-ink-faint: #92a0b4;
-  --color-line: #e4eaf3;
-  --color-line-strong: #d3dcea;
-  --color-court: #1560d6;
-  --color-court-deep: #0e48a8;
-  --color-paid: #0f8a5b;
-  --color-owe: #b96608;
-  --color-danger: #dc2626;
+  /* palette bespoke — Court Ledger.
+     Semua nilai lewat var() biar bisa dioverride di `.dark` (theme inline
+     meng-inline value, jadi hex literal di sini gak bisa di-swap runtime). */
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-ink: var(--ink);
+  --color-ink-soft: var(--ink-soft);
+  --color-ink-faint: var(--ink-faint);
+  --color-line: var(--line);
+  --color-line-strong: var(--line-strong);
+  --color-court: var(--court);
+  --color-court-deep: var(--court-deep);
+  --color-paid: var(--paid);
+  --color-owe: var(--owe);
+  --color-danger: var(--danger);
 
   --radius-lg: 0.75rem;
   --radius-xl: 1rem;
   --radius-xl2: 1.25rem;
 
-  --shadow-card: 0 1px 2px rgba(15, 27, 45, 0.04), 0 8px 24px -14px rgba(15, 27, 45, 0.18);
-  --shadow-pop: 0 12px 40px -12px rgba(15, 27, 45, 0.28);
-  --shadow-court: 0 10px 30px -12px rgba(21, 96, 214, 0.35);
+  --shadow-card: var(--sh-card);
+  --shadow-pop: var(--sh-pop);
+  --shadow-court: var(--sh-court);
 }
 
 :root {
+  color-scheme: light;
+
   --safe-b: env(safe-area-inset-bottom, 0px);
   --safe-t: env(safe-area-inset-top, 0px);
 
+  /* easing expo-out buat reveal ganti tema */
+  --expo-out: linear(
+    0 0%,
+    0.1684 2.66%,
+    0.3165 5.49%,
+    0.446 8.52%,
+    0.5581 11.78%,
+    0.6535 15.29%,
+    0.7341 19.11%,
+    0.8011 23.3%,
+    0.8557 27.93%,
+    0.8962 32.68%,
+    0.9283 38.01%,
+    0.9529 44.08%,
+    0.9711 51.14%,
+    0.9833 59.06%,
+    0.9915 68.74%,
+    1 100%
+  );
+
+  /* bespoke — light */
+  --bg: #eef2f8;
+  --surface: #ffffff;
+  --surface-2: #f4f7fc;
+  --ink: #0f1b2d;
+  --ink-soft: #55647b;
+  --ink-faint: #92a0b4;
+  --line: #e4eaf3;
+  --line-strong: #d3dcea;
+  --court: #1560d6;
+  --court-deep: #0e48a8;
+  --paid: #0f8a5b;
+  --owe: #b96608;
+  --danger: #dc2626;
+
+  --bg-glow: rgba(21, 96, 214, 0.08);
+  --shimmer: rgba(255, 255, 255, 0.65);
+  --sh-card: 0 1px 2px rgba(15, 27, 45, 0.04), 0 8px 24px -14px rgba(15, 27, 45, 0.18);
+  --sh-pop: 0 12px 40px -12px rgba(15, 27, 45, 0.28);
+  --sh-court: 0 10px 30px -12px rgba(21, 96, 214, 0.35);
+
+  /* shadcn semantic — light */
   --background: #eef2f8;
   --foreground: #0f1b2d;
   --card: #ffffff;
@@ -75,6 +121,51 @@
   --border: #e4eaf3;
   --input: #dbe3ef;
   --ring: #1560d6;
+}
+
+.dark {
+  color-scheme: dark;
+
+  /* bespoke — dark */
+  --bg: #0a1120;
+  --surface: #121b2c;
+  --surface-2: #18243a;
+  --ink: #e9eef8;
+  --ink-soft: #a4b2c8;
+  --ink-faint: #71809a;
+  --line: #22304a;
+  --line-strong: #2e3f5e;
+  --court: #3b82f6;
+  --court-deep: #2f6fd8;
+  --paid: #2fbc85;
+  --owe: #e3a04a;
+  --danger: #f26b6b;
+
+  --bg-glow: rgba(59, 130, 246, 0.16);
+  --shimmer: rgba(255, 255, 255, 0.08);
+  --sh-card: 0 1px 2px rgba(0, 0, 0, 0.4), 0 8px 24px -14px rgba(0, 0, 0, 0.7);
+  --sh-pop: 0 12px 40px -12px rgba(0, 0, 0, 0.8);
+  --sh-court: 0 10px 30px -12px rgba(59, 130, 246, 0.55);
+
+  /* shadcn semantic — dark */
+  --background: #0a1120;
+  --foreground: #e9eef8;
+  --card: #121b2c;
+  --card-foreground: #e9eef8;
+  --popover: #121b2c;
+  --popover-foreground: #e9eef8;
+  --primary: #3b82f6;
+  --primary-foreground: #ffffff;
+  --secondary: #18243a;
+  --secondary-foreground: #e9eef8;
+  --muted: #18243a;
+  --muted-foreground: #a4b2c8;
+  --accent: #1b2b46;
+  --accent-foreground: #9cc2ff;
+  --destructive: #f26b6b;
+  --border: #22304a;
+  --input: #2a3a58;
+  --ring: #3b82f6;
 }
 
 @layer base {
@@ -97,16 +188,17 @@
     overscroll-behavior-y: none;
     color: var(--color-ink);
     background:
-      radial-gradient(120% 80% at 50% -20%, rgba(21, 96, 214, 0.08), transparent 55%),
+      radial-gradient(120% 80% at 50% -20%, var(--bg-glow), transparent 55%),
       var(--color-bg);
     background-attachment: fixed;
     -webkit-font-smoothing: antialiased;
     text-rendering: optimizeLegibility;
   }
+  /* Picker native ikut tema root (`color-scheme` di :root / .dark) */
   input[type="date"],
   input[type="number"],
   input[type="text"] {
-    color-scheme: light;
+    color-scheme: inherit;
   }
 }
 
@@ -127,10 +219,14 @@
 
 /* ── Court motif: garis lapangan halus di kartu matchup ── */
 .court-surface {
-  background-color: rgba(21, 96, 214, 0.05);
+  background-color: color-mix(in srgb, var(--court) 5%, transparent);
   background-image:
-    linear-gradient(rgba(21, 96, 214, 0.14) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(21, 96, 214, 0.14) 1px, transparent 1px);
+    linear-gradient(color-mix(in srgb, var(--court) 14%, transparent) 1px, transparent 1px),
+    linear-gradient(
+      90deg,
+      color-mix(in srgb, var(--court) 14%, transparent) 1px,
+      transparent 1px
+    );
   background-size: 100% 50%, 50% 100%;
   background-position: 0 0;
 }
@@ -216,17 +312,17 @@
   position: absolute;
   inset: 0;
   transform: translateX(-100%);
-  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.65), transparent);
+  background: linear-gradient(90deg, transparent, var(--shimmer), transparent);
   animation: shimmer 1.4s infinite;
 }
 
 @keyframes court-flash {
   0% {
-    box-shadow: 0 0 0 0 rgba(21, 96, 214, 0.5);
-    background-color: rgba(21, 96, 214, 0.1);
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--court) 50%, transparent);
+    background-color: color-mix(in srgb, var(--court) 10%, transparent);
   }
   100% {
-    box-shadow: 0 0 0 6px rgba(21, 96, 214, 0);
+    box-shadow: 0 0 0 6px transparent;
     background-color: transparent;
   }
 }
@@ -240,5 +336,34 @@
   *::after {
     animation-duration: 0.001ms !important;
     transition-duration: 0.001ms !important;
+  }
+}
+
+/* ── Ganti tema: reveal lingkaran ber-blur dari pojok kanan atas ──
+   Tombol toggle ada di kanan atas header, jadi reveal-nya keluar dari situ.
+   Cuma jalan kalau browser dukung View Transitions (lihat lib/theme-transition.ts). */
+::view-transition-group(root) {
+  animation-timing-function: var(--expo-out);
+}
+::view-transition-old(root),
+.dark::view-transition-old(root) {
+  animation: none;
+  animation-fill-mode: both;
+  z-index: -1;
+}
+::view-transition-new(root),
+.dark::view-transition-new(root) {
+  mask: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 40"><defs><filter id="blur"><feGaussianBlur stdDeviation="2"/></filter></defs><circle cx="40" cy="0" r="18" fill="white" filter="url(%23blur)"/></svg>')
+    top right / 0 no-repeat;
+  mask-origin: content-box;
+  transform-origin: top right;
+  animation-name: theme-reveal;
+  animation-duration: 0.9s;
+  animation-timing-function: var(--expo-out);
+  animation-fill-mode: both;
+}
+@keyframes theme-reveal {
+  to {
+    mask-size: 350vmax;
   }
 }

@@ -11,6 +11,7 @@ import { KokTypesPanel } from "@/components/admin/kok-types-panel";
 import { OperatorsPanel } from "@/components/admin/operators-panel";
 import { PlayersPanel } from "@/components/admin/players-panel";
 import { SettingsPanel } from "@/components/admin/settings-panel";
+import { ThemePanel } from "@/components/admin/theme-panel";
 import { KIcon, type IconName } from "@/components/kok/icons";
 import {
   Sheet,
@@ -20,7 +21,7 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet";
 
-type PanelKey = "kok" | "pemain" | "delegasi" | "setelan" | null;
+type PanelKey = "kok" | "pemain" | "delegasi" | "setelan" | "tampilan" | null;
 
 const MENU: {
   key: PanelKey | "public" | "lock";
@@ -58,6 +59,12 @@ const MENU: {
     icon: "qrcode",
     adminOnly: true,
     desc: "Upload foto QRIS cetak merchant. Payload disimpan — tombol Bayar QRIS muncul di tagihan.",
+  },
+  {
+    key: "tampilan",
+    label: "Tampilan",
+    icon: "themeAuto",
+    desc: "Mode terang, gelap, atau ikut setelan sistem.",
   },
   { key: "public", label: "Halaman publik", icon: "back", href: "/" },
   { key: "lock", label: "Kunci", icon: "lock", danger: true },
@@ -165,6 +172,7 @@ export function LainnyaMenu({
             {panel === "pemain" && <PlayersPanel players={players} />}
             {panel === "delegasi" && <OperatorsPanel operators={operators} players={players} />}
             {panel === "setelan" && <SettingsPanel merchantQris={merchantQris} />}
+            {panel === "tampilan" && <ThemePanel />}
           </div>
         </SheetContent>
       </Sheet>
