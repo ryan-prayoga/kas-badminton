@@ -14,6 +14,19 @@ const mono = JetBrains_Mono({ variable: "--font-jbmono", subsets: ["latin"] });
 export const metadata: Metadata = {
   title: "Kok Badminton",
   description: "Kas patungan kok badminton — matchup, tagihan, dan setelan, realtime.",
+  applicationName: "Kok Badminton",
+  icons: {
+    icon: [
+      { url: "/favicon.ico", sizes: "any" },
+      { url: "/icon.svg", type: "image/svg+xml" },
+    ],
+    apple: [{ url: "/apple-icon.png", sizes: "180x180", type: "image/png" }],
+  },
+  appleWebApp: {
+    capable: true,
+    title: "Kok Badminton",
+    statusBarStyle: "default",
+  },
 };
 
 export const viewport: Viewport = {

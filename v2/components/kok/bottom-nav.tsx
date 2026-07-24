@@ -28,7 +28,7 @@ function buildItems(adminChrome: boolean, role: Role): NavItem[] {
     },
     {
       href: "/belum-bayar",
-      label: "Bayar",
+      label: "Rekap",
       icon: "wallet",
       match: (p) => p.startsWith("/belum-bayar"),
     },
@@ -96,7 +96,7 @@ export function BottomNav({
   // - rute /admin*, atau
   // - masih login + mode admin + BUKAN di home publik `/`
   // Mode `public` (dari menu Lainnya) stay di chrome publik meski pindah
-  // Bayar/Statistik — Riwayat tetap `/`, tanpa FAB/Lainnya.
+  // Rekap/Statistik — Riwayat tetap `/`, tanpa FAB/Lainnya.
   const adminChrome =
     !!role &&
     (pathname.startsWith("/admin") || (storedMode !== "public" && pathname !== "/"));

@@ -21,6 +21,7 @@ export default async function StatistikPage() {
         kokTypes={data.kokTypes}
         photoMap={buildPhotoMap(data.players)}
         kas={isAdmin ? data.kas : undefined}
+        expenses={isAdmin ? data.expenses : undefined}
       />
     </AppFrame>
   );

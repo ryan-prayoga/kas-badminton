@@ -5,13 +5,13 @@ import type { CarryMap, DbSnapshot } from "@/lib/domain/types";
 import { rowToGame, rowToKokType } from "./mappers";
 
 export async function loadSnapshot(): Promise<DbSnapshot> {
-  const [settingsRow, playerRows, gameRows, typeRows, carryRows, expenseAgg] = await Promise.all([
+  const [settingsRow, playerRows, gameRows, typeRows, carryRows, expenseRows] = await Promise.all([
     prisma.settings.findUnique({ where: { id: 1 } }),
     prisma.players.findMany({ orderBy: { name: "asc" } }),
     prisma.games.findMany(),
     prisma.kok_types.findMany(),
     prisma.player_carry.findMany(),
-    prisma.expenses.aggregate({ _sum: { amount: true } }),
+    prisma.expenses.findMany({ select: { amount: true, created_at: true } }),
   ]);
 
   const carry: CarryMap = {};
@@ -24,6 +24,12 @@ export async function loadSnapshot(): Promise<DbSnapshot> {
     .map(rowToKokType)
     .sort((a, b) => a.name.toLowerCase().localeCompare(b.name.toLowerCase()));
 
+  const expenses = expenseRows.map((r) => ({
+    amount: Math.max(0, Math.round(Number(r.amount) || 0)),
+    createdAt: r.created_at.toISOString(),
+  }));
+  const totalExpense = expenses.reduce((s, e) => s + e.amount, 0);
+
   return {
     settings: {
       defaultPricePerPerson: Number(settingsRow?.default_price_per_person) || 3000,
@@ -33,6 +39,7 @@ export async function loadSnapshot(): Promise<DbSnapshot> {
     games: gameRows.map(rowToGame),
     kokTypes,
     carry,
-    totalExpense: Number(expenseAgg._sum.amount) || 0,
+    totalExpense,
+    expenses,
   };
 }

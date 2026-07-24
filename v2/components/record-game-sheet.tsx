@@ -282,13 +282,13 @@ export function RecordGameSheet({
                             }}
                           </SelectValue>
                         </SelectTrigger>
-                        <SelectContent className="rounded-xl" alignItemWithTrigger={false}>
-                          <SelectItem value={CUSTOM} className="rounded-lg">
+                        <SelectContent className="rounded-xl p-1.5" alignItemWithTrigger={false}>
+                          <SelectItem value={CUSTOM} className="rounded-lg px-3 py-2.5">
                             Custom / tanpa stok
                           </SelectItem>
                           {options.map((t) => (
-                            <SelectItem key={t.id} value={t.id} className="rounded-lg">
-                              <span className="flex w-full min-w-0 items-center justify-between gap-2">
+                            <SelectItem key={t.id} value={t.id} className="rounded-lg px-3 py-2.5">
+                              <span className="flex w-full min-w-0 items-center justify-between gap-3">
                                 <span className="truncate">{t.name}</span>
                                 <span className="shrink-0 font-mono text-xs text-muted-foreground">
                                   {formatRupiah(t.pricePerPerson)} · stok {t.stock}

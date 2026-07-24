@@ -151,7 +151,7 @@ export function DateField({
         <div
           role="dialog"
           aria-label="Pilih tanggal"
-          className="mt-2 overflow-hidden rounded-2xl border border-line bg-surface p-3 shadow-card animate-in fade-in-0 zoom-in-95"
+          className="absolute bottom-full left-0 right-0 z-50 mb-2 overflow-hidden rounded-2xl border border-line bg-surface p-3 shadow-pop animate-in fade-in-0 zoom-in-95"
         >
           <div className="mb-2.5 flex gap-1.5">
             {[

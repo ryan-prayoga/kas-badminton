@@ -1,8 +1,8 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import type { DebtEntry, EnrichedGame, KokType } from "@/lib/domain/types";
-import { fmt, periodKey } from "@/lib/format";
+import type { DebtEntry, EnrichedGame, ExpenseRow, KokType } from "@/lib/domain/types";
+import { fmt, periodKey, periodLabel } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { Avatar, type PhotoMap } from "@/components/kok/avatar";
 import { PeriodFilter } from "@/components/kok/period-filter";
@@ -46,18 +46,79 @@ interface PlayerStat {
   nunggak: number;
 }
 
+function doShare(text: string) {
+  if (typeof navigator !== "undefined" && navigator.share) {
+    navigator.share({ text }).catch(() => {});
+  } else {
+    window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, "_blank");
+  }
+}
+
+function buildShareText({
+  periodName,
+  totalGames,
+  totalKok,
+  paid,
+  unpaid,
+  expense,
+  showKas,
+  players,
+}: {
+  periodName: string;
+  totalGames: number;
+  totalKok: number;
+  paid: number;
+  unpaid: number;
+  expense: number;
+  showKas: boolean;
+  players: PlayerStat[];
+}): string {
+  const net = paid - expense;
+  const lines: string[] = [
+    "📊 Statistik Kok Badminton",
+    `Periode: ${periodName}`,
+    "",
+    "RINGKASAN",
+    `• Total game: ${totalGames}`,
+    `• Total kok: ${totalKok}`,
+    `• Masuk (lunas): ${fmt(paid)}`,
+    `• Belum bayar: ${fmt(unpaid)}`,
+  ];
+
+  if (showKas) {
+    lines.push(`• Keluar (beli stok): ${fmt(expense)}`);
+    lines.push(`• Saldo bersih: ${fmt(net)}`);
+  }
+
+  lines.push("", `PEMAIN (${players.length} orang)`);
+  if (players.length === 0) {
+    lines.push("• Belum ada yang main");
+  } else {
+    players.forEach((p, i) => {
+      const status = p.nunggak > 0 ? `nunggak ${fmt(p.nunggak)}` : "Lunas";
+      lines.push(
+        `${i + 1}. ${p.name} — ${p.main} main · ${p.kok} kok · keluar ${fmt(p.keluar)} · ${status}`,
+      );
+    });
+  }
+
+  return lines.join("\n");
+}
+
 export function StatsView({
   games,
   debts,
   kokTypes,
   photoMap,
   kas,
+  expenses,
 }: {
   games: EnrichedGame[];
   debts: DebtEntry[];
   kokTypes: KokType[];
   photoMap: PhotoMap;
   kas?: { paid: number; expense: number; net: number };
+  expenses?: ExpenseRow[];
 }) {
   const [period, setPeriod] = useState("all");
 
@@ -70,11 +131,38 @@ export function StatsView({
     return [...keys].sort().reverse();
   }, [games]);
 
-  const scoped = period === "all" ? games : games.filter((g) => periodKey(g.date) === period);
-  const totalDebt = debts.reduce((s, d) => s + d.total, 0);
+  const scoped = useMemo(
+    () => (period === "all" ? games : games.filter((g) => periodKey(g.date) === period)),
+    [games, period],
+  );
+
   const totalKok = scoped.reduce((s, g) => s + g.cost.kokCount, 0);
+  const paidIn = scoped.reduce((s, g) => s + g.summary.paidTotal, 0);
+  const unpaidIn = scoped.reduce((s, g) => s + g.summary.unpaidTotal, 0);
+
+  // Kas keluar: filter expense by bulan (createdAt) bila period dipilih; all-time pakai total.
+  const expenseIn = useMemo(() => {
+    if (!kas) return 0;
+    if (period === "all") return kas.expense;
+    if (!expenses?.length) return 0;
+    return expenses
+      .filter((e) => periodKey(e.createdAt.slice(0, 10)) === period)
+      .reduce((s, e) => s + e.amount, 0);
+  }, [kas, expenses, period]);
+
+  const kasNet = paidIn - expenseIn;
   const stockLeft = kokTypes.reduce((s, t) => s + Math.max(0, Number(t.stock) || 0), 0);
   const typesWithStock = kokTypes.filter((t) => (Number(t.stock) || 0) > 0).length;
+
+  // Belum bayar: periode → unpaid game di scope; semua waktu → debt summary (carry-aware).
+  const totalDebt =
+    period === "all" ? debts.reduce((s, d) => s + d.total, 0) : unpaidIn;
+  const debtPeople =
+    period === "all"
+      ? debts.length
+      : new Set(
+          scoped.flatMap((g) => g.players.filter((p) => p.name && !p.paid).map((p) => p.name)),
+        ).size;
 
   const players = useMemo(() => {
     const map = new Map<string, PlayerStat>();
@@ -95,10 +183,36 @@ export function StatsView({
     );
   }, [scoped]);
 
+  const periodName = period === "all" ? "Semua waktu" : periodLabel(period);
+
+  const onShare = () => {
+    doShare(
+      buildShareText({
+        periodName,
+        totalGames: scoped.length,
+        totalKok,
+        paid: paidIn,
+        unpaid: totalDebt,
+        expense: expenseIn,
+        showKas: Boolean(kas),
+        players,
+      }),
+    );
+  };
+
   return (
     <section className="flex flex-col gap-4">
-      <div className="flex items-center justify-end">
+      <div className="flex items-center justify-end gap-2">
         <PeriodFilter value={period} periods={periods} onChange={setPeriod} />
+        <button
+          type="button"
+          onClick={onShare}
+          aria-label="Bagikan statistik"
+          className="inline-flex h-[34px] items-center gap-1.5 rounded-full border border-line bg-surface px-3 text-xs font-semibold text-ink-soft shadow-card transition hover:border-court/30 hover:text-court active:scale-95"
+        >
+          <KIcon name="share" className="size-3.5" />
+          Bagikan
+        </button>
       </div>
 
       <div className="grid grid-cols-2 gap-3">
@@ -106,17 +220,17 @@ export function StatsView({
           <>
             <StatCard
               icon="cash"
-              iconClass={kas.net >= 0 ? "text-paid" : "text-danger"}
+              iconClass={kasNet >= 0 ? "text-paid" : "text-danger"}
               label="Total kas"
-              value={fmt(kas.net)}
-              valueClass={kas.net >= 0 ? "text-paid" : "text-danger"}
-              sub="saldo bersih"
+              value={fmt(kasNet)}
+              valueClass={kasNet >= 0 ? "text-paid" : "text-danger"}
+              sub={period === "all" ? "saldo bersih" : `bersih · ${periodName}`}
             />
             <StatCard
               icon="cash"
               iconClass="text-paid"
               label="Masuk"
-              value={fmt(kas.paid)}
+              value={fmt(paidIn)}
               valueClass="text-paid"
               sub="pembayaran lunas"
             />
@@ -124,7 +238,7 @@ export function StatsView({
               icon="cash"
               iconClass="text-danger"
               label="Beli / keluar"
-              value={fmt(kas.expense)}
+              value={fmt(expenseIn)}
               valueClass="text-danger"
               sub="beli stok kok"
             />
@@ -136,7 +250,7 @@ export function StatsView({
           label="Belum bayar"
           value={fmt(totalDebt)}
           valueClass={totalDebt ? "text-owe" : "text-paid"}
-          sub={debts.length ? `${debts.length} orang` : "Semua lunas"}
+          sub={debtPeople ? `${debtPeople} orang` : "Semua lunas"}
         />
         <StatCard
           icon="racket"

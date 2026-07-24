@@ -83,6 +83,13 @@ export interface DebtEntry {
 
 export type CarryMap = Record<string, number>;
 
+/** Pengeluaran kas (beli stok), untuk filter per-periode di statistik. */
+export interface ExpenseRow {
+  amount: number;
+  /** ISO datetime created_at */
+  createdAt: string;
+}
+
 export interface DbSnapshot {
   settings: { defaultPricePerPerson: number; merchantQris: string };
   players: PlayerRow[];
@@ -90,4 +97,6 @@ export interface DbSnapshot {
   kokTypes: KokType[];
   carry: CarryMap;
   totalExpense: number;
+  /** Daftar pengeluaran (admin); kosong/undefined di public. */
+  expenses?: ExpenseRow[];
 }

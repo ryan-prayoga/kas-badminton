@@ -2,7 +2,7 @@
 
 import { buildDebtSummary } from "./debt";
 import { enrichGame } from "./game";
-import type { DbSnapshot, DebtEntry, EnrichedGame, KokType, PlayerRow } from "./types";
+import type { DbSnapshot, DebtEntry, EnrichedGame, ExpenseRow, KokType, PlayerRow } from "./types";
 
 export interface SummaryPayload {
   settings: {
@@ -15,6 +15,8 @@ export interface SummaryPayload {
   games: EnrichedGame[];
   debtSummary: DebtEntry[];
   kas?: { paid: number; expense: number; net: number };
+  /** Rincian pengeluaran (admin) — untuk filter kas per bulan di statistik. */
+  expenses?: ExpenseRow[];
 }
 
 export function summarize(db: DbSnapshot, isAdmin: boolean): SummaryPayload {
@@ -45,6 +47,7 @@ export function summarize(db: DbSnapshot, isAdmin: boolean): SummaryPayload {
     const paid = games.reduce((s, g) => s + g.summary.paidTotal, 0);
     const expense = Math.max(0, Number(db.totalExpense) || 0);
     payload.kas = { paid, expense, net: paid - expense };
+    payload.expenses = db.expenses ?? [];
   }
 
   return payload;

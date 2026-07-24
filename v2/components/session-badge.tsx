@@ -22,7 +22,7 @@ export function SessionBadge({ role, name }: { role: "admin" | "operator" | null
   if (!role) return null;
 
   // Tombol "Admin · buka" di home publik, atau saat browse mode publik
-  // (setelah menu Halaman publik) di Bayar/Statistik.
+  // (setelah menu Halaman publik) di Rekap/Statistik.
   const publicBrowse =
     !pathname.startsWith("/admin") &&
     (storedMode === "public" || pathname === "/");
@@ -43,14 +43,14 @@ export function SessionBadge({ role, name }: { role: "admin" | "operator" | null
         <Link
           href="/admin"
           onClick={() => setNavMode("admin")}
-          className="inline-flex items-center gap-1 rounded-full bg-court/10 px-2.5 py-1 text-xs font-bold text-court transition hover:bg-court/15"
+          className="inline-flex h-9 items-center gap-1.5 rounded-full bg-court/10 px-3.5 text-sm font-bold text-court transition hover:bg-court/15"
         >
-          <KIcon name="shield" className="size-3.5" />
+          <KIcon name="shield" className="size-4" />
           {label} · buka
         </Link>
       ) : (
-        <span className="inline-flex items-center gap-1 rounded-full bg-court/10 px-2.5 py-1 text-xs font-bold text-court">
-          <KIcon name="shield" className="size-3.5" />
+        <span className="inline-flex h-9 items-center gap-1.5 rounded-full bg-court/10 px-3.5 text-sm font-bold text-court">
+          <KIcon name="shield" className="size-4" />
           {label}
         </span>
       )}
@@ -58,10 +58,10 @@ export function SessionBadge({ role, name }: { role: "admin" | "operator" | null
         type="button"
         onClick={doLogout}
         disabled={pending}
-        aria-label="Keluar"
-        className="grid size-9 place-items-center rounded-xl border border-line bg-surface text-ink-soft shadow-card transition hover:text-danger active:scale-95"
+        aria-label="Kunci sesi"
+        className="grid size-9 place-items-center rounded-full border border-line bg-surface text-ink-soft shadow-card transition hover:border-court/25 hover:bg-court/5 hover:text-court active:scale-95 disabled:opacity-50"
       >
-        <KIcon name="logout" className="size-4" />
+        <KIcon name="lock" className="size-4" />
       </button>
     </div>
   );

@@ -107,7 +107,7 @@ export function LainnyaMenu({
                 href={item.href}
                 className={className}
                 onClick={() => {
-                  // Stay di chrome publik saat pindah nav (Bayar/Statistik/Riwayat)
+                  // Stay di chrome publik saat pindah nav (Rekap/Statistik/Riwayat)
                   if (item.key === "public") setNavMode("public");
                 }}
               >
