@@ -53,10 +53,10 @@ const MENU: {
   },
   {
     key: "setelan",
-    label: "QRIS & harga default",
-    icon: "cog",
+    label: "QRIS",
+    icon: "qrcode",
     adminOnly: true,
-    desc: "QRIS merchant + harga default per orang.",
+    desc: "Upload QRIS statis merchant. Tombol bayar muncul di tagihan.",
   },
   { key: "public", label: "Halaman publik", icon: "back", href: "/" },
   { key: "lock", label: "Kunci", icon: "lock", danger: true },
@@ -66,13 +66,12 @@ export function LainnyaMenu({
   kokTypes,
   players,
   operators,
-  defaultPrice,
   merchantQris,
 }: {
   kokTypes: KokType[];
   players: PlayerRow[];
   operators: OperatorView[];
-  defaultPrice: number;
+  defaultPrice?: number;
   merchantQris: string;
 }) {
   const router = useRouter();
@@ -152,9 +151,7 @@ export function LainnyaMenu({
             {panel === "kok" && <KokTypesPanel kokTypes={kokTypes} />}
             {panel === "pemain" && <PlayersPanel players={players} />}
             {panel === "delegasi" && <OperatorsPanel operators={operators} />}
-            {panel === "setelan" && (
-              <SettingsPanel defaultPrice={defaultPrice} merchantQris={merchantQris} />
-            )}
+            {panel === "setelan" && <SettingsPanel merchantQris={merchantQris} />}
           </div>
         </SheetContent>
       </Sheet>

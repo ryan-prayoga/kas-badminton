@@ -8,6 +8,7 @@ import type { KokType } from "@/lib/domain/types";
 import { expenseFromInitialStock, slopsFromStock } from "@/lib/domain/stock";
 import { formatRupiah } from "@/lib/format";
 import {
+  adjustStockAction,
   buyStockAction,
   createKokTypeAction,
   deleteKokTypeAction,
@@ -26,6 +27,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { KIcon } from "@/components/kok/icons";
 
 function BuyDialog({ type }: { type: KokType }) {
   const router = useRouter();
@@ -185,6 +187,15 @@ function TypeRow({ type }: { type: KokType }) {
       } else toast.error(res.error);
     });
 
+  const tweak = (delta: number) =>
+    startTransition(async () => {
+      const res = await adjustStockAction(type.id, delta);
+      if (res.ok) {
+        toast.success(delta > 0 ? `Stok +${delta}` : `Stok ${delta}`);
+        router.refresh();
+      } else toast.error(res.error);
+    });
+
   return (
     <Card className="gap-3 p-3">
       <div className="flex items-start justify-between gap-2">
@@ -200,6 +211,29 @@ function TypeRow({ type }: { type: KokType }) {
         </Badge>
       </div>
       <div className="flex items-center gap-1.5">
+        <div className="inline-flex items-center gap-0.5 rounded-xl border border-line bg-surface p-0.5 shadow-card">
+          <button
+            type="button"
+            aria-label="Kurangi 1 kok"
+            disabled={pending || type.stock <= 0}
+            onClick={() => tweak(-1)}
+            className="grid size-8 place-items-center rounded-lg text-ink-soft transition hover:bg-surface-2 hover:text-ink active:scale-95 disabled:opacity-40"
+          >
+            <KIcon name="minus" className="size-4" />
+          </button>
+          <span className="tabular min-w-8 text-center font-mono text-sm font-bold text-ink">
+            {type.stock}
+          </span>
+          <button
+            type="button"
+            aria-label="Tambah 1 kok"
+            disabled={pending}
+            onClick={() => tweak(1)}
+            className="grid size-8 place-items-center rounded-lg text-ink-soft transition hover:bg-surface-2 hover:text-ink active:scale-95 disabled:opacity-40"
+          >
+            <KIcon name="plus" className="size-4" />
+          </button>
+        </div>
         <BuyDialog type={type} />
         <div className="ml-auto flex items-center gap-1">
           <EditDialog type={type} />

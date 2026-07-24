@@ -16,14 +16,13 @@ type NavItem = {
   match: (p: string) => boolean;
 };
 
-function buildItems(role: Role): NavItem[] {
-  const loggedIn = !!role;
+function buildItems(adminChrome: boolean, role: Role): NavItem[] {
   const items: NavItem[] = [
     {
-      href: loggedIn ? "/admin" : "/",
+      href: adminChrome ? "/admin" : "/",
       label: "Riwayat",
       icon: "history",
-      match: (p) => (loggedIn ? p === "/admin" : p === "/"),
+      match: (p) => (adminChrome ? p === "/admin" : p === "/"),
     },
     {
       href: "/belum-bayar",
@@ -38,14 +37,24 @@ function buildItems(role: Role): NavItem[] {
       match: (p) => p.startsWith("/statistik"),
     },
   ];
-  if (role === "admin") {
+
+  if (adminChrome && role === "admin") {
     items.push({
       href: "/admin/lainnya",
       label: "Lainnya",
       icon: "dotsHorizontal",
       match: (p) => p.startsWith("/admin/lainnya"),
     });
+  } else if (!adminChrome) {
+    // Nav publik: Lainnya → masuk admin / kunci
+    items.push({
+      href: "/admin",
+      label: "Lainnya",
+      icon: "dotsHorizontal",
+      match: (p) => p.startsWith("/admin"),
+    });
   }
+
   return items;
 }
 
@@ -55,12 +64,12 @@ function NavLink({ item, pathname }: { item: NavItem; pathname: string }) {
     <Link
       href={item.href}
       className={cn(
-        "flex min-w-0 flex-1 flex-col items-center justify-center gap-0.5 rounded-2xl px-1 py-1.5 text-[11px] font-semibold transition sm:flex-row sm:gap-1.5 sm:px-2.5 sm:text-sm",
-        active ? "bg-court/12 text-court" : "text-ink-soft hover:bg-court/8 hover:text-court",
+        "flex min-w-0 flex-1 flex-col items-center justify-center gap-0.5 px-1 py-1.5 text-[11px] font-semibold transition",
+        active ? "text-court" : "text-ink-faint hover:text-court",
       )}
     >
-      <KIcon name={item.icon} className="size-[20px] sm:size-[18px]" />
-      <span className="truncate">{item.label}</span>
+      <KIcon name={item.icon} className="size-5" />
+      <span className="max-w-full truncate">{item.label}</span>
     </Link>
   );
 }
@@ -80,8 +89,12 @@ export function BottomNav({
   // Lockscreen admin: sembunyikan nav biar mirip v1
   if (!role && pathname.startsWith("/admin")) return null;
 
-  const items = buildItems(role);
-  const showFab = !!role && !!recordGame;
+  // Halaman publik (`/`) selalu pakai nav publik — meski masih login
+  // (tombol "Halaman publik" di Lainnya). Di rute lain, login = chrome admin.
+  const onPublicHome = pathname === "/";
+  const adminChrome = !!role && !onPublicHome;
+  const items = buildItems(adminChrome, role);
+  const showFab = adminChrome && !!recordGame;
 
   // Sisipkan FAB di tengah: [kiri…] [FAB] […kanan]
   const mid = Math.ceil(items.length / 2);
@@ -93,13 +106,13 @@ export function BottomNav({
       className="pointer-events-none fixed inset-x-0 bottom-0 z-40 flex justify-center px-3"
       style={{ paddingBottom: "calc(env(safe-area-inset-bottom) + 10px)" }}
     >
-      <nav className="pointer-events-auto flex w-full max-w-[440px] items-end gap-0.5 rounded-[1.75rem] border border-line bg-surface/90 p-1.5 shadow-pop backdrop-blur-xl">
+      <nav className="pointer-events-auto relative flex w-full max-w-[440px] items-center rounded-[1.75rem] border border-line bg-surface/95 px-1.5 py-1.5 shadow-pop backdrop-blur-xl">
         {left.map((item) => (
-          <NavLink key={item.href} item={item} pathname={pathname} />
+          <NavLink key={item.href + item.label} item={item} pathname={pathname} />
         ))}
 
         {showFab && recordGame ? (
-          <div className="flex shrink-0 items-center justify-center px-0.5 pb-0.5">
+          <div className="relative z-10 flex shrink-0 items-center justify-center px-1">
             <RecordGameSheet
               kokTypes={recordGame.kokTypes}
               players={recordGame.players}
@@ -108,7 +121,7 @@ export function BottomNav({
                 <button
                   type="button"
                   aria-label="Catat main baru"
-                  className="grid size-14 place-items-center rounded-full bg-court text-white shadow-court transition hover:bg-court-deep active:scale-90"
+                  className="-my-3 grid size-14 place-items-center rounded-full bg-court text-white shadow-court transition hover:bg-court-deep active:scale-90"
                 >
                   <KIcon name="plus" className="size-7" />
                 </button>
@@ -118,7 +131,7 @@ export function BottomNav({
         ) : null}
 
         {right.map((item) => (
-          <NavLink key={item.href} item={item} pathname={pathname} />
+          <NavLink key={item.href + item.label} item={item} pathname={pathname} />
         ))}
       </nav>
     </div>

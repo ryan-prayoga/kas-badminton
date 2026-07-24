@@ -41,6 +41,7 @@ function StatCard({
 interface PlayerStat {
   name: string;
   main: number;
+  kok: number;
   keluar: number;
   nunggak: number;
 }
@@ -78,10 +79,12 @@ export function StatsView({
   const players = useMemo(() => {
     const map = new Map<string, PlayerStat>();
     for (const g of scoped) {
+      const kokCount = Number(g.cost.kokCount) || 0;
       for (const p of g.players) {
         if (!p.name) continue;
-        const s = map.get(p.name) ?? { name: p.name, main: 0, keluar: 0, nunggak: 0 };
+        const s = map.get(p.name) ?? { name: p.name, main: 0, kok: 0, keluar: 0, nunggak: 0 };
         s.main += 1;
+        s.kok += kokCount;
         s.keluar += g.cost.perPerson;
         if (!p.paid) s.nunggak += g.cost.perPerson;
         map.set(p.name, s);
@@ -167,6 +170,9 @@ export function StatsView({
                     <span className="inline-flex items-center gap-1">
                       <KIcon name="racket" className="size-3" /> {s.main} main
                     </span>
+                    <span className="inline-flex items-center gap-1">
+                      <KIcon name="shuttle" className="size-3" /> {s.kok} kok
+                    </span>
                     <span className="tabular inline-flex items-center gap-1 font-mono">
                       <KIcon name="cash" className="size-3" /> {fmt(s.keluar)}
                     </span>
@@ -174,10 +180,7 @@ export function StatsView({
                 </div>
                 <div className="shrink-0 text-right">
                   {s.nunggak > 0 ? (
-                    <>
-                      <div className="tabular font-mono text-sm font-bold text-owe">{fmt(s.nunggak)}</div>
-                      <div className="text-[10px] text-ink-faint">nunggak</div>
-                    </>
+                    <div className="tabular font-mono text-sm font-bold text-owe">{fmt(s.nunggak)}</div>
                   ) : (
                     <div className="inline-flex items-center gap-1 text-sm font-bold text-paid">
                       <KIcon name="checkCircle" className="size-3.5" /> Lunas

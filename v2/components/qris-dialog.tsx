@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import QRCode from "qrcode";
-import { Loader2, QrCode } from "lucide-react";
+import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { formatRupiah } from "@/lib/format";
 import { Button } from "@/components/ui/button";
@@ -16,6 +16,10 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { KIcon } from "@/components/kok/icons";
+
+const pillBtn =
+  "inline-flex items-center gap-1.5 rounded-xl border border-line bg-surface px-3 py-2 text-sm font-semibold text-ink shadow-card transition active:scale-95";
 
 export function QrisDialog({
   name,
@@ -70,8 +74,8 @@ export function QrisDialog({
       {trigger ? (
         <DialogTrigger render={trigger as React.ReactElement} />
       ) : (
-        <DialogTrigger render={<Button size="sm" variant="outline" className="h-8 gap-1.5 text-xs" />}>
-          <QrCode className="size-4" /> QRIS
+        <DialogTrigger render={<button type="button" className={pillBtn} />}>
+          <KIcon name="qrcode" className="size-4" /> QRIS
         </DialogTrigger>
       )}
       <DialogContent className="max-w-sm">

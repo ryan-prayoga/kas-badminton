@@ -26,7 +26,6 @@ export default async function LainnyaPage() {
           kokTypes={data.kokTypes}
           players={data.players}
           operators={operators}
-          defaultPrice={data.settings.defaultPricePerPerson}
           merchantQris={data.settings.merchantQris ?? ""}
         />
       </div>
