@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { EnrichedGame } from "@/lib/domain/types";
-import { fmt, fmtDate, periodKey } from "@/lib/format";
+import { currentPeriodKey, fmt, fmtDate, periodKey } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { GameCard } from "@/components/kok/game-card";
 import { PeriodFilter } from "@/components/kok/period-filter";
@@ -69,10 +69,6 @@ export function HistoryView({
   players?: import("@/lib/domain/types").PlayerRow[];
   defaultPrice?: number;
 }) {
-  const [period, setPeriod] = useState("all");
-  const [open, setOpen] = useState<Record<string, boolean>>({});
-  const flash = useFlash(games);
-
   const periods = useMemo(() => {
     const keys = new Set<string>();
     for (const g of games) {
@@ -81,6 +77,13 @@ export function HistoryView({
     }
     return [...keys].sort().reverse();
   }, [games]);
+
+  const [period, setPeriod] = useState(() => {
+    const cur = currentPeriodKey();
+    return periods.includes(cur) ? cur : "all";
+  });
+  const [open, setOpen] = useState<Record<string, boolean>>({});
+  const flash = useFlash(games);
 
   const filtered = period === "all" ? games : games.filter((g) => periodKey(g.date) === period);
   const groups = groupByDate(filtered);

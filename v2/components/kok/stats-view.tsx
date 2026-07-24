@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import type { DebtEntry, EnrichedGame, ExpenseRow, KokType } from "@/lib/domain/types";
-import { fmt, fmtDate, periodKey, periodLabel, toLocalIso } from "@/lib/format";
+import { currentPeriodKey, fmt, fmtDate, periodKey, periodLabel, toLocalIso } from "@/lib/format";
 import { APP_URL, type ShareCardBlock, type ShareMetric } from "@/lib/share";
 import { cn } from "@/lib/utils";
 import { Avatar, type PhotoMap } from "@/components/kok/avatar";
@@ -289,9 +289,6 @@ export function StatsView({
   kas?: { paid: number; expense: number; net: number };
   expenses?: ExpenseRow[];
 }) {
-  const [period, setPeriod] = useState("all");
-  const [shareOpen, setShareOpen] = useState(false);
-
   const periods = useMemo(() => {
     const keys = new Set<string>();
     for (const g of games) {
@@ -300,6 +297,12 @@ export function StatsView({
     }
     return [...keys].sort().reverse();
   }, [games]);
+
+  const [period, setPeriod] = useState(() => {
+    const cur = currentPeriodKey();
+    return periods.includes(cur) ? cur : "all";
+  });
+  const [shareOpen, setShareOpen] = useState(false);
 
   const scoped = useMemo(
     () => (period === "all" ? games : games.filter((g) => periodKey(g.date) === period)),

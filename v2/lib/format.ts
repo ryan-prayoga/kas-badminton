@@ -119,6 +119,11 @@ export function periodKey(iso: string): string {
   return m ? `${m[1]}-${m[2]}` : "";
 }
 
+export function currentPeriodKey(): string {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+}
+
 export function periodLabel(key: string): string {
   const m = /^(\d{4})-(\d{2})$/.exec(key);
   if (!m) return key;
