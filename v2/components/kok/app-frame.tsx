@@ -46,10 +46,6 @@ export function AppFrame({
       </header>
 
       {children}
-
-      <footer className="pb-1 pt-2 text-center text-xs text-ink-faint">
-        Kok Badminton · dibuat buat patungan yang rapi
-      </footer>
     </div>
   );
 }
