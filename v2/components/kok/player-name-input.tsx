@@ -25,9 +25,13 @@ export function PlayerNameInput({
     .filter((n) => n.toLowerCase().includes(q) && n.toLowerCase() !== q)
     .slice(0, 6);
   const selectedPhoto = value.trim() ? photoMap?.[value.trim()] : undefined;
+  const showList = open && matches.length > 0;
 
   return (
-    <div className="relative z-10">
+    // Semua input ini bersebelahan dengan z yang sama, jadi input yang lebih
+    // bawah di DOM bakal nutupin dropdown punya input di atasnya. Naikin z
+    // pembungkusnya selama dropdown kebuka.
+    <div className={cn("relative", showList ? "z-50" : "z-10")}>
       <div className="relative">
         {selectedPhoto && (
           // eslint-disable-next-line @next/next/no-img-element
@@ -56,7 +60,7 @@ export function PlayerNameInput({
           )}
         />
       </div>
-      {open && matches.length > 0 && (
+      {showList && (
         <ul className="absolute z-50 mt-1 max-h-56 w-full overflow-y-auto overscroll-contain rounded-xl border border-line bg-surface p-1 shadow-pop">
           {matches.map((n) => (
             <li key={n}>
