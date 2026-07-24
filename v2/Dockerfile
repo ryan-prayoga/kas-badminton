@@ -1,30 +1,39 @@
 # syntax=docker/dockerfile:1
 
-# ---- deps (build-time, termasuk devDeps buat next/typescript) ----
-FROM node:20-alpine AS deps
+# ---- deps (build-time, full incl. devDeps buat next/typescript/tailwind) ----
+# bun install + cache store; layer ini CACHED selama lockfile gak berubah
+FROM oven/bun:1-alpine AS deps
 WORKDIR /app
-COPY package.json package-lock.json ./
-RUN --mount=type=cache,target=/root/.npm \
-    npm ci --no-audit --no-fund
+COPY package.json bun.lock ./
+RUN --mount=type=cache,target=/root/.bun/install/cache \
+    bun install --frozen-lockfile
 
-# ---- builder ----
+# ---- prod-deps: install production only (tanpa eslint/vitest/ts) ----
+# COPY --from=deps biar stage ini sequential setelah deps → cache store bun sudah warm
+FROM oven/bun:1-alpine AS prod-deps
+WORKDIR /app
+COPY package.json bun.lock ./
+COPY --from=deps /app/package.json /tmp/.deps-warm
+RUN --mount=type=cache,target=/root/.bun/install/cache \
+    bun install --frozen-lockfile --production
+
+# ---- builder (node resmi: next build + prisma generate) ----
 FROM node:20-alpine AS builder
 WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
-COPY . .
-# prisma generate cuma butuh DATABASE_URL ke-resolve secara sintaks, gak konek ke DB beneran
+COPY package.json bun.lock ./
+# prisma dulu biar layer generate cache-hit kalau cuma ubah app source
+COPY prisma ./prisma
+COPY prisma.config.ts ./
 ENV DATABASE_URL="postgresql://build:build@localhost:5432/build" \
     NEXT_TELEMETRY_DISABLED=1 \
     NODE_ENV=production
+# prisma generate cuma butuh DATABASE_URL ke-resolve secara sintaks, gak konek ke DB beneran
 RUN npx prisma generate
-RUN npm run build
-
-# ---- prod-deps (runtime saja: tanpa eslint/vitest/typescript/dll) ----
-FROM node:20-alpine AS prod-deps
-WORKDIR /app
-COPY package.json package-lock.json ./
-RUN --mount=type=cache,target=/root/.npm \
-    npm ci --omit=dev --no-audit --no-fund
+COPY . .
+# cache .next biar compile incremental antar CI run (BuildKit cache mount)
+RUN --mount=type=cache,target=/app/.next/cache \
+    npm run build
 
 # ---- runner ----
 FROM node:20-alpine AS runner

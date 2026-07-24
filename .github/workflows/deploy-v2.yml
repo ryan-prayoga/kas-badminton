@@ -57,8 +57,9 @@ jobs:
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
           labels: |
             org.opencontainers.image.source=https://github.com/ryan-prayoga/kas-badminton
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          # scope stabil biar cache GHA gak kecampur workflow lain di repo
+          cache-from: type=gha,scope=kas-v2-arm
+          cache-to: type=gha,mode=max,scope=kas-v2-arm
           # provenance/sbom off biar image lebih simpel di-pull compose lama
           provenance: false
           sbom: false
@@ -129,7 +130,7 @@ jobs:
             # login GHCR pake token job (expired setelah workflow selesai)
             echo "$GHCR_TOKEN" | docker login ghcr.io -u "$GHCR_USER" --password-stdin
 
-            # pull dulu — production di 8200 tetap hidup selama ini
+            # pull sekali — image yang sama dipakai validate (8201) + prod (8200)
             docker compose pull
 
             # proses test manual lama yang mungkin masih nyangkut
@@ -143,16 +144,17 @@ jobs:
               || true
 
             # --- validasi di project terpisah port 8201, PRODUCTION TETAP DI 8200 ---
+            # gak perlu pull lagi: tag IMAGE_TAG yang sama udah di local dari compose pull di atas
             export PORT=8201
-            docker compose -p kas-v2-validate pull
             docker compose -p kas-v2-validate up -d --force-recreate
             ok=0
-            for i in $(seq 1 20); do
+            for i in $(seq 1 24); do
               if curl -fsS "http://127.0.0.1:8201/api/health" >/dev/null 2>&1; then
                 ok=1
                 break
               fi
-              sleep 1
+              # interval pendek di awal (boot cepat), longgar di akhir
+              if [ "$i" -le 8 ]; then sleep 0.5; else sleep 1; fi
             done
             docker compose -p kas-v2-validate down || true
 
@@ -169,12 +171,12 @@ jobs:
             docker compose up -d --force-recreate --remove-orphans
 
             ok=0
-            for i in $(seq 1 20); do
+            for i in $(seq 1 24); do
               if curl -fsS "http://127.0.0.1:8200/api/health" >/dev/null 2>&1; then
                 ok=1
                 break
               fi
-              sleep 1
+              if [ "$i" -le 8 ]; then sleep 0.5; else sleep 1; fi
             done
 
             if [ "$ok" != "1" ]; then
