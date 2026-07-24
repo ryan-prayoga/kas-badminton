@@ -103,14 +103,32 @@ export function StatsView({
 
       <div className="grid grid-cols-2 gap-3">
         {kas && (
-          <StatCard
-            icon="cash"
-            iconClass={kas.net >= 0 ? "text-paid" : "text-danger"}
-            label="Total kas"
-            value={fmt(kas.net)}
-            valueClass={kas.net >= 0 ? "text-paid" : "text-danger"}
-            sub={`masuk ${fmt(kas.paid)} · beli ${fmt(kas.expense)}`}
-          />
+          <>
+            <StatCard
+              icon="cash"
+              iconClass={kas.net >= 0 ? "text-paid" : "text-danger"}
+              label="Total kas"
+              value={fmt(kas.net)}
+              valueClass={kas.net >= 0 ? "text-paid" : "text-danger"}
+              sub="saldo bersih"
+            />
+            <StatCard
+              icon="cash"
+              iconClass="text-paid"
+              label="Masuk"
+              value={fmt(kas.paid)}
+              valueClass="text-paid"
+              sub="pembayaran lunas"
+            />
+            <StatCard
+              icon="cash"
+              iconClass="text-danger"
+              label="Beli / keluar"
+              value={fmt(kas.expense)}
+              valueClass="text-danger"
+              sub="beli stok kok"
+            />
+          </>
         )}
         <StatCard
           icon="cash"
