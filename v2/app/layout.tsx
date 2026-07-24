@@ -51,7 +51,7 @@ export default async function RootLayout({ children }: Readonly<{ children: Reac
       className={`${archivo.variable} ${hanken.variable} ${mono.variable}`}
       suppressHydrationWarning
     >
-      <body className="min-h-dvh font-sans antialiased">
+      <body className="min-h-svh font-sans antialiased">
         <ThemeProvider>
           <ConfirmProvider>
             {children}

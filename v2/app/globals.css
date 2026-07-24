@@ -175,16 +175,19 @@
   }
   html {
     -webkit-text-size-adjust: 100%;
-    /* `height: 100%` di iOS Safari ngukur ke viewport GEDE (toolbar kesembunyi),
-       jadi halaman pendek pun ikut bisa discroll setinggi toolbar dan bottom nav
-       yang `fixed` keangkat sampai ilang. `dvh` ngikut viewport yang kelihatan. */
-    min-height: 100dvh;
+    /* `dvh` masih kena lag: pas toolbar Safari nyembunyi, viewport-nya membesar
+       SEBELUM ukuran dvh sempat sinkron ulang, jadi ada jendela singkat di mana
+       halaman pendek ke-anggap "punya sisa scroll" — geser situ nyeret bottom nav
+       `fixed` ikut naik ke tengah layar. `svh` (viewport TERKECIL, toolbar
+       kebuka) statis, gak pernah lebih besar dari viewport sungguhan di state
+       manapun, jadi halaman pendek gak akan pernah kebaca scrollable. */
+    min-height: 100svh;
     /* matiin rubber-band iOS — overscroll bawah nyeret elemen fixed ikut naik */
     overscroll-behavior-y: none;
   }
   body {
     margin: 0;
-    min-height: 100dvh;
+    min-height: 100svh;
     overscroll-behavior-y: none;
     color: var(--color-ink);
     background:
