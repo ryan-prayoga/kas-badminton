@@ -175,11 +175,6 @@ export function GameCard({
         )}
       </div>
 
-      <div className="mt-1 flex items-center gap-1 px-1 text-[11px] text-ink-faint">
-        <KIcon name="pencil" className="size-3 shrink-0" />
-        <span className="truncate">dicatat {game.recordedBy || "Admin"}</span>
-      </div>
-
       {/* signature: mini court */}
       <div className="court-surface relative mt-2.5 rounded-xl border border-court/15 p-2.5">
         <div className="court-net pointer-events-none absolute inset-y-4 left-1/2 w-[2px] -translate-x-1/2" />
@@ -215,37 +210,43 @@ export function GameCard({
         </div>
       )}
 
-      {editable && (
-        <div className="mt-2.5 flex items-center justify-end gap-1 border-t border-line pt-2">
-          {!allPaid && (
+      <div className="mt-2.5 flex items-center gap-2 border-t border-line pt-2">
+        <div className="flex min-w-0 flex-1 items-center gap-1 text-[11px] text-ink-faint">
+          <KIcon name="pencil" className="size-3 shrink-0" />
+          <span className="truncate">dicatat {game.recordedBy || "Admin"}</span>
+        </div>
+        {editable && (
+          <div className="flex shrink-0 items-center gap-1">
+            {!allPaid && (
+              <button
+                type="button"
+                onClick={markAll}
+                disabled={pending}
+                className="inline-flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-xs font-semibold text-court transition hover:bg-court/8"
+              >
+                <KIcon name="check" className="size-3.5" /> Lunasin semua
+              </button>
+            )}
+            {kokTypes && players && defaultPrice !== undefined && (
+              <EditGameSheet
+                game={game}
+                kokTypes={kokTypes}
+                players={players}
+                defaultPrice={defaultPrice}
+              />
+            )}
             <button
               type="button"
-              onClick={markAll}
+              onClick={remove}
               disabled={pending}
-              className="inline-flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-xs font-semibold text-court transition hover:bg-court/8"
+              aria-label="Hapus game"
+              className="grid size-8 place-items-center rounded-lg text-ink-faint transition hover:bg-danger/10 hover:text-danger"
             >
-              <KIcon name="check" className="size-3.5" /> Lunasin semua
+              <KIcon name="trash" className="size-4" />
             </button>
-          )}
-          {kokTypes && players && defaultPrice !== undefined && (
-            <EditGameSheet
-              game={game}
-              kokTypes={kokTypes}
-              players={players}
-              defaultPrice={defaultPrice}
-            />
-          )}
-          <button
-            type="button"
-            onClick={remove}
-            disabled={pending}
-            aria-label="Hapus game"
-            className="grid size-8 place-items-center rounded-lg text-ink-faint transition hover:bg-danger/10 hover:text-danger"
-          >
-            <KIcon name="trash" className="size-4" />
-          </button>
-        </div>
-      )}
+          </div>
+        )}
+      </div>
     </div>
   );
 }

@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type { KokType, PlayerRow } from "@/lib/domain/types";
 import type { OperatorView } from "@/lib/repo/operators";
+import { setNavMode } from "@/lib/nav-mode";
 import { logout } from "@/server/actions/auth";
 import { KokTypesPanel } from "@/components/admin/kok-types-panel";
 import { OperatorsPanel } from "@/components/admin/operators-panel";
@@ -83,6 +84,7 @@ export function LainnyaMenu({
   const onLock = () =>
     startTransition(async () => {
       await logout();
+      setNavMode("admin");
       // Langsung ke halaman publik, bukan lockscreen PIN
       router.push("/");
       router.refresh();
@@ -100,7 +102,15 @@ export function LainnyaMenu({
 
           if (item.href) {
             return (
-              <Link key={item.key} href={item.href} className={className}>
+              <Link
+                key={item.key}
+                href={item.href}
+                className={className}
+                onClick={() => {
+                  // Stay di chrome publik saat pindah nav (Bayar/Statistik/Riwayat)
+                  if (item.key === "public") setNavMode("public");
+                }}
+              >
                 <KIcon name={item.icon} className="size-5 shrink-0 text-court" />
                 <span className="flex-1 text-left">{item.label}</span>
                 <KIcon name="chevronDown" className="size-4 -rotate-90 text-ink-faint" />

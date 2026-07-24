@@ -1,8 +1,10 @@
 "use client";
 
+import { useEffect, useSyncExternalStore } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
+import { getNavMode, setNavMode, subscribeNavMode } from "@/lib/nav-mode";
 import type { KokType, PlayerRow } from "@/lib/domain/types";
 import { KIcon, type IconName } from "@/components/kok/icons";
 import { RecordGameSheet } from "@/components/record-game-sheet";
@@ -78,13 +80,26 @@ export function BottomNav({
   };
 }) {
   const pathname = usePathname();
+  const storedMode = useSyncExternalStore(subscribeNavMode, getNavMode, () => "admin" as const);
+
+  // Masuk rute admin* → paksa mode admin (persist)
+  useEffect(() => {
+    if (pathname.startsWith("/admin") && getNavMode() !== "admin") {
+      setNavMode("admin");
+    }
+  }, [pathname]);
+
   // Lockscreen admin: sembunyikan nav biar mirip v1
   if (!role && pathname.startsWith("/admin")) return null;
 
-  // Halaman publik (`/`) selalu pakai nav publik — meski masih login
-  // (tombol "Halaman publik" di Lainnya). Di rute lain, login = chrome admin.
-  const onPublicHome = pathname === "/";
-  const adminChrome = !!role && !onPublicHome;
+  // Chrome admin hanya saat:
+  // - rute /admin*, atau
+  // - masih login + mode admin + BUKAN di home publik `/`
+  // Mode `public` (dari menu Lainnya) stay di chrome publik meski pindah
+  // Bayar/Statistik — Riwayat tetap `/`, tanpa FAB/Lainnya.
+  const adminChrome =
+    !!role &&
+    (pathname.startsWith("/admin") || (storedMode !== "public" && pathname !== "/"));
   const items = buildItems(adminChrome, role);
   const showFab = adminChrome && !!recordGame;
 
