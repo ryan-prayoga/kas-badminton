@@ -1,5 +1,6 @@
 services:
   app:
+    image: ghcr.io/ryan-prayoga/kas-badminton/v2:${IMAGE_TAG:-latest}
     build: .
     restart: unless-stopped
     # host networking - DATABASE_URL prod nunjuk ke localhost/127.0.0.1 (postgres di host

@@ -12,29 +12,85 @@ concurrency:
   group: kas-badminton-production-deploy
   cancel-in-progress: false
 
+env:
+  REGISTRY: ghcr.io
+  # lowercase wajib buat GHCR
+  IMAGE_NAME: ryan-prayoga/kas-badminton/v2
+
 jobs:
-  deploy:
+  # Build di runner GitHub (CPU lebih kenceng) + cache layer GHA.
+  # Server cuma pull image — gak npm ci / next build di VPS lagi.
+  build:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      image_tag: ${{ steps.meta.outputs.tag }}
     steps:
-      - name: Deploy v2 to server (docker) & retire v1 (pm2)
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Image tag
+        id: meta
+        run: echo "tag=${GITHUB_SHA::12}" >> "$GITHUB_OUTPUT"
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build & push
+        uses: docker/build-push-action@v6
+        with:
+          context: ./v2
+          push: true
+          tags: |
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.meta.outputs.tag }}
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
+          labels: |
+            org.opencontainers.image.source=https://github.com/ryan-prayoga/kas-badminton
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          # provenance/sbom off biar image lebih simpel di-pull compose lama
+          provenance: false
+          sbom: false
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: read
+    steps:
+      - name: Deploy prebuilt image to server
         uses: appleboy/ssh-action@v1.0.3
+        env:
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GHCR_USER: ${{ github.actor }}
+          IMAGE_TAG: ${{ needs.build.outputs.image_tag }}
         with:
           host: ${{ secrets.SERVER_HOST }}
           username: ubuntu
           key: ${{ secrets.SERVER_DEPLOY_KEY }}
           port: 22
+          command_timeout: 15m
+          envs: GHCR_TOKEN,GHCR_USER,IMAGE_TAG
           script: |
             set -e
-            export NVM_DIR="$HOME/.nvm"
-            [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"
-            export PATH="/usr/bin:$HOME/.nvm/versions/node/v24.14.0/bin:$PATH"
 
             V1_DIR="/home/ubuntu/projects/kok-badminton"
             PROJECT_DIR="/home/ubuntu/projects/kok-badminton-v2"
             REPO_URL="https://github.com/ryan-prayoga/kas-badminton.git"
             BRANCH="${{ github.ref_name }}"
+            export IMAGE_TAG
 
-            # v2 pake DB prod yang sama kayak v1 - ambil DATABASE_URL dari .env v1, jangan simpan ulang di tempat lain
+            # v2 pake DB prod yang sama kayak v1 - ambil DATABASE_URL dari .env v1
             if [ ! -f "$V1_DIR/.env" ]; then
               echo "$V1_DIR/.env gak ketemu, gak bisa ambil DATABASE_URL" >&2
               exit 1
@@ -54,65 +110,69 @@ jobs:
               git remote add origin "$REPO_URL"
             fi
 
-            git fetch origin
+            # Cuma butuh compose + entrypoint config terbaru; source app udah di dalam image
+            git fetch origin --depth=1
             git checkout -f "$BRANCH" 2>/dev/null || git checkout -b "$BRANCH" "origin/$BRANCH"
             git reset --hard "origin/$BRANCH"
             git clean -fd -e v2/data -e v2/.env
 
             cd v2
-            printf 'DATABASE_URL=%s\nPORT=8200\n' "$DATABASE_URL" > .env
+            # PORT gak di-hardcode di .env biar validate (8201) vs prod (8200) gampang di-override
+            printf 'DATABASE_URL=%s\n' "$DATABASE_URL" > .env
 
-            # data/ di-bind-mount ke /app/data, container jalan sbg uid 1001 (nextjs) bukan root.
-            # kalo dir baru dibuat (mkdir) atau kepeleset ke root:root, container gak bisa nulis
-            # admin-pin.txt -> crash EACCES tiap request /admin. paksa ownership tiap deploy.
+            # data/ di-bind-mount ke /app/data, container jalan sbg uid 1001 (nextjs)
             mkdir -p data
             sudo chown -R 1001:65533 data
 
-            # bersihin sisa container lama (mis. dari attempt yang gagal/crash-loop)
-            docker compose down || true
+            # login GHCR pake token job (expired setelah workflow selesai)
+            echo "$GHCR_TOKEN" | docker login ghcr.io -u "$GHCR_USER" --password-stdin
 
-            # proses test manual lama yang mungkin masih nyangkut di port validasi
+            # pull dulu — production di 8200 tetap hidup selama ini
+            docker compose pull
+
+            # proses test manual lama yang mungkin masih nyangkut
             pm2 stop kok-badminton-v2 || true
 
-            docker compose build
+            # tandai skema existing (dari v1) sebagai udah "applied" (aman diulang)
+            docker compose run --rm --no-deps --entrypoint "" app \
+              node node_modules/prisma/build/index.js migrate resolve --applied 0_init \
+              || docker compose run --rm --no-deps --entrypoint "" app \
+                npx prisma migrate resolve --applied 0_init \
+              || true
 
-            # tandai skema existing (dari v1) sebagai udah "applied" biar migrate deploy
-            # gak nabrak CREATE TABLE ke tabel yang udah ada isinya. aman diulang - kalau
-            # udah pernah di-resolve, prisma exit non-zero, ditelan || true.
-            docker compose run --rm --entrypoint "" app \
-              npx prisma migrate resolve --applied 0_init || true
-
-            # --- validasi dulu di port sementara (8201), JANGAN sentuh v1 sebelum ini lolos ---
+            # --- validasi di project terpisah port 8201, PRODUCTION TETAP DI 8200 ---
             export PORT=8201
-            docker compose up -d
+            docker compose -p kas-v2-validate pull
+            docker compose -p kas-v2-validate up -d --force-recreate
             ok=0
-            for i in $(seq 1 15); do
+            for i in $(seq 1 20); do
               if curl -fsS "http://127.0.0.1:8201/api/health" >/dev/null 2>&1; then
                 ok=1
                 break
               fi
-              sleep 2
+              sleep 1
             done
-            docker compose down
+            docker compose -p kas-v2-validate down || true
 
             if [ "$ok" != "1" ]; then
-              echo "v2 gagal sehat di port validasi, batal cutover - v1 tetap jalan" >&2
-              docker compose logs --no-color --tail=100 || true
+              echo "v2 gagal sehat di port validasi, batal cutover - production tetap jalan" >&2
+              docker compose -p kas-v2-validate logs --no-color --tail=100 || true
+              docker logout ghcr.io || true
               exit 1
             fi
 
-            # --- lolos validasi, baru cutover: matiin v1, naikin v2 di port 8200 ---
+            # --- lolos validasi, cutover ke 8200 (downtime cuma ganti container) ---
             export PORT=8200
             pm2 stop kok-badminton || true
-            docker compose up -d
+            docker compose up -d --force-recreate --remove-orphans
 
             ok=0
-            for i in $(seq 1 15); do
+            for i in $(seq 1 20); do
               if curl -fsS "http://127.0.0.1:8200/api/health" >/dev/null 2>&1; then
                 ok=1
                 break
               fi
-              sleep 2
+              sleep 1
             done
 
             if [ "$ok" != "1" ]; then
@@ -120,7 +180,12 @@ jobs:
               docker compose logs --no-color --tail=100 || true
               docker compose down || true
               pm2 restart kok-badminton || pm2 start "$V1_DIR/server.js" --name kok-badminton --cwd "$V1_DIR"
+              docker logout ghcr.io || true
               exit 1
             fi
 
-            echo "Deploy v2 complete: $(git rev-parse --short HEAD) ($(date))"
+            # bersihin image tag lama biar disk VPS gak numpuk (keep latest + current)
+            docker image prune -f >/dev/null 2>&1 || true
+            docker logout ghcr.io || true
+
+            echo "Deploy v2 complete: $IMAGE_TAG ($(date))"
