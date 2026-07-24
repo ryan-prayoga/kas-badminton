@@ -3,8 +3,17 @@
 import { useState, useTransition } from "react";
 import { toast } from "sonner";
 import type { EnrichedGame, KokType } from "@/lib/domain/types";
-import { addKokAction } from "@/server/actions/games";
+import { formatRupiah } from "@/lib/format";
+import { updateGameAction } from "@/server/actions/games";
 import { KIcon } from "@/components/kok/icons";
+import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import {
   Dialog,
   DialogContent,
@@ -14,8 +23,29 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 
-function lastKokOf(game: EnrichedGame) {
-  return game.koks[game.koks.length - 1];
+const CUSTOM = "__custom__";
+
+interface KokLine {
+  key: string;
+  typeId: string;
+  count: string;
+  price: string;
+}
+
+function defaultTypeId(active: KokType[]): string {
+  const withStock = active.filter((t) => (Number(t.stock) || 0) > 0);
+  return (withStock[0] ?? active[0])?.id ?? CUSTOM;
+}
+
+function firstLine(game: EnrichedGame, active: KokType[], defaultPrice: number): KokLine {
+  const last = game.koks[game.koks.length - 1];
+  const t = last?.typeId ? active.find((x) => x.id === last.typeId) : undefined;
+  return {
+    key: `${game.koks.length}-0`,
+    typeId: t ? t.id : last?.typeId ? last.typeId : defaultTypeId(active),
+    count: "1",
+    price: String(last?.pricePerPerson ?? t?.pricePerPerson ?? defaultPrice),
+  };
 }
 
 export function AddKokDialog({
@@ -29,22 +59,73 @@ export function AddKokDialog({
 }) {
   const [open, setOpen] = useState(false);
   const [pending, start] = useTransition();
-  const last = lastKokOf(game);
-  const [typeId, setTypeId] = useState(last?.typeId ?? "");
-  const [price, setPrice] = useState(String(last?.pricePerPerson ?? defaultPrice));
 
   // Tipe nonaktif tapi masih dipakai di game ini tetap ditampilkan biar bisa dipilih lagi.
   const active = kokTypes.filter((t) => t.active || game.koks.some((k) => k.typeId === t.id));
+  const selectable = active.filter((t) => (Number(t.stock) || 0) > 0);
+
+  const [lines, setLines] = useState<KokLine[]>(() => [firstLine(game, active, defaultPrice)]);
+
+  const typeOptionsFor = (typeId: string) => {
+    const selected = active.find((t) => t.id === typeId);
+    if (selected && !selectable.some((t) => t.id === selected.id)) {
+      return [selected, ...selectable];
+    }
+    return selectable;
+  };
+
+  const setLine = (key: string, patch: Partial<KokLine>) =>
+    setLines((ls) => ls.map((l) => (l.key === key ? { ...l, ...patch } : l)));
+
+  const onTypeChange = (key: string, v: string | null) => {
+    const next = v ?? CUSTOM;
+    const t = active.find((x) => x.id === next);
+    setLine(key, { typeId: next, price: t ? String(t.pricePerPerson) : "" });
+  };
+
+  const addLine = () =>
+    setLines((ls) => [
+      ...ls,
+      { key: `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`, typeId: defaultTypeId(active), count: "1", price: String(defaultPrice) },
+    ]);
+
+  const removeLine = (key: string) =>
+    setLines((ls) => (ls.length > 1 ? ls.filter((l) => l.key !== key) : ls));
+
+  const bumpCount = (key: string, delta: number) =>
+    setLines((ls) =>
+      ls.map((l) => {
+        if (l.key !== key) return l;
+        const n = Math.max(1, Math.min(50, (Number(l.count) || 1) + delta));
+        return { ...l, count: String(n) };
+      }),
+    );
+
+  const totalNew = lines.reduce((s, l) => s + Math.max(1, Number(l.count) || 1), 0);
 
   const submit = () => {
+    const existing = game.koks.map((k) => ({
+      id: k.id,
+      typeId: k.typeId,
+      typeName: k.typeName,
+      pricePerPerson: k.pricePerPerson,
+    }));
+    const added = lines.flatMap((line) => {
+      const n = Math.max(1, Math.min(50, Number(line.count) || 1));
+      const t = active.find((x) => x.id === line.typeId);
+      const typeId = line.typeId === CUSTOM ? null : line.typeId;
+      const price = line.price ? Number(line.price) || 0 : (t?.pricePerPerson ?? defaultPrice);
+      return Array.from({ length: n }, () => ({
+        typeId,
+        typeName: t ? t.name : null,
+        pricePerPerson: price,
+      }));
+    });
+
     start(async () => {
-      const res = await addKokAction(game.id, {
-        typeId: typeId || null,
-        typeName: active.find((t) => t.id === typeId)?.name ?? null,
-        pricePerPerson: Number(price) || 0,
-      });
+      const res = await updateGameAction(game.id, { koks: [...existing, ...added] });
       if (res.ok) {
-        toast.success("Kok ditambah");
+        toast.success(totalNew > 1 ? `${totalNew} kok ditambah` : "Kok ditambah");
         setOpen(false);
       } else {
         toast.error(res.error);
@@ -57,13 +138,7 @@ export function AddKokDialog({
       open={open}
       onOpenChange={(v) => {
         setOpen(v);
-        if (v) {
-          // Isi ulang dari kok terakhir tiap dialog dibuka — game.koks bisa udah
-          // berubah sejak render sebelumnya.
-          const l = lastKokOf(game);
-          setTypeId(l?.typeId ?? "");
-          setPrice(String(l?.pricePerPerson ?? defaultPrice));
-        }
+        if (v) setLines([firstLine(game, active, defaultPrice)]);
       }}
     >
       <DialogTrigger
@@ -80,32 +155,125 @@ export function AddKokDialog({
       <DialogContent className="max-w-sm">
         <DialogHeader>
           <DialogTitle className="font-display">Tambah kok</DialogTitle>
-          <DialogDescription>Nambah 1 kok ke game ini. Stok kepotong otomatis.</DialogDescription>
+          <DialogDescription>Nambah kok ke game ini. Stok kepotong otomatis.</DialogDescription>
         </DialogHeader>
 
-        <div className="flex items-center gap-2">
-          <select
-            value={typeId}
-            onChange={(e) => {
-              const t = active.find((x) => x.id === e.target.value);
-              setTypeId(e.target.value);
-              if (t) setPrice(String(t.pricePerPerson));
-            }}
-            className="h-10 flex-1 rounded-xl border border-input bg-surface px-3 text-sm text-ink outline-none focus:border-court/50"
-          >
-            <option value="">Custom</option>
-            {active.map((t) => (
-              <option key={t.id} value={t.id}>
-                {t.name}
-              </option>
-            ))}
-          </select>
-          <input
-            inputMode="numeric"
-            value={price}
-            onChange={(e) => setPrice(e.target.value.replace(/[^\d]/g, ""))}
-            className="h-10 w-24 shrink-0 rounded-xl border border-input bg-surface px-3 text-sm text-ink outline-none focus:border-court/50"
-          />
+        <div className="space-y-2">
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-xs font-bold uppercase tracking-wide text-ink-faint">
+              Kok dipakai
+            </span>
+            <button
+              type="button"
+              onClick={addLine}
+              className="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-semibold text-court transition hover:bg-court/10"
+            >
+              <KIcon name="plus" className="size-3.5" />
+              Tambah jenis
+            </button>
+          </div>
+
+          <div className="space-y-2">
+            {lines.map((line) => {
+              const selected = active.find((t) => t.id === line.typeId);
+              const options = typeOptionsFor(line.typeId);
+              return (
+                <div
+                  key={line.key}
+                  className="space-y-2 rounded-2xl border border-line bg-surface-2/60 p-2.5"
+                >
+                  <div className="flex items-center gap-2">
+                    <Select value={line.typeId} onValueChange={(v) => onTypeChange(line.key, v)}>
+                      <SelectTrigger className="h-10 min-w-0 flex-1 rounded-xl border-input bg-surface px-3">
+                        <SelectValue>
+                          {(value: string | null) => {
+                            if (!value || value === CUSTOM) return "Custom / tanpa stok";
+                            const t = active.find((x) => x.id === value);
+                            if (!t) return "Custom / tanpa stok";
+                            return `${t.name} · stok ${t.stock}`;
+                          }}
+                        </SelectValue>
+                      </SelectTrigger>
+                      <SelectContent className="rounded-xl p-1.5" alignItemWithTrigger={false}>
+                        <SelectItem value={CUSTOM} className="rounded-lg px-3 py-2.5">
+                          Custom / tanpa stok
+                        </SelectItem>
+                        {options.map((t) => (
+                          <SelectItem key={t.id} value={t.id} className="rounded-lg px-3 py-2.5">
+                            <span className="flex w-full min-w-0 items-center justify-between gap-3">
+                              <span className="truncate">{t.name}</span>
+                              <span className="shrink-0 font-mono text-xs text-muted-foreground">
+                                {formatRupiah(t.pricePerPerson)} · stok {t.stock}
+                              </span>
+                            </span>
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+
+                    <button
+                      type="button"
+                      onClick={() => removeLine(line.key)}
+                      disabled={lines.length <= 1}
+                      className="grid size-10 shrink-0 place-items-center rounded-xl text-ink-faint transition hover:bg-danger/10 hover:text-danger disabled:opacity-30"
+                      aria-label="Hapus jenis kok"
+                    >
+                      <KIcon name="trash" className="size-4" />
+                    </button>
+                  </div>
+
+                  <div className="grid grid-cols-[auto_1fr] gap-2">
+                    <div className="inline-flex h-10 items-center rounded-xl border border-input bg-surface">
+                      <button
+                        type="button"
+                        onClick={() => bumpCount(line.key, -1)}
+                        className="grid size-10 place-items-center text-ink-soft transition hover:text-ink"
+                        aria-label="Kurangi jumlah"
+                      >
+                        <KIcon name="minus" className="size-4" />
+                      </button>
+                      <input
+                        inputMode="numeric"
+                        value={line.count}
+                        onChange={(e) =>
+                          setLine(line.key, { count: e.target.value.replace(/[^\d]/g, "") || "1" })
+                        }
+                        className="w-8 bg-transparent text-center text-sm font-bold tabular-nums outline-none"
+                        aria-label="Jumlah kok"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => bumpCount(line.key, 1)}
+                        className="grid size-10 place-items-center text-ink-soft transition hover:text-ink"
+                        aria-label="Tambah jumlah"
+                      >
+                        <KIcon name="plus" className="size-4" />
+                      </button>
+                    </div>
+
+                    <div className="relative">
+                      <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-xs font-medium text-ink-faint">
+                        Rp
+                      </span>
+                      <Input
+                        inputMode="numeric"
+                        placeholder={String(selected?.pricePerPerson ?? defaultPrice)}
+                        value={line.price}
+                        onChange={(e) =>
+                          setLine(line.key, { price: e.target.value.replace(/[^\d]/g, "") })
+                        }
+                        className="h-10 rounded-xl pl-9"
+                        aria-label="Harga per orang"
+                      />
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+          <p className="text-[11px] text-ink-faint">
+            Bisa campur jenis kok berbeda. Nambah total {totalNew} kok.
+          </p>
         </div>
 
         <button
