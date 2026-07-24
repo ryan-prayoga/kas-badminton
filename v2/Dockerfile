@@ -8,14 +8,15 @@ COPY package.json bun.lock ./
 RUN --mount=type=cache,target=/root/.bun/install/cache \
     bun install --frozen-lockfile
 
-# ---- prod-deps: install production only (tanpa eslint/vitest/ts) ----
-# COPY --from=deps biar stage ini sequential setelah deps → cache store bun sudah warm
-FROM oven/bun:1-alpine AS prod-deps
-WORKDIR /app
-COPY package.json bun.lock ./
-COPY --from=deps /app/package.json /tmp/.deps-warm
+# ---- migrate-tools: HANYA prisma CLI (+ tree-nya) buat migrate deploy ----
+# Full prod node_modules ~250MB compressed di image final — dobel sama standalone.
+# Prisma CLI tree cuma ~sepersepuluhnya; app runtime sudah di .next/standalone.
+FROM oven/bun:1-alpine AS migrate-tools
+WORKDIR /tools
+COPY package.json ./package.src.json
 RUN --mount=type=cache,target=/root/.bun/install/cache \
-    bun install --frozen-lockfile --production
+    bun -e 'const p=require("./package.src.json"); require("fs").writeFileSync("package.json", JSON.stringify({name:"migrate-tools",private:true,dependencies:{prisma:p.dependencies.prisma}}))' \
+    && bun install
 
 # ---- builder (node resmi: next build + prisma generate) ----
 FROM node:20-alpine AS builder
@@ -49,9 +50,8 @@ RUN addgroup -g 1001 -S nodejs && adduser -S nextjs -u 1001
 COPY --from=builder /app/public ./public
 COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
-# node_modules production (bukan full+devDeps) - prisma CLI butuh dependency
-# transitif yang gak ke-trace sama standalone output next.js
-COPY --from=prod-deps --chown=nextjs:nodejs /app/node_modules ./node_modules
+# Prisma CLI terpisah di /prisma-cli (bukan overwrite node_modules standalone)
+COPY --from=migrate-tools --chown=nextjs:nodejs /tools/node_modules /prisma-cli/node_modules
 COPY --from=builder /app/prisma ./prisma
 COPY --from=builder /app/prisma.config.ts ./prisma.config.ts
 COPY --from=builder /app/docker-entrypoint.sh ./docker-entrypoint.sh

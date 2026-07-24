@@ -57,9 +57,17 @@ jobs:
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
           labels: |
             org.opencontainers.image.source=https://github.com/ryan-prayoga/kas-badminton
-          # scope stabil biar cache GHA gak kecampur workflow lain di repo
-          cache-from: type=gha,scope=kas-v2-arm
-          cache-to: type=gha,mode=max,scope=kas-v2-arm
+          # GHA + registry buildcache + image latest:
+          # - gha: cepat untuk layer kecil / metadata
+          # - registry buildcache: layer besar (node_modules) lebih stabil di GHCR
+          # - latest: reuse layer final yang gak berubah antar deploy
+          cache-from: |
+            type=gha,scope=kas-v2-arm
+            type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:buildcache
+            type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
+          cache-to: |
+            type=gha,mode=max,scope=kas-v2-arm
+            type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:buildcache,mode=max
           # provenance/sbom off biar image lebih simpel di-pull compose lama
           provenance: false
           sbom: false
@@ -137,10 +145,9 @@ jobs:
             pm2 stop kok-badminton-v2 || true
 
             # tandai skema existing (dari v1) sebagai udah "applied" (aman diulang)
+            # Prisma CLI di /prisma-cli (slim), bukan full node_modules
             docker compose run --rm --no-deps --entrypoint "" app \
-              node node_modules/prisma/build/index.js migrate resolve --applied 0_init \
-              || docker compose run --rm --no-deps --entrypoint "" app \
-                npx prisma migrate resolve --applied 0_init \
+              node /prisma-cli/node_modules/prisma/build/index.js migrate resolve --applied 0_init \
               || true
 
             # --- validasi di project terpisah port 8201, PRODUCTION TETAP DI 8200 ---
