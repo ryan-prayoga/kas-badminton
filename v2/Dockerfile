@@ -11,11 +11,12 @@ RUN --mount=type=cache,target=/root/.bun/install/cache \
 # ---- migrate-tools: HANYA prisma CLI (+ tree-nya) buat migrate deploy ----
 # Full prod node_modules ~250MB compressed di image final — dobel sama standalone.
 # Prisma CLI tree cuma ~sepersepuluhnya; app runtime sudah di .next/standalone.
+# dotenv ikut karena prisma.config.ts import "dotenv/config" (resolve via NODE_PATH).
 FROM oven/bun:1-alpine AS migrate-tools
 WORKDIR /tools
 COPY package.json ./package.src.json
 RUN --mount=type=cache,target=/root/.bun/install/cache \
-    bun -e 'const p=require("./package.src.json"); require("fs").writeFileSync("package.json", JSON.stringify({name:"migrate-tools",private:true,dependencies:{prisma:p.dependencies.prisma}}))' \
+    bun -e 'const p=require("./package.src.json"); require("fs").writeFileSync("package.json", JSON.stringify({name:"migrate-tools",private:true,dependencies:{prisma:p.dependencies.prisma,dotenv:"^17.0.0"}}))' \
     && bun install
 
 # ---- builder (node resmi: next build + prisma generate) ----

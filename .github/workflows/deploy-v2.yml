@@ -145,8 +145,10 @@ jobs:
             pm2 stop kok-badminton-v2 || true
 
             # tandai skema existing (dari v1) sebagai udah "applied" (aman diulang)
-            # Prisma CLI di /prisma-cli (slim), bukan full node_modules
-            docker compose run --rm --no-deps --entrypoint "" app \
+            # Prisma CLI di /prisma-cli (slim); NODE_PATH biar config resolve deps CLI
+            docker compose run --rm --no-deps \
+              -e NODE_PATH=/prisma-cli/node_modules \
+              --entrypoint "" app \
               node /prisma-cli/node_modules/prisma/build/index.js migrate resolve --applied 0_init \
               || true
 
