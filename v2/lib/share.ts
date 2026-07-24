@@ -69,7 +69,36 @@ export type ShareCardBlock =
   | { kind: "footer"; text?: string };
 
 /** Palet Court Ledger — 1:1 globals.css */
-const C = {
+type Palette = {
+  bg: string;
+  surface: string;
+  surface2: string;
+  ink: string;
+  inkSoft: string;
+  inkFaint: string;
+  line: string;
+  lineStrong: string;
+  court: string;
+  courtDeep: string;
+  courtSoft: string;
+  paid: string;
+  paidSoft: string;
+  owe: string;
+  oweSoft: string;
+  danger: string;
+  dangerSoft: string;
+  mutedSoft: string;
+  paidBorder: string;
+  oweBorder: string;
+  dangerBorder: string;
+  courtBorder: string;
+  /** Radial glow di background kartu. */
+  glow: string;
+  shadowCard: string;
+  shadowCourt: string;
+};
+
+const LIGHT: Palette = {
   bg: "#eef2f8",
   surface: "#ffffff",
   surface2: "#f4f7fc",
@@ -87,39 +116,92 @@ const C = {
   oweSoft: "rgba(185, 102, 8, 0.12)",
   danger: "#dc2626",
   dangerSoft: "rgba(220, 38, 38, 0.12)",
-} as const;
-
-const TONE: Record<ShareCardTone, string> = {
-  default: C.ink,
-  paid: C.paid,
-  owe: C.owe,
-  danger: C.danger,
-  muted: C.inkSoft,
-  court: C.court,
+  mutedSoft: "rgba(85, 100, 123, 0.10)",
+  paidBorder: "rgba(15,138,91,0.25)",
+  oweBorder: "rgba(185,102,8,0.25)",
+  dangerBorder: "rgba(220,38,38,0.25)",
+  courtBorder: "rgba(21,96,214,0.25)",
+  glow: "rgba(21, 96, 214, 0.08)",
+  shadowCard: "0 1px 2px rgba(15,27,45,0.04), 0 8px 24px -14px rgba(15,27,45,0.18)",
+  shadowCourt: "0 10px 30px -12px rgba(21,96,214,0.35)",
 };
 
-const TONE_SOFT: Record<ShareCardTone, string> = {
-  default: C.courtSoft,
-  paid: C.paidSoft,
-  owe: C.oweSoft,
-  danger: C.dangerSoft,
-  muted: "rgba(85, 100, 123, 0.10)",
-  court: C.courtSoft,
+const DARK: Palette = {
+  bg: "#0a1120",
+  surface: "#121b2c",
+  surface2: "#18243a",
+  ink: "#e9eef8",
+  inkSoft: "#a4b2c8",
+  inkFaint: "#71809a",
+  line: "#22304a",
+  lineStrong: "#2e3f5e",
+  court: "#3b82f6",
+  // Di dark, teks aksen harus lebih terang dari surface — bukan biru tua.
+  courtDeep: "#9cc2ff",
+  courtSoft: "rgba(59, 130, 246, 0.16)",
+  paid: "#2fbc85",
+  paidSoft: "rgba(47, 188, 133, 0.16)",
+  owe: "#e3a04a",
+  oweSoft: "rgba(227, 160, 74, 0.16)",
+  danger: "#f26b6b",
+  dangerSoft: "rgba(242, 107, 107, 0.16)",
+  mutedSoft: "rgba(164, 178, 200, 0.12)",
+  paidBorder: "rgba(47,188,133,0.32)",
+  oweBorder: "rgba(227,160,74,0.32)",
+  dangerBorder: "rgba(242,107,107,0.32)",
+  courtBorder: "rgba(59,130,246,0.32)",
+  glow: "rgba(59, 130, 246, 0.16)",
+  shadowCard: "0 1px 2px rgba(0,0,0,0.4), 0 8px 24px -14px rgba(0,0,0,0.7)",
+  shadowCourt: "0 10px 30px -12px rgba(59,130,246,0.55)",
 };
 
-const TONE_BORDER: Record<ShareCardTone, string> = {
-  default: C.line,
-  paid: "rgba(15,138,91,0.25)",
-  owe: "rgba(185,102,8,0.25)",
-  danger: "rgba(220,38,38,0.25)",
-  muted: C.line,
-  court: "rgba(21,96,214,0.25)",
-};
+// Palet aktif — di-set ulang tiap render (lihat applyPalette / renderShareCard).
+let C: Palette = LIGHT;
+let TONE: Record<ShareCardTone, string>;
+let TONE_SOFT: Record<ShareCardTone, string>;
+let TONE_BORDER: Record<ShareCardTone, string>;
+let SHADOW_CARD: string;
+
+/** Pasang palet + turunan tone-nya. Dipanggil sebelum DOM kartu dibangun. */
+function applyPalette(dark: boolean): void {
+  C = dark ? DARK : LIGHT;
+  TONE = {
+    default: C.ink,
+    paid: C.paid,
+    owe: C.owe,
+    danger: C.danger,
+    muted: C.inkSoft,
+    court: C.court,
+  };
+  TONE_SOFT = {
+    default: C.courtSoft,
+    paid: C.paidSoft,
+    owe: C.oweSoft,
+    danger: C.dangerSoft,
+    muted: C.mutedSoft,
+    court: C.courtSoft,
+  };
+  TONE_BORDER = {
+    default: C.line,
+    paid: C.paidBorder,
+    owe: C.oweBorder,
+    danger: C.dangerBorder,
+    muted: C.line,
+    court: C.courtBorder,
+  };
+  SHADOW_CARD = C.shadowCard;
+}
+
+applyPalette(false);
+
+/** Kartu ngikut tema yang lagi aktif di app (class `dark` di <html>). */
+function isDarkActive(): boolean {
+  return typeof document !== "undefined" && document.documentElement.classList.contains("dark");
+}
 
 const FONT_SANS = 'var(--font-hanken), "Hanken Grotesk", ui-sans-serif, system-ui, sans-serif';
 const FONT_DISPLAY = "var(--font-archivo), Archivo, ui-sans-serif, system-ui, sans-serif";
 const FONT_MONO = 'var(--font-jbmono), "JetBrains Mono", ui-monospace, monospace';
-const SHADOW_CARD = "0 1px 2px rgba(15,27,45,0.04), 0 8px 24px -14px rgba(15,27,45,0.18)";
 
 /** Path ikon persis sama dengan yang dipakai web (mdi + game-icons). */
 const ICON_DATA: Record<ShareIconName, { vb: string; d: string }> = {
@@ -401,7 +483,7 @@ function buildShareDom(blocks: ShareCardBlock[]): HTMLElement {
     padding: "18px 16px 14px",
     fontFamily: FONT_SANS,
     color: C.ink,
-    background: `radial-gradient(120% 80% at 50% -20%, rgba(21, 96, 214, 0.08), transparent 55%), ${C.bg}`,
+    background: `radial-gradient(120% 80% at 50% -20%, ${C.glow}, transparent 55%), ${C.bg}`,
   });
   root.setAttribute("data-share-card", "1");
   root.style.setProperty("-webkit-font-smoothing", "antialiased");
@@ -437,7 +519,7 @@ function buildShareDom(blocks: ShareCardBlock[]): HTMLElement {
     display: "grid",
     placeItems: "center",
     flexShrink: "0",
-    boxShadow: "0 10px 30px -12px rgba(21,96,214,0.35)",
+    boxShadow: C.shadowCourt,
   });
   logo.innerHTML = iconSvg("racket", 24);
 
@@ -946,6 +1028,7 @@ function footerNode(text?: string): HTMLElement {
 export async function renderShareCard(blocks: ShareCardBlock[]): Promise<Blob> {
   if (typeof document === "undefined") throw new Error("Hanya di browser");
 
+  applyPalette(isDarkActive());
   const card = buildShareDom(await preparePhotos(blocks));
   // Wrapper off-screen: card sendiri tetap `position: static` biar hasil
   // snapshot-nya gak kegeser (lihat catatan di buildShareDom).
