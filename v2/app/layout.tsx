@@ -42,8 +42,8 @@ export default async function RootLayout({ children }: Readonly<{ children: Reac
   const canRecord = data.me.role === "admin" || data.me.role === "operator";
 
   return (
-    <html lang="id" className={`${archivo.variable} ${hanken.variable} ${mono.variable} h-full`}>
-      <body className="min-h-full font-sans antialiased">
+    <html lang="id" className={`${archivo.variable} ${hanken.variable} ${mono.variable}`}>
+      <body className="min-h-dvh font-sans antialiased">
         <ConfirmProvider>
           {children}
           <BottomNav

@@ -84,11 +84,17 @@
   }
   html {
     -webkit-text-size-adjust: 100%;
-    height: 100%;
+    /* `height: 100%` di iOS Safari ngukur ke viewport GEDE (toolbar kesembunyi),
+       jadi halaman pendek pun ikut bisa discroll setinggi toolbar dan bottom nav
+       yang `fixed` keangkat sampai ilang. `dvh` ngikut viewport yang kelihatan. */
+    min-height: 100dvh;
+    /* matiin rubber-band iOS — overscroll bawah nyeret elemen fixed ikut naik */
+    overscroll-behavior-y: none;
   }
   body {
     margin: 0;
-    min-height: 100%;
+    min-height: 100dvh;
+    overscroll-behavior-y: none;
     color: var(--color-ink);
     background:
       radial-gradient(120% 80% at 50% -20%, rgba(21, 96, 214, 0.08), transparent 55%),
