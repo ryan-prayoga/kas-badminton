@@ -18,10 +18,11 @@ env:
   IMAGE_NAME: ryan-prayoga/kas-badminton/v2
 
 jobs:
-  # Build di runner GitHub (CPU lebih kenceng) + cache layer GHA.
+  # Build di runner GitHub ARM (VPS Oracle Ampere = arm64) + cache layer GHA.
   # Server cuma pull image — gak npm ci / next build di VPS lagi.
+  # WAJIB arm64: image amd64 di host arm64 = exec format error.
   build:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04-arm
     permissions:
       contents: read
       packages: write
@@ -50,6 +51,7 @@ jobs:
         with:
           context: ./v2
           push: true
+          platforms: linux/arm64
           tags: |
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.meta.outputs.tag }}
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
