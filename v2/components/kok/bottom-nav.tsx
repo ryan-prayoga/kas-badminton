@@ -45,14 +45,6 @@ function buildItems(adminChrome: boolean, role: Role): NavItem[] {
       icon: "dotsHorizontal",
       match: (p) => p.startsWith("/admin/lainnya"),
     });
-  } else if (!adminChrome) {
-    // Nav publik: Lainnya → masuk admin / kunci
-    items.push({
-      href: "/admin",
-      label: "Lainnya",
-      icon: "dotsHorizontal",
-      match: (p) => p.startsWith("/admin"),
-    });
   }
 
   return items;
