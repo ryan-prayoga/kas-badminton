@@ -3,8 +3,8 @@
 import { useMemo, useState, useTransition } from "react";
 import { toast } from "sonner";
 import type { DebtEntry, DebtItem } from "@/lib/domain/types";
-import { fmt, fmtDate, relativeDay } from "@/lib/format";
-import type { ShareCardBlock } from "@/lib/share";
+import { fmt, fmtDate, relativeDay, toLocalIso } from "@/lib/format";
+import { APP_URL, type ShareCardBlock } from "@/lib/share";
 import { cn } from "@/lib/utils";
 import { payInstallmentAction, settleAllAction } from "@/server/actions/players";
 import { useConfirm } from "@/components/confirm-dialog";
@@ -38,23 +38,24 @@ function groupItems(items: DebtItem[]): DateGroup[] {
   return order.map((d) => map.get(d)!);
 }
 
+function todayLabel(): string {
+  return fmtDate(toLocalIso(new Date()));
+}
+
 function debtShareText(d: DebtEntry): string {
   const grouped = groupItems(d.items);
   const totalKoks = d.items.reduce((s, it) => s + (Number(it.kokCount) || 0), 0);
   const lines = [
-    `*Kok Badminton · Tagihan*`,
-    `Untuk: *${d.name}*`,
+    "🏸 *Kok Badminton · Tagihan Kok*",
+    `Halo *${d.name}*, ini rekap kok kamu ya 👇`,
     "",
-    `*Sisa tagihan: ${fmt(d.total)}*`,
+    `💸 *Sisa tagihan: ${fmt(d.total)}*`,
+    `🏸 ${d.items.length} main · ${totalKoks} kok belum lunas`,
   ];
   if (d.carry > 0) {
-    lines.push(`Sudah dicicil: ${fmt(d.carry)} dari ${fmt(d.owedGross)}`);
+    lines.push(`✅ Sudah dicicil ${fmt(d.carry)} dari ${fmt(d.owedGross)}`);
   }
-  lines.push(
-    `${d.items.length} main · ${totalKoks} kok belum lunas`,
-    "",
-    "*Rincian main*",
-  );
+  lines.push("", "📅 *Rincian main*");
   for (const g of grouped) {
     const rel = relativeDay(g.date);
     lines.push(
@@ -62,21 +63,47 @@ function debtShareText(d: DebtEntry): string {
       `  ${g.count} main · ${g.koks} kok · ${fmt(g.total)}`,
     );
   }
-  lines.push("", "Mohon dilunasi ya 🙏", "", "_kok.ryanprayoga.dev_");
+  lines.push(
+    "",
+    "Kalau sudah transfer, kabarin ya biar langsung ditandai lunas 🙏",
+    `🔗 Cek tagihanmu kapan aja: ${APP_URL}`,
+  );
   return lines.join("\n");
 }
 
-function debtShareBlocks(d: DebtEntry): ShareCardBlock[] {
+function debtShareCaption(d: DebtEntry): string {
+  return [
+    `🏸 Tagihan kok *${d.name}* — sisa *${fmt(d.total)}*.`,
+    `Rincian lengkapnya di ${APP_URL} 🔗`,
+  ].join("\n");
+}
+
+function debtShareBlocks(d: DebtEntry, photo?: string): ShareCardBlock[] {
   const grouped = groupItems(d.items);
   const totalKoks = d.items.reduce((s, it) => s + (Number(it.kokCount) || 0), 0);
   const blocks: ShareCardBlock[] = [
-    { kind: "header", title: d.name, subtitle: "Tagihan belum lunas" },
+    { kind: "header", title: "Tagihan", subtitle: "Belum lunas", badge: todayLabel() },
+    {
+      kind: "hero",
+      name: d.name,
+      subtitle: "Tagihan atas nama",
+      photo,
+      tone: "owe",
+      chips: [
+        { icon: "racket", text: `${d.items.length} main` },
+        { icon: "shuttle", text: `${totalKoks} kok` },
+      ],
+    },
     {
       kind: "highlight",
       label: "Sisa tagihan",
       value: fmt(d.total),
       tone: "owe",
-      hint: `${d.items.length} main · ${totalKoks} kok belum lunas`,
+      icon: "wallet",
+      hint:
+        d.carry > 0
+          ? `Sudah dicicil ${fmt(d.carry)} dari ${fmt(d.owedGross)}`
+          : `${d.items.length} main · ${totalKoks} kok belum lunas`,
     },
   ];
   if (d.carry > 0) {
@@ -85,43 +112,48 @@ function debtShareBlocks(d: DebtEntry): ShareCardBlock[] {
       label: "Sudah dicicil",
       value: `${fmt(d.carry)} / ${fmt(d.owedGross)}`,
       tone: "paid",
+      icon: "cash",
     });
   }
-  blocks.push({ kind: "section", title: "Rincian main" });
+  blocks.push({ kind: "section", title: "Rincian main", icon: "calendar" });
   grouped.forEach((g, i) => {
     const rel = relativeDay(g.date);
     blocks.push({
       kind: "person",
       rank: i + 1,
       name: fmtDate(g.date),
-      detail: `${g.count} main · ${g.koks} kok${rel ? ` · ${rel}` : ""}`,
+      chips: [
+        { icon: "racket", text: `${g.count} main` },
+        { icon: "shuttle", text: `${g.koks} kok` },
+      ],
+      tag: rel || undefined,
       right: fmt(g.total),
       rightTone: "owe",
       initial: String(Number(g.date.slice(8, 10)) || i + 1),
     });
   });
-  blocks.push({ kind: "footer", text: "Kok Badminton · dibuat buat patungan yang rapi" });
+  blocks.push({ kind: "footer" });
   return blocks;
 }
 
 function rekapShareText(debts: DebtEntry[], total: number): string {
   if (!debts.length) {
     return [
-      "*Kok Badminton · Rekap tagihan*",
+      "🏸 *Kok Badminton · Rekap Tagihan*",
       "",
-      "Semua sudah lunas ✅",
+      "🎉 *Semua sudah lunas!* Kas aman, tinggal main.",
       "",
-      "_kok.ryanprayoga.dev_",
+      `🔗 ${APP_URL}`,
     ].join("\n");
   }
   const lines = [
-    "*Kok Badminton · Rekap tagihan*",
-    "Status: belum bayar",
+    "🏸 *Kok Badminton · Rekap Tagihan*",
+    `📅 Per ${todayLabel()}`,
     "",
-    `*Total belum bayar: ${fmt(total)}*`,
-    `${debts.length} orang`,
+    `💸 *Total belum bayar: ${fmt(total)}*`,
+    `👥 ${debts.length} orang masih nunggak`,
     "",
-    "*Rincian*",
+    "*Siapa aja nih*",
   ];
   debts.forEach((d, i) => {
     const koks = d.items.reduce((s, it) => s + (Number(it.kokCount) || 0), 0);
@@ -130,24 +162,53 @@ function rekapShareText(debts: DebtEntry[], total: number): string {
       `   ${d.items.length} main · ${koks} kok`,
     );
   });
-  lines.push("", "Mohon dilunasi ya 🙏", "", "_kok.ryanprayoga.dev_");
+  lines.push(
+    "",
+    "Yuk dilunasin biar kas klub aman 🙏",
+    `🔗 Cek rincian punya kamu: ${APP_URL}`,
+  );
   return lines.join("\n");
 }
 
-function rekapShareBlocks(debts: DebtEntry[], total: number): ShareCardBlock[] {
+function rekapShareCaption(debts: DebtEntry[], total: number): string {
+  if (!debts.length) {
+    return `🏸 Kok Badminton — semua sudah lunas 🎉\nCek kapan aja di ${APP_URL} 🔗`;
+  }
+  return [
+    `🏸 Rekap belum bayar per ${todayLabel()} — *${fmt(total)}* dari ${debts.length} orang.`,
+    `Cek punya kamu di ${APP_URL} 🔗`,
+  ].join("\n");
+}
+
+function rekapShareBlocks(
+  debts: DebtEntry[],
+  total: number,
+  photoMap: PhotoMap,
+): ShareCardBlock[] {
   const blocks: ShareCardBlock[] = [
-    { kind: "header", title: "Rekap tagihan", subtitle: "Belum bayar" },
+    { kind: "header", title: "Rekap tagihan", subtitle: "Belum bayar", badge: todayLabel() },
     {
       kind: "highlight",
       label: "Total belum bayar",
       value: fmt(total),
       tone: total > 0 ? "owe" : "paid",
-      hint: debts.length ? `${debts.length} orang masih nunggak` : "Semua lunas",
+      icon: "wallet",
+      hint: debts.length ? `${debts.length} orang masih nunggak` : "Semua sudah lunas 🎉",
     },
-    { kind: "section", title: debts.length ? `Orang (${debts.length})` : "Status" },
+    {
+      kind: "section",
+      title: debts.length ? `Belum bayar (${debts.length})` : "Status",
+      icon: debts.length ? "users" : "checkCircle",
+    },
   ];
   if (!debts.length) {
-    blocks.push({ kind: "kv", label: "Status", value: "Semua lunas", tone: "paid" });
+    blocks.push({
+      kind: "kv",
+      label: "Semua pemain",
+      value: "Lunas",
+      tone: "paid",
+      icon: "checkCircle",
+    });
   } else {
     debts.forEach((d, i) => {
       const koks = d.items.reduce((s, it) => s + (Number(it.kokCount) || 0), 0);
@@ -155,14 +216,18 @@ function rekapShareBlocks(debts: DebtEntry[], total: number): ShareCardBlock[] {
         kind: "person",
         rank: i + 1,
         name: d.name,
-        detail: `${d.items.length} main · ${koks} kok`,
+        photo: photoMap[d.name],
+        chips: [
+          { icon: "racket", text: `${d.items.length} main` },
+          { icon: "shuttle", text: `${koks} kok` },
+        ],
         right: fmt(d.total),
         rightTone: "owe",
         initial: d.name.slice(0, 1),
       });
     });
   }
-  blocks.push({ kind: "footer", text: "Kok Badminton · dibuat buat patungan yang rapi" });
+  blocks.push({ kind: "footer" });
   return blocks;
 }
 
@@ -185,8 +250,10 @@ function DebtCard({
   const [amount, setAmount] = useState("");
   const grouped = groupItems(d.items);
   const totalKoks = d.items.reduce((s, it) => s + (Number(it.kokCount) || 0), 0);
+  const photo = photoMap[d.name];
   const shareTextPayload = useMemo(() => debtShareText(d), [d]);
-  const shareBlocks = useMemo(() => debtShareBlocks(d), [d]);
+  const shareBlocks = useMemo(() => debtShareBlocks(d, photo), [d, photo]);
+  const shareCaption = useMemo(() => debtShareCaption(d), [d]);
 
   const settle = async () => {
     const ok = await confirm({
@@ -300,6 +367,7 @@ function DebtCard({
                 description="Pilih format teks atau gambar"
                 text={shareTextPayload}
                 imageBlocks={shareBlocks}
+                imageCaption={shareCaption}
                 imageName={`tagihan-${d.name.toLowerCase().replace(/\s+/g, "-")}.png`}
               />
               {editable && (
@@ -364,7 +432,11 @@ export function DebtView({
   const [shareOpen, setShareOpen] = useState(false);
   const total = debts.reduce((s, d) => s + d.total, 0);
   const shareTextPayload = useMemo(() => rekapShareText(debts, total), [debts, total]);
-  const shareBlocks = useMemo(() => rekapShareBlocks(debts, total), [debts, total]);
+  const shareBlocks = useMemo(
+    () => rekapShareBlocks(debts, total, photoMap),
+    [debts, total, photoMap],
+  );
+  const shareCaption = useMemo(() => rekapShareCaption(debts, total), [debts, total]);
 
   return (
     <section className="rounded-xl2 border border-line bg-surface p-4 shadow-card">
@@ -399,6 +471,7 @@ export function DebtView({
         description="Semua tagihan belum bayar"
         text={shareTextPayload}
         imageBlocks={shareBlocks}
+        imageCaption={shareCaption}
         imageName="rekap-belum-bayar.png"
       />
 

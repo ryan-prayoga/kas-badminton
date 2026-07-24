@@ -25,6 +25,7 @@ export function ShareChoiceDialog({
   text,
   imageBlocks,
   imageName = "kok-share.png",
+  imageCaption,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -33,6 +34,8 @@ export function ShareChoiceDialog({
   text: string;
   imageBlocks: ShareCardBlock[];
   imageName?: string;
+  /** Caption pendek yang ikut terkirim bareng gambar (berisi link app). */
+  imageCaption?: string;
 }) {
   const [busy, setBusy] = useState<"text" | "image" | null>(null);
 
@@ -52,7 +55,7 @@ export function ShareChoiceDialog({
     setBusy("image");
     try {
       const blob = await renderShareCard(imageBlocks);
-      const mode = await shareImage(blob, imageName, title);
+      const mode = await shareImage(blob, imageName, title, imageCaption);
       if (mode === "downloaded") {
         toast.success("Gambar diunduh — kirim manual dari galeri/file");
       }
@@ -76,7 +79,7 @@ export function ShareChoiceDialog({
           <OptionButton
             icon="share"
             label="Bagikan teks"
-            hint="WhatsApp / share sheet teks"
+            hint="Rapi buat WhatsApp, lengkap sama link"
             onClick={onText}
             disabled={busy !== null}
             loading={busy === "text"}
@@ -84,7 +87,7 @@ export function ShareChoiceDialog({
           <OptionButton
             icon="image"
             label="Bagikan gambar"
-            hint="Kartu rapi, cocok story/chat"
+            hint="Kartu mirip tampilan web, cocok story/chat"
             onClick={onImage}
             disabled={busy !== null}
             loading={busy === "image"}
