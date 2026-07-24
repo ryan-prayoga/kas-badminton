@@ -24,6 +24,8 @@ export async function mutate<T>(fn: () => Promise<T>): Promise<ActionResult<T>> 
   const res = await run(fn);
   if (res.ok) {
     revalidatePath("/", "layout");
+    // publish setelah commit: fan-out SSE (subscriber juga re-cek sesi →
+    // operator yang di-revoke langsung dapat event session:invalid)
     await publish("update");
   }
   return res;

@@ -4,6 +4,11 @@ import { useEffect, useSyncExternalStore, useTransition } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { getNavMode, setNavMode, subscribeNavMode } from "@/lib/nav-mode";
+import {
+  getSessionAlive,
+  setSessionAlive,
+  subscribeSessionAlive,
+} from "@/lib/session-alive";
 import { logout } from "@/server/actions/auth";
 import { KIcon } from "@/components/kok/icons";
 
@@ -12,6 +17,8 @@ export function SessionBadge({ role, name }: { role: "admin" | "operator" | null
   const pathname = usePathname();
   const [pending, startTransition] = useTransition();
   const storedMode = useSyncExternalStore(subscribeNavMode, getNavMode, () => "admin" as const);
+  const sessionAlive = useSyncExternalStore(subscribeSessionAlive, getSessionAlive, () => true);
+  const effectiveRole = sessionAlive ? role : null;
 
   useEffect(() => {
     if (pathname.startsWith("/admin") && getNavMode() !== "admin") {
@@ -19,17 +26,18 @@ export function SessionBadge({ role, name }: { role: "admin" | "operator" | null
     }
   }, [pathname]);
 
-  if (!role) return null;
+  if (!effectiveRole) return null;
 
   // Tombol "Admin · buka" di home publik, atau saat browse mode publik
   // (setelah menu Halaman publik) di Rekap/Statistik.
   const publicBrowse =
     !pathname.startsWith("/admin") &&
     (storedMode === "public" || pathname === "/");
-  const label = role === "admin" ? "Admin" : (name ?? "Operator");
+  const label = effectiveRole === "admin" ? "Admin" : (name ?? "Operator");
 
   const doLogout = () =>
     startTransition(async () => {
+      setSessionAlive(false);
       await logout();
       setNavMode("admin"); // reset preferensi
       // Langsung ke halaman publik, bukan lockscreen PIN

@@ -63,7 +63,19 @@ export function SettingsPanel({ merchantQris }: { merchantQris: string }) {
   );
   const [pending, startTransition] = useTransition();
   const [decoding, setDecoding] = useState(false);
+  const [dirty, setDirty] = useState(false);
+  const [serverQris, setServerQris] = useState(merchantQris);
   const fileRef = useRef<HTMLInputElement>(null);
+
+  // prop server berubah (realtime) + form belum dirty → ikut server
+  if (merchantQris !== serverQris) {
+    setServerQris(merchantQris);
+    if (!dirty) {
+      setQris(merchantQris);
+      setStatus(merchantQris ? "✓ QRIS aktif" : "QRIS belum diatur");
+      setStatusKind(merchantQris ? "ok" : "info");
+    }
+  }
 
   useEffect(() => {
     let cancelled = false;
@@ -82,6 +94,7 @@ export function SettingsPanel({ merchantQris }: { merchantQris: string }) {
     setStatusKind("info");
     try {
       const payload = await decodeQrisFromFile(file);
+      setDirty(true);
       setQris(payload);
       if (/^0002/.test(payload)) {
         setStatus("✓ QR terbaca. Klik Simpan untuk aktifkan.");
@@ -100,6 +113,7 @@ export function SettingsPanel({ merchantQris }: { merchantQris: string }) {
   };
 
   const remove = () => {
+    setDirty(true);
     setQris("");
     setStatus("QRIS dikosongkan. Klik Simpan buat matikan.");
     setStatusKind("info");
@@ -109,6 +123,7 @@ export function SettingsPanel({ merchantQris }: { merchantQris: string }) {
     startTransition(async () => {
       const res = await updateSettingsAction({ merchantQris: qris.trim() });
       if (res.ok) {
+        setDirty(false);
         toast.success("Pengaturan disimpan");
         const enabled = Boolean(res.data?.qrisEnabled ?? qris.trim());
         setStatus(enabled ? "✓ QRIS aktif" : "QRIS belum diatur");

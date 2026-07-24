@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import type { KokType, PlayerRow } from "@/lib/domain/types";
 import type { OperatorView } from "@/lib/repo/operators";
 import { setNavMode } from "@/lib/nav-mode";
+import { setSessionAlive } from "@/lib/session-alive";
 import { logout } from "@/server/actions/auth";
 import { KokTypesPanel } from "@/components/admin/kok-types-panel";
 import { OperatorsPanel } from "@/components/admin/operators-panel";
@@ -90,6 +91,7 @@ export function LainnyaMenu({
 
   const onLock = () =>
     startTransition(async () => {
+      setSessionAlive(false);
       await logout();
       setNavMode("admin");
       // Langsung ke halaman publik, bukan lockscreen PIN

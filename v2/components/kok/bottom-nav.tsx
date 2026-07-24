@@ -5,6 +5,10 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { getNavMode, setNavMode, subscribeNavMode } from "@/lib/nav-mode";
+import {
+  getSessionAlive,
+  subscribeSessionAlive,
+} from "@/lib/session-alive";
 import type { KokType, PlayerRow } from "@/lib/domain/types";
 import { KIcon, type IconName } from "@/components/kok/icons";
 import { RecordGameSheet } from "@/components/record-game-sheet";
@@ -81,6 +85,9 @@ export function BottomNav({
 }) {
   const pathname = usePathname();
   const storedMode = useSyncExternalStore(subscribeNavMode, getNavMode, () => "admin" as const);
+  const sessionAlive = useSyncExternalStore(subscribeSessionAlive, getSessionAlive, () => true);
+  // Sesi mati (revoke/expire) → drop role instan tanpa nunggu RSC refresh
+  const effectiveRole: Role = sessionAlive ? role : null;
 
   // Masuk rute admin* → paksa mode admin (persist)
   useEffect(() => {
@@ -90,7 +97,7 @@ export function BottomNav({
   }, [pathname]);
 
   // Lockscreen admin: sembunyikan nav biar mirip v1
-  if (!role && pathname.startsWith("/admin")) return null;
+  if (!effectiveRole && pathname.startsWith("/admin")) return null;
 
   // Chrome admin hanya saat:
   // - rute /admin*, atau
@@ -98,10 +105,10 @@ export function BottomNav({
   // Mode `public` (dari menu Lainnya) stay di chrome publik meski pindah
   // Rekap/Statistik — Riwayat tetap `/`, tanpa FAB/Lainnya.
   const adminChrome =
-    !!role &&
+    !!effectiveRole &&
     (pathname.startsWith("/admin") || (storedMode !== "public" && pathname !== "/"));
-  const items = buildItems(adminChrome, role);
-  const showFab = adminChrome && !!recordGame;
+  const items = buildItems(adminChrome, effectiveRole);
+  const showFab = adminChrome && !!recordGame && !!effectiveRole;
 
   // Sisipkan FAB di tengah: [kiri…] [FAB] […kanan]
   const mid = Math.ceil(items.length / 2);

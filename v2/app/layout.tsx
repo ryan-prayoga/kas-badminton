@@ -5,6 +5,7 @@ import { ConfirmProvider } from "@/components/confirm-dialog";
 import { ThemeProvider } from "@/components/theme-provider";
 import { Toaster } from "@/components/ui/sonner";
 import { RealtimeRefresher } from "@/components/realtime-refresher";
+import { SessionGuard } from "@/components/session-guard";
 import { ScrollContainer } from "@/components/scroll-container";
 import { BottomNav } from "@/components/kok/bottom-nav";
 import { getData } from "@/lib/data";
@@ -55,19 +56,21 @@ export default async function RootLayout({ children }: Readonly<{ children: Reac
       <body className="h-svh overflow-hidden font-sans antialiased">
         <ThemeProvider>
           <ConfirmProvider>
-            <ScrollContainer>{children}</ScrollContainer>
-            <BottomNav
-              role={data.me.role}
-              recordGame={
-                canRecord
-                  ? {
-                      kokTypes: data.kokTypes,
-                      players: data.players,
-                      defaultPrice: data.settings.defaultPricePerPerson,
-                    }
-                  : undefined
-              }
-            />
+            <SessionGuard role={data.me.role}>
+              <ScrollContainer>{children}</ScrollContainer>
+              <BottomNav
+                role={data.me.role}
+                recordGame={
+                  canRecord
+                    ? {
+                        kokTypes: data.kokTypes,
+                        players: data.players,
+                        defaultPrice: data.settings.defaultPricePerPerson,
+                      }
+                    : undefined
+                }
+              />
+            </SessionGuard>
             <Toaster position="top-center" richColors />
             <RealtimeRefresher />
           </ConfirmProvider>

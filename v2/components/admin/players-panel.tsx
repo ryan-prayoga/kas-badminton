@@ -24,6 +24,7 @@ function PlayerRowItem({ player }: { player: PlayerRow }) {
   const [name, setName] = useState(player.name);
   const [pending, start] = useTransition();
   const fileRef = useRef<HTMLInputElement>(null);
+  // list pakai key={player.name} → remount otomatis kalau rename remote
 
   const rename = () => {
     const n = name.trim();

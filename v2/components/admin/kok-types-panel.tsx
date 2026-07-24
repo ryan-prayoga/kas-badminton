@@ -37,6 +37,15 @@ function BuyDialog({ type }: { type: KokType }) {
   const [price, setPrice] = useState(String(type.pricePerSlop || ""));
   const [pending, startTransition] = useTransition();
 
+  const onOpenChange = (v: boolean) => {
+    setOpen(v);
+    if (v) {
+      // ambil harga terbaru saat buka (realtime bisa ubah pricePerSlop)
+      setSlops("1");
+      setPrice(String(type.pricePerSlop || ""));
+    }
+  };
+
   const slopN = Number(slops) || 0;
   const priceN = Number(price) || 0;
   const total = slopN * priceN;
@@ -61,7 +70,7 @@ function BuyDialog({ type }: { type: KokType }) {
     });
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
+    <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogTrigger render={<Button size="sm" variant="outline" className="h-8 gap-1.5 text-xs" />}>
         <ShoppingCart className="size-4" /> Beli slop
       </DialogTrigger>
@@ -113,6 +122,16 @@ function EditDialog({ type }: { type: KokType }) {
   const [slop, setSlop] = useState(String(type.pricePerSlop));
   const [pending, startTransition] = useTransition();
 
+  const onOpenChange = (v: boolean) => {
+    setOpen(v);
+    if (v) {
+      // resync dari server tiap dibuka — cegah form basi setelah realtime
+      setName(type.name);
+      setPrice(String(type.pricePerPerson));
+      setSlop(String(type.pricePerSlop));
+    }
+  };
+
   const save = () =>
     startTransition(async () => {
       const res = await patchKokTypeAction(type.id, {
@@ -130,7 +149,7 @@ function EditDialog({ type }: { type: KokType }) {
     });
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
+    <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogTrigger render={<Button size="icon" variant="outline" className="size-8" />}>
         <Pencil className="size-4" />
       </DialogTrigger>

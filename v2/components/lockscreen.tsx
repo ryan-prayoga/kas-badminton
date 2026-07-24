@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Loader2 } from "lucide-react";
+import { setSessionAlive } from "@/lib/session-alive";
 import { login } from "@/server/actions/auth";
 import { KIcon } from "@/components/kok/icons";
 import { cn } from "@/lib/utils";
@@ -43,6 +44,7 @@ export function Lockscreen() {
       startTransition(async () => {
         const res = await login(pin);
         if (res.ok) {
+          setSessionAlive(true);
           router.refresh();
         } else {
           setError(res.error);
