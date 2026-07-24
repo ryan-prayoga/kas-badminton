@@ -1577,9 +1577,9 @@ function openEdit(game) {
 
   var root = $('#editPairs');
   root.innerHTML = [
-    pairCardHtml({ pairKey: 'a', label: 'Pair A', p1Name: game.players[0] && game.players[0].name, p2Name: game.players[1] && game.players[1].name, namePrefix: 'editPlayer' }),
+    pairCardHtml({ pairKey: 'a', label: 'Pasangan A', p1Name: game.players[0] && game.players[0].name, p2Name: game.players[1] && game.players[1].name, namePrefix: 'editPlayer' }),
     '<div class="grid place-items-center"><span class="grid h-7 w-7 place-items-center rounded-full border border-line bg-surface text-[10px] font-bold tracking-wider text-soft">VS</span></div>',
-    pairCardHtml({ pairKey: 'b', label: 'Pair B', p1Name: game.players[2] && game.players[2].name, p2Name: game.players[3] && game.players[3].name, namePrefix: 'editPlayer' }),
+    pairCardHtml({ pairKey: 'b', label: 'Pasangan B', p1Name: game.players[2] && game.players[2].name, p2Name: game.players[3] && game.players[3].name, namePrefix: 'editPlayer' }),
   ].join('');
   wireAllPlayerInputs(root);
 

@@ -8,6 +8,7 @@ import type { EnrichedGame, KokType, PlayerRow } from "@/lib/domain/types";
 import { fmt } from "@/lib/format";
 import { updateGameAction } from "@/server/actions/games";
 import { buildPhotoMap } from "@/components/kok/avatar";
+import { DateField } from "@/components/kok/date-field";
 import { KIcon } from "@/components/kok/icons";
 import { PlayerNameInput } from "@/components/kok/player-name-input";
 import {
@@ -106,7 +107,7 @@ export function EditGameSheet({
           {([0, 1] as const).map((pair) => (
             <div key={pair} className="space-y-1.5">
               <label className="text-xs font-bold uppercase tracking-wide text-ink-faint">
-                Pair {pair === 0 ? "A" : "B"}
+                Pasangan {pair === 0 ? "A" : "B"}
               </label>
               <div className="grid grid-cols-2 gap-2">
                 {[0, 1].map((j) => {
@@ -141,7 +142,7 @@ export function EditGameSheet({
                       const t = kokTypes.find((x) => x.id === e.target.value);
                       setKok(i, { typeId: e.target.value, price: t ? String(t.pricePerPerson) : k.price });
                     }}
-                    className="h-9 flex-1 rounded-xl border border-input bg-surface px-3 text-sm outline-none focus:border-court/50"
+                    className="h-10 flex-1 rounded-xl border border-input bg-surface px-3 text-sm outline-none focus:border-court/50"
                   >
                     <option value="">Custom</option>
                     {active.map((t) => (
@@ -154,12 +155,12 @@ export function EditGameSheet({
                     inputMode="numeric"
                     value={k.price}
                     onChange={(e) => setKok(i, { price: e.target.value.replace(/[^\d]/g, "") })}
-                    className="w-24 rounded-xl border border-input bg-surface px-3 py-2 text-sm text-ink outline-none focus:border-court/50"
+                    className="h-10 w-24 rounded-xl border border-input bg-surface px-3 text-sm text-ink outline-none focus:border-court/50"
                   />
                   <button
                     type="button"
                     onClick={() => removeKok(i)}
-                    className="grid size-9 shrink-0 place-items-center rounded-xl text-ink-faint hover:text-danger"
+                    className="grid size-10 shrink-0 place-items-center rounded-xl text-ink-faint hover:text-danger"
                   >
                     <KIcon name="trash" className="size-4" />
                   </button>
@@ -168,19 +169,14 @@ export function EditGameSheet({
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-2">
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
             <div className="space-y-1.5">
               <label className="text-xs font-bold uppercase tracking-wide text-ink-faint">Tanggal</label>
-              <input
-                type="date"
-                value={date}
-                onChange={(e) => setDate(e.target.value)}
-                className="w-full rounded-xl border border-input bg-surface px-3 py-2 text-sm text-ink outline-none focus:border-court/50"
-              />
+              <DateField value={date} onChange={setDate} />
             </div>
             <div className="space-y-1.5">
               <label className="text-xs font-bold uppercase tracking-wide text-ink-faint">Per orang</label>
-              <div className="tabular flex h-[38px] items-center rounded-xl bg-court/8 px-3 font-mono text-sm font-bold text-court">
+              <div className="tabular flex h-11 items-center rounded-xl bg-court/8 px-3 font-mono text-sm font-bold text-court">
                 {fmt(perPerson)}
               </div>
             </div>
@@ -191,7 +187,7 @@ export function EditGameSheet({
             <input
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
-              className="w-full rounded-xl border border-input bg-surface px-3 py-2 text-sm text-ink outline-none focus:border-court/50"
+              className="h-11 w-full rounded-xl border border-input bg-surface px-3 text-sm text-ink outline-none focus:border-court/50"
             />
           </div>
         </div>
@@ -201,9 +197,9 @@ export function EditGameSheet({
             type="button"
             onClick={submit}
             disabled={pending}
-            className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-court py-2.5 font-semibold text-white shadow-court transition active:scale-[0.98] disabled:opacity-60"
+            className="inline-flex h-12 w-full items-center justify-center gap-2 rounded-2xl bg-court text-base font-bold text-white shadow-court transition active:scale-[0.98] disabled:opacity-60"
           >
-            {pending ? <Loader2 className="size-4 animate-spin" /> : <KIcon name="save" className="size-4" />}
+            {pending ? <Loader2 className="size-5 animate-spin" /> : <KIcon name="save" className="size-5" />}
             Simpan perubahan
           </button>
         </SheetFooter>

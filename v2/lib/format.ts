@@ -34,6 +34,53 @@ export function fmtDate(iso: string): string {
   return `${Number(m[3])} ${MONTHS[Number(m[2]) - 1]} ${m[1]}`;
 }
 
+const WEEKDAYS = ["Minggu", "Senin", "Selasa", "Rabu", "Kamis", "Jumat", "Sabtu"];
+
+/** Parse YYYY-MM-DD → Date lokal (tengah malam). */
+export function parseLocalDate(iso: string): Date | null {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(iso || ""));
+  if (!m) return null;
+  const d = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
+  return Number.isNaN(d.getTime()) ? null : d;
+}
+
+/** Date lokal → YYYY-MM-DD. */
+export function toLocalIso(d: Date): string {
+  const y = d.getFullYear();
+  const mo = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${mo}-${day}`;
+}
+
+/** "24 Juli 2026" dari YYYY-MM-DD. */
+export function fmtDateLong(iso: string): string {
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(iso || ""));
+  if (!m) return iso || "";
+  return `${Number(m[3])} ${MONTHS_FULL[Number(m[2]) - 1]} ${m[1]}`;
+}
+
+/** "Kamis, 24 Juli 2026". */
+export function fmtDateFull(iso: string): string {
+  const d = parseLocalDate(iso);
+  if (!d) return iso || "";
+  return `${WEEKDAYS[d.getDay()]}, ${fmtDateLong(iso)}`;
+}
+
+/**
+ * Label manusiawi untuk field tanggal:
+ * - "Hari ini · Kamis, 24 Juli 2026"
+ * - "Kemarin · Rabu, 23 Juli 2026"
+ * - "Kamis, 17 Juli 2026" (lebih lama)
+ */
+export function fmtDateHuman(iso: string): string {
+  const rel = relativeDay(iso);
+  const full = fmtDateFull(iso);
+  if (!full) return "";
+  if (rel === "Hari ini" || rel === "Kemarin") return `${rel} · ${full}`;
+  if (rel) return `${rel} · ${fmtDateLong(iso)}`;
+  return full;
+}
+
 /** "18 Jul 2026, 09.39" dari ISO datetime (waktu lokal). */
 export function fmtDateTime(iso: string): string {
   if (!iso) return "—";
