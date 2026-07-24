@@ -117,7 +117,7 @@ export function SettingsPanel({ merchantQris }: { merchantQris: string }) {
     });
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto overscroll-contain">
+    <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto overscroll-contain p-px">
       {/* Info sudah di SheetHeader — di sini cuma aksi + preview, biar gak dobel */}
       <Card className="gap-4 p-4">
         <div className="flex flex-col items-center gap-3 rounded-xl2 border border-line bg-surface-2 p-4">

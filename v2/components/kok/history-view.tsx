@@ -154,6 +154,7 @@ export function HistoryView({
                 </button>
                 <div className="acc-panel" data-open={opened}>
                   <div className="acc-inner">
+                    {/* p-3 + gap: ruang border/shadow GameCard biar gak kepotong overflow parent */}
                     <div className="grid gap-3 border-t border-line p-3">
                       {grp.games.map((g) => (
                         <GameCard

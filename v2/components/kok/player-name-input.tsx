@@ -27,7 +27,7 @@ export function PlayerNameInput({
   const selectedPhoto = value.trim() ? photoMap?.[value.trim()] : undefined;
 
   return (
-    <div className="relative">
+    <div className="relative z-10">
       <div className="relative">
         {selectedPhoto && (
           // eslint-disable-next-line @next/next/no-img-element
@@ -57,7 +57,7 @@ export function PlayerNameInput({
         />
       </div>
       {open && matches.length > 0 && (
-        <ul className="absolute z-30 mt-1 max-h-56 w-full overflow-auto rounded-xl border border-line bg-surface p-1 shadow-pop">
+        <ul className="absolute z-50 mt-1 max-h-56 w-full overflow-y-auto overscroll-contain rounded-xl border border-line bg-surface p-1 shadow-pop">
           {matches.map((n) => (
             <li key={n}>
               <button
@@ -67,10 +67,10 @@ export function PlayerNameInput({
                   onChange(n);
                   setOpen(false);
                 }}
-                className="flex w-full items-center gap-2 truncate rounded-lg px-2 py-2 text-left text-sm font-medium text-ink transition hover:bg-court/8"
+                className="flex w-full items-center gap-2 rounded-lg px-2 py-2 text-left text-sm font-medium text-ink transition hover:bg-court/8"
               >
                 <Avatar name={n} photo={photoMap?.[n]} size="size-7" />
-                <span className="truncate">{n}</span>
+                <span className="min-w-0 flex-1 truncate">{n}</span>
               </button>
             </li>
           ))}

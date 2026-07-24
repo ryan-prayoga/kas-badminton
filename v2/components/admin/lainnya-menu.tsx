@@ -158,8 +158,9 @@ export function LainnyaMenu({
             <SheetTitle className="font-display">{active?.label ?? "—"}</SheetTitle>
             {active?.desc ? <SheetDescription>{active.desc}</SheetDescription> : null}
           </SheetHeader>
-          {/* Semua panel: body flex; list internal yang scroll biar X + header tetap */}
-          <div className="flex min-h-0 flex-1 flex-col overflow-hidden px-4 pb-4">
+          {/* Body flex; list internal yang scroll. overflow-x-hidden + overflow-y-hidden
+              (bukan overflow-hidden generik) — sama clip-nya, stacking dropdown tetap aman. */}
+          <div className="flex min-h-0 flex-1 flex-col overflow-x-hidden overflow-y-hidden px-4 pb-4">
             {panel === "kok" && <KokTypesPanel kokTypes={kokTypes} />}
             {panel === "pemain" && <PlayersPanel players={players} />}
             {panel === "delegasi" && <OperatorsPanel operators={operators} players={players} />}

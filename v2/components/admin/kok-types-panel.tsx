@@ -360,12 +360,14 @@ export function KokTypesPanel({ kokTypes }: { kokTypes: KokType[] }) {
         </Button>
       </Card>
 
-      <div className="min-h-0 flex-1 space-y-3 overflow-y-auto overscroll-contain">
-        {kokTypes.length === 0 ? (
-          <p className="py-6 text-center text-sm text-muted-foreground">Belum ada jenis kok.</p>
-        ) : (
-          kokTypes.map((t) => <TypeRow key={t.id} type={t} />)
-        )}
+      <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
+        <div className="space-y-3 p-px">
+          {kokTypes.length === 0 ? (
+            <p className="py-6 text-center text-sm text-muted-foreground">Belum ada jenis kok.</p>
+          ) : (
+            kokTypes.map((t) => <TypeRow key={t.id} type={t} />)
+          )}
+        </div>
       </div>
     </div>
   );

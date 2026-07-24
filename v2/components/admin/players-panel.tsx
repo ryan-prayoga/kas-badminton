@@ -120,11 +120,14 @@ export function PlayersPanel({ players }: { players: PlayerRow[] }) {
       <p className="shrink-0 px-1 text-xs text-ink-soft">
         Ketuk foto buat ganti · edit nama lalu simpan.
       </p>
-      {/* Hanya list yang scroll — header sheet + hint tetap */}
-      <div className="min-h-0 flex-1 space-y-2 overflow-y-auto overscroll-contain">
-        {players.map((p) => (
-          <PlayerRowItem key={p.name} player={p} />
-        ))}
+      {/* Hanya list yang scroll — header sheet + hint tetap.
+          p-px: ruang 1px biar border kartu gak kepotong overflow-y-auto */}
+      <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
+        <div className="space-y-2 p-px">
+          {players.map((p) => (
+            <PlayerRowItem key={p.name} player={p} />
+          ))}
+        </div>
       </div>
     </div>
   );

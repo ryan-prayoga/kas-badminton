@@ -45,7 +45,7 @@ function CourtSide({
   align: "left" | "right";
 }) {
   return (
-    <div className={cn("flex flex-col gap-1.5", align === "left" ? "pr-4" : "pl-4")}>
+    <div className={cn("flex min-w-0 flex-col gap-1.5", align === "left" ? "pr-3.5" : "pl-3.5")}>
       {indexes.map((i) => {
         const isPaid = paid[i];
         const Tag = editable ? "button" : "div";
@@ -54,10 +54,11 @@ function CourtSide({
             key={i}
             {...(editable ? { type: "button" as const, onClick: () => onToggle(i), disabled: pending } : {})}
             className={cn(
-              "flex min-w-0 items-center gap-1.5 rounded-lg border px-2 py-2 text-left backdrop-blur-sm",
+              // box-border + w-full: border gak kepotong di grid sempit
+              "box-border flex w-full min-w-0 items-center gap-1.5 rounded-lg border px-2 py-2 text-left",
               isPaid
-                ? "border-paid/25 bg-paid/10 text-paid"
-                : "border-owe/25 bg-owe/10 text-owe",
+                ? "border-paid/40 bg-paid/10 text-paid"
+                : "border-owe/40 bg-owe/10 text-owe",
               editable && "transition active:scale-[0.98] disabled:opacity-60",
             )}
           >
@@ -154,6 +155,7 @@ export function GameCard({
   return (
     <div
       className={cn(
+        // border di dalam box-model (bukan ring) biar gak kepotong overflow parent
         "rounded-xl2 border border-line bg-surface p-3 shadow-card",
         flash && "flash-update",
         pending && "opacity-80",
@@ -175,13 +177,13 @@ export function GameCard({
         )}
       </div>
 
-      {/* signature: mini court */}
-      <div className="court-surface relative mt-2.5 rounded-xl border border-court/15 p-2.5">
-        <div className="court-net pointer-events-none absolute inset-y-4 left-1/2 w-[2px] -translate-x-1/2" />
-        <span className="font-display pointer-events-none absolute left-1/2 top-1/2 z-10 -translate-x-1/2 -translate-y-1/2 rounded-full border border-court/25 bg-surface px-1.5 py-0.5 text-[9px] font-extrabold tracking-wide text-court shadow-sm">
+      {/* signature: mini court — overflow-visible biar border chip gak kepotong */}
+      <div className="court-surface relative mt-2.5 overflow-visible rounded-xl border border-court/20 p-2">
+        <div className="court-net pointer-events-none absolute inset-y-4 left-1/2 z-0 w-[2px] -translate-x-1/2" />
+        <span className="font-display pointer-events-none absolute left-1/2 top-1/2 z-10 -translate-x-1/2 -translate-y-1/2 rounded-full border border-court/30 bg-surface px-1.5 py-0.5 text-[9px] font-extrabold tracking-wide text-court shadow-sm">
           VS
         </span>
-        <div className="grid grid-cols-2">
+        <div className="relative z-[1] grid grid-cols-2 gap-x-1">
           <CourtSide
             indexes={[0, 1]}
             names={names}
