@@ -175,20 +175,20 @@
   }
   html {
     -webkit-text-size-adjust: 100%;
-    /* `dvh` masih kena lag: pas toolbar Safari nyembunyi, viewport-nya membesar
-       SEBELUM ukuran dvh sempat sinkron ulang, jadi ada jendela singkat di mana
-       halaman pendek ke-anggap "punya sisa scroll" — geser situ nyeret bottom nav
-       `fixed` ikut naik ke tengah layar. `svh` (viewport TERKECIL, toolbar
-       kebuka) statis, gak pernah lebih besar dari viewport sungguhan di state
-       manapun, jadi halaman pendek gak akan pernah kebaca scrollable. */
-    min-height: 100svh;
-    /* matiin rubber-band iOS — overscroll bawah nyeret elemen fixed ikut naik */
-    overscroll-behavior-y: none;
+    /* Safari nolak `overscroll-behavior` di ROOT scroller (html/body) — bounce
+       rubber-band tetap jalan native meski di-`none`-in, dan pas mantul situ
+       Safari nyeret elemen `position: fixed` (bottom nav) ikut naik ke tengah
+       layar. Satu-satunya cara pasti: bikin html/body gak bisa discroll sama
+       sekali (`height` pas + `overflow: hidden`), scroll beneran dipindah ke
+       div pembungkus non-root di dalam <body> (lihat layout.tsx) — di situ
+       `overscroll-behavior: none` kerja bener. */
+    height: 100svh;
+    overflow: hidden;
   }
   body {
     margin: 0;
-    min-height: 100svh;
-    overscroll-behavior-y: none;
+    height: 100svh;
+    overflow: hidden;
     color: var(--color-ink);
     background:
       radial-gradient(120% 80% at 50% -20%, var(--bg-glow), transparent 55%),

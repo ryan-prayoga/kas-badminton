@@ -5,6 +5,7 @@ import { ConfirmProvider } from "@/components/confirm-dialog";
 import { ThemeProvider } from "@/components/theme-provider";
 import { Toaster } from "@/components/ui/sonner";
 import { RealtimeRefresher } from "@/components/realtime-refresher";
+import { ScrollContainer } from "@/components/scroll-container";
 import { BottomNav } from "@/components/kok/bottom-nav";
 import { getData } from "@/lib/data";
 
@@ -51,10 +52,10 @@ export default async function RootLayout({ children }: Readonly<{ children: Reac
       className={`${archivo.variable} ${hanken.variable} ${mono.variable}`}
       suppressHydrationWarning
     >
-      <body className="min-h-svh font-sans antialiased">
+      <body className="h-svh overflow-hidden font-sans antialiased">
         <ThemeProvider>
           <ConfirmProvider>
-            {children}
+            <ScrollContainer>{children}</ScrollContainer>
             <BottomNav
               role={data.me.role}
               recordGame={
