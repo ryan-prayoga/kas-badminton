@@ -150,7 +150,7 @@ export function LainnyaMenu({
           <div className="px-4 pb-4">
             {panel === "kok" && <KokTypesPanel kokTypes={kokTypes} />}
             {panel === "pemain" && <PlayersPanel players={players} />}
-            {panel === "delegasi" && <OperatorsPanel operators={operators} />}
+            {panel === "delegasi" && <OperatorsPanel operators={operators} players={players} />}
             {panel === "setelan" && <SettingsPanel merchantQris={merchantQris} />}
           </div>
         </SheetContent>

@@ -34,6 +34,19 @@ export function fmtDate(iso: string): string {
   return `${Number(m[3])} ${MONTHS[Number(m[2]) - 1]} ${m[1]}`;
 }
 
+/** "18 Jul 2026, 09.39" dari ISO datetime (waktu lokal). */
+export function fmtDateTime(iso: string): string {
+  if (!iso) return "—";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "—";
+  const y = d.getFullYear();
+  const mo = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  const hh = String(d.getHours()).padStart(2, "0");
+  const mm = String(d.getMinutes()).padStart(2, "0");
+  return `${fmtDate(`${y}-${mo}-${day}`)}, ${hh}.${mm}`;
+}
+
 function todayLocal(): string {
   const d = new Date();
   const off = d.getTimezoneOffset();
