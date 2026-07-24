@@ -117,13 +117,9 @@ export function SettingsPanel({ merchantQris }: { merchantQris: string }) {
     });
 
   return (
-    <Card className="gap-4 p-4">
-      <div className="space-y-2">
-        <p className="text-sm font-semibold">QRIS statis merchant</p>
-        <p className="text-xs text-muted-foreground">
-          Upload foto QRIS cetak merchant. Payload disimpan, tombol “Bayar QRIS” muncul di tagihan.
-        </p>
-
+    <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto overscroll-contain">
+      {/* Info sudah di SheetHeader — di sini cuma aksi + preview, biar gak dobel */}
+      <Card className="gap-4 p-4">
         <div className="flex flex-col items-center gap-3 rounded-xl2 border border-line bg-surface-2 p-4">
           {preview ? (
             // eslint-disable-next-line @next/next/no-img-element
@@ -185,11 +181,11 @@ export function SettingsPanel({ merchantQris }: { merchantQris: string }) {
             {status}
           </p>
         </div>
-      </div>
 
-      <Button onClick={save} disabled={pending || decoding} className="w-full">
-        {pending ? <Loader2 className="size-4 animate-spin" /> : "Simpan pengaturan"}
-      </Button>
-    </Card>
+        <Button onClick={save} disabled={pending || decoding} className="w-full">
+          {pending ? <Loader2 className="size-4 animate-spin" /> : "Simpan pengaturan"}
+        </Button>
+      </Card>
+    </div>
   );
 }

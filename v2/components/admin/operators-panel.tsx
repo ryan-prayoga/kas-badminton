@@ -117,8 +117,8 @@ export function OperatorsPanel({
   };
 
   return (
-    <div className="space-y-3">
-      <Card className="gap-3 p-4">
+    <div className="flex min-h-0 flex-1 flex-col gap-3">
+      <Card className="shrink-0 gap-3 p-4">
         <p className="text-sm font-semibold">Buat delegasi (operator sementara)</p>
 
         <div className="space-y-1.5">
@@ -197,33 +197,35 @@ export function OperatorsPanel({
         )}
       </Card>
 
-      {active.length === 0 ? (
-        <p className="py-6 text-center text-sm text-muted-foreground">Belum ada delegasi aktif.</p>
-      ) : (
-        active.map((op) => (
-          <Card key={op.id} className="flex-row items-center gap-3 p-3">
-            <div className="min-w-0 flex-1">
-              <div className="flex items-center gap-1.5">
-                <p className="truncate font-medium">{op.name}</p>
-                <Badge variant="secondary" className="text-brand">
-                  aktif
-                </Badge>
+      <div className="min-h-0 flex-1 space-y-3 overflow-y-auto overscroll-contain">
+        {active.length === 0 ? (
+          <p className="py-6 text-center text-sm text-muted-foreground">Belum ada delegasi aktif.</p>
+        ) : (
+          active.map((op) => (
+            <Card key={op.id} className="flex-row items-center gap-3 p-3">
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-1.5">
+                  <p className="truncate font-medium">{op.name}</p>
+                  <Badge variant="secondary" className="text-brand">
+                    aktif
+                  </Badge>
+                </div>
+                <p className="text-xs text-muted-foreground">sampai {fmtDateTime(op.expiresAt)}</p>
               </div>
-              <p className="text-xs text-muted-foreground">sampai {fmtDateTime(op.expiresAt)}</p>
-            </div>
-            <Button
-              size="icon"
-              variant="ghost"
-              className="size-8 shrink-0 text-muted-foreground hover:text-destructive"
-              onClick={() => revoke(op.id, op.name)}
-              disabled={pending}
-              title="Cabut"
-            >
-              <X className="size-4" />
-            </Button>
-          </Card>
-        ))
-      )}
+              <Button
+                size="icon"
+                variant="ghost"
+                className="size-8 shrink-0 text-muted-foreground hover:text-destructive"
+                onClick={() => revoke(op.id, op.name)}
+                disabled={pending}
+                title="Cabut"
+              >
+                <X className="size-4" />
+              </Button>
+            </Card>
+          ))
+        )}
+      </div>
     </div>
   );
 }

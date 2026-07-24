@@ -116,11 +116,16 @@ export function PlayersPanel({ players }: { players: PlayerRow[] }) {
     return <p className="py-6 text-center text-sm text-ink-soft">Belum ada pemain.</p>;
   }
   return (
-    <div className="space-y-2">
-      <p className="px-1 text-xs text-ink-soft">Ketuk foto buat ganti · edit nama lalu simpan.</p>
-      {players.map((p) => (
-        <PlayerRowItem key={p.name} player={p} />
-      ))}
+    <div className="flex min-h-0 flex-1 flex-col gap-2">
+      <p className="shrink-0 px-1 text-xs text-ink-soft">
+        Ketuk foto buat ganti · edit nama lalu simpan.
+      </p>
+      {/* Hanya list yang scroll — header sheet + hint tetap */}
+      <div className="min-h-0 flex-1 space-y-2 overflow-y-auto overscroll-contain">
+        {players.map((p) => (
+          <PlayerRowItem key={p.name} player={p} />
+        ))}
+      </div>
     </div>
   );
 }

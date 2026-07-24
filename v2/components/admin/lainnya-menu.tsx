@@ -56,7 +56,7 @@ const MENU: {
     label: "QRIS",
     icon: "qrcode",
     adminOnly: true,
-    desc: "Upload QRIS statis merchant. Tombol bayar muncul di tagihan.",
+    desc: "Upload foto QRIS cetak merchant. Payload disimpan — tombol Bayar QRIS muncul di tagihan.",
   },
   { key: "public", label: "Halaman publik", icon: "back", href: "/" },
   { key: "lock", label: "Kunci", icon: "lock", danger: true },
@@ -141,13 +141,15 @@ export function LainnyaMenu({
       <Sheet open={panel !== null} onOpenChange={(o) => !o && setPanel(null)}>
         <SheetContent
           side="bottom"
-          className="mx-auto max-h-[92dvh] max-w-lg overflow-y-auto rounded-t-[1.75rem] border-line pb-[max(1rem,env(safe-area-inset-bottom))]"
+          className="mx-auto flex max-h-[92dvh] max-w-lg flex-col gap-0 overflow-hidden rounded-t-[1.75rem] border-line pb-[max(1rem,env(safe-area-inset-bottom))]"
         >
-          <SheetHeader>
+          {/* Header + tombol X tetap di atas; body yang scroll */}
+          <SheetHeader className="shrink-0 pr-12">
             <SheetTitle className="font-display">{active?.label ?? "—"}</SheetTitle>
             {active?.desc ? <SheetDescription>{active.desc}</SheetDescription> : null}
           </SheetHeader>
-          <div className="px-4 pb-4">
+          {/* Semua panel: body flex; list internal yang scroll biar X + header tetap */}
+          <div className="flex min-h-0 flex-1 flex-col overflow-hidden px-4 pb-4">
             {panel === "kok" && <KokTypesPanel kokTypes={kokTypes} />}
             {panel === "pemain" && <PlayersPanel players={players} />}
             {panel === "delegasi" && <OperatorsPanel operators={operators} players={players} />}

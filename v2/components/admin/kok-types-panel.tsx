@@ -297,8 +297,8 @@ export function KokTypesPanel({ kokTypes }: { kokTypes: KokType[] }) {
     });
 
   return (
-    <div className="space-y-3">
-      <Card className="gap-3 rounded-xl2 p-4">
+    <div className="flex min-h-0 flex-1 flex-col gap-3">
+      <Card className="shrink-0 gap-3 rounded-xl2 p-4">
         <p className="text-sm font-semibold">Tambah jenis kok</p>
         <p className="text-xs text-muted-foreground">
           Isi <strong>harga/slop</strong> + <strong>stok awal</strong> supaya kas langsung berkurang
@@ -360,11 +360,13 @@ export function KokTypesPanel({ kokTypes }: { kokTypes: KokType[] }) {
         </Button>
       </Card>
 
-      {kokTypes.length === 0 ? (
-        <p className="py-6 text-center text-sm text-muted-foreground">Belum ada jenis kok.</p>
-      ) : (
-        kokTypes.map((t) => <TypeRow key={t.id} type={t} />)
-      )}
+      <div className="min-h-0 flex-1 space-y-3 overflow-y-auto overscroll-contain">
+        {kokTypes.length === 0 ? (
+          <p className="py-6 text-center text-sm text-muted-foreground">Belum ada jenis kok.</p>
+        ) : (
+          kokTypes.map((t) => <TypeRow key={t.id} type={t} />)
+        )}
+      </div>
     </div>
   );
 }
