@@ -33,6 +33,7 @@ import logout from "@iconify-icons/mdi/logout";
 import cog from "@iconify-icons/mdi/cog-outline";
 import accountPlus from "@iconify-icons/mdi/account-plus-outline";
 import camera from "@iconify-icons/mdi/camera-outline";
+import image from "@iconify-icons/mdi/image-outline";
 import happy from "@iconify-icons/mdi/emoticon-happy-outline";
 import dotsHorizontal from "@iconify-icons/mdi/dots-horizontal";
 import backspace from "@iconify-icons/mdi/backspace-outline";
@@ -70,6 +71,7 @@ export const ICONS = {
   cog,
   accountPlus,
   camera,
+  image,
   happy,
   back,
   dotsHorizontal,

@@ -1,14 +1,16 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useMemo, useState, useTransition } from "react";
 import { toast } from "sonner";
 import type { DebtEntry, DebtItem } from "@/lib/domain/types";
 import { fmt, fmtDate, relativeDay } from "@/lib/format";
+import type { ShareCardBlock } from "@/lib/share";
 import { cn } from "@/lib/utils";
 import { payInstallmentAction, settleAllAction } from "@/server/actions/players";
 import { useConfirm } from "@/components/confirm-dialog";
 import { Avatar, type PhotoMap } from "@/components/kok/avatar";
 import { EmptyPanel } from "@/components/kok/empty-panel";
+import { ShareChoiceDialog } from "@/components/kok/share-choice";
 import { KIcon } from "@/components/kok/icons";
 import { QrisDialog } from "@/components/qris-dialog";
 
@@ -36,19 +38,85 @@ function groupItems(items: DebtItem[]): DateGroup[] {
   return order.map((d) => map.get(d)!);
 }
 
-function shareText(d: DebtEntry): string {
+function debtShareText(d: DebtEntry): string {
   const lines = [`Tagihan kok badminton — ${d.name}`, `Sisa: ${fmt(d.total)}`];
   if (d.carry > 0) lines.push(`(sudah dicicil ${fmt(d.carry)} dari ${fmt(d.owedGross)})`);
   for (const g of groupItems(d.items)) lines.push(`• ${fmtDate(g.date)} — ${fmt(g.total)} (${g.count} main)`);
   return lines.join("\n");
 }
 
-function doShare(text: string) {
-  if (typeof navigator !== "undefined" && navigator.share) {
-    navigator.share({ text }).catch(() => {});
-  } else {
-    window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, "_blank");
+function debtShareBlocks(d: DebtEntry): ShareCardBlock[] {
+  const grouped = groupItems(d.items);
+  const blocks: ShareCardBlock[] = [
+    { kind: "header", title: d.name, subtitle: "Tagihan belum lunas" },
+    { kind: "kv", label: "Sisa tagihan", value: fmt(d.total), tone: "owe" },
+  ];
+  if (d.carry > 0) {
+    blocks.push({
+      kind: "kv",
+      label: "Sudah dicicil",
+      value: `${fmt(d.carry)} / ${fmt(d.owedGross)}`,
+      tone: "paid",
+    });
   }
+  blocks.push({ kind: "section", title: "Rincian main" });
+  for (const g of grouped) {
+    blocks.push({
+      kind: "person",
+      rank: 0,
+      name: fmtDate(g.date),
+      detail: `${g.count} main · ${g.koks} kok`,
+      right: fmt(g.total),
+      rightTone: "owe",
+    });
+  }
+  // Fix rank display: use index 1..n
+  let i = 0;
+  for (const b of blocks) {
+    if (b.kind === "person") {
+      i += 1;
+      b.rank = i;
+    }
+  }
+  blocks.push({ kind: "footer", text: "kok.ryanprayoga.dev" });
+  return blocks;
+}
+
+function rekapShareText(debts: DebtEntry[], total: number): string {
+  if (!debts.length) return "Semua sudah lunas 🎉";
+  const lines = ["Rekap tagihan kok badminton", `Total belum bayar: ${fmt(total)}`, ""];
+  for (const d of debts) lines.push(`• ${d.name}: ${fmt(d.total)}`);
+  return lines.join("\n");
+}
+
+function rekapShareBlocks(debts: DebtEntry[], total: number): ShareCardBlock[] {
+  const blocks: ShareCardBlock[] = [
+    { kind: "header", title: "Rekap tagihan", subtitle: "Belum bayar" },
+    {
+      kind: "kv",
+      label: "Total belum bayar",
+      value: fmt(total),
+      tone: total > 0 ? "owe" : "paid",
+    },
+    { kind: "section", title: `Orang (${debts.length})` },
+  ];
+  if (!debts.length) {
+    blocks.push({ kind: "kv", label: "Status", value: "Semua lunas 🎉", tone: "paid" });
+  } else {
+    debts.forEach((d, i) => {
+      const koks = d.items.reduce((s, it) => s + (Number(it.kokCount) || 0), 0);
+      blocks.push({
+        kind: "person",
+        rank: i + 1,
+        name: d.name,
+        detail: `${d.items.length} main · ${koks} kok`,
+        right: fmt(d.total),
+        rightTone: "owe",
+      });
+    });
+  }
+  blocks.push({ kind: "footer", text: "kok.ryanprayoga.dev" });
+  return blocks;
 }
 
 function DebtCard({
@@ -65,10 +133,13 @@ function DebtCard({
   const confirm = useConfirm();
   const [pending, start] = useTransition();
   const [open, setOpen] = useState(false);
+  const [shareOpen, setShareOpen] = useState(false);
   const [cicil, setCicil] = useState(false);
   const [amount, setAmount] = useState("");
   const grouped = groupItems(d.items);
   const totalKoks = d.items.reduce((s, it) => s + (Number(it.kokCount) || 0), 0);
+  const shareTextPayload = useMemo(() => debtShareText(d), [d]);
+  const shareBlocks = useMemo(() => debtShareBlocks(d), [d]);
 
   const settle = async () => {
     const ok = await confirm({
@@ -170,11 +241,20 @@ function DebtCard({
               {qrisEnabled && <QrisDialog name={d.name} defaultAmount={d.total} />}
               <button
                 type="button"
-                onClick={() => doShare(shareText(d))}
+                onClick={() => setShareOpen(true)}
                 className="inline-flex items-center gap-1.5 rounded-xl border border-line bg-surface px-3 py-2 text-sm font-semibold text-ink shadow-card transition active:scale-95"
               >
                 <KIcon name="share" className="size-4" /> Bagikan
               </button>
+              <ShareChoiceDialog
+                open={shareOpen}
+                onOpenChange={setShareOpen}
+                title={`Bagikan · ${d.name}`}
+                description="Pilih format teks atau gambar"
+                text={shareTextPayload}
+                imageBlocks={shareBlocks}
+                imageName={`tagihan-${d.name.toLowerCase().replace(/\s+/g, "-")}.png`}
+              />
               {editable && (
                 <>
                   {!cicil ? (
@@ -234,13 +314,10 @@ export function DebtView({
   editable?: boolean;
   qrisEnabled?: boolean;
 }) {
+  const [shareOpen, setShareOpen] = useState(false);
   const total = debts.reduce((s, d) => s + d.total, 0);
-  const shareAll = () => {
-    if (!debts.length) return doShare("Semua sudah lunas 🎉");
-    const lines = ["Rekap tagihan kok badminton", `Total belum bayar: ${fmt(total)}`, ""];
-    for (const d of debts) lines.push(`• ${d.name}: ${fmt(d.total)}`);
-    doShare(lines.join("\n"));
-  };
+  const shareTextPayload = useMemo(() => rekapShareText(debts, total), [debts, total]);
+  const shareBlocks = useMemo(() => rekapShareBlocks(debts, total), [debts, total]);
 
   return (
     <section className="rounded-xl2 border border-line bg-surface p-4 shadow-card">
@@ -259,7 +336,7 @@ export function DebtView({
           )}
           <button
             type="button"
-            onClick={shareAll}
+            onClick={() => setShareOpen(true)}
             aria-label="Bagikan semua tagihan"
             className="grid size-8 place-items-center rounded-xl border border-line bg-surface text-ink-soft shadow-card transition hover:text-court active:scale-95"
           >
@@ -267,6 +344,16 @@ export function DebtView({
           </button>
         </div>
       </div>
+
+      <ShareChoiceDialog
+        open={shareOpen}
+        onOpenChange={setShareOpen}
+        title="Bagikan rekap"
+        description="Semua tagihan belum bayar"
+        text={shareTextPayload}
+        imageBlocks={shareBlocks}
+        imageName="rekap-belum-bayar.png"
+      />
 
       {debts.length === 0 ? (
         <EmptyPanel icon="happy" text="Semua sudah bayar 🎉" />

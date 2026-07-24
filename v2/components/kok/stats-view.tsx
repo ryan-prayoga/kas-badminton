@@ -3,10 +3,12 @@
 import { useMemo, useState } from "react";
 import type { DebtEntry, EnrichedGame, ExpenseRow, KokType } from "@/lib/domain/types";
 import { fmt, periodKey, periodLabel } from "@/lib/format";
+import type { ShareCardBlock } from "@/lib/share";
 import { cn } from "@/lib/utils";
 import { Avatar, type PhotoMap } from "@/components/kok/avatar";
 import { PeriodFilter } from "@/components/kok/period-filter";
 import { EmptyPanel } from "@/components/kok/empty-panel";
+import { ShareChoiceDialog } from "@/components/kok/share-choice";
 import { KIcon, type IconName } from "@/components/kok/icons";
 
 function StatCard({
@@ -46,15 +48,7 @@ interface PlayerStat {
   nunggak: number;
 }
 
-function doShare(text: string) {
-  if (typeof navigator !== "undefined" && navigator.share) {
-    navigator.share({ text }).catch(() => {});
-  } else {
-    window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, "_blank");
-  }
-}
-
-function buildShareText({
+function buildStatsShareText({
   periodName,
   totalGames,
   totalKok,
@@ -105,6 +99,72 @@ function buildShareText({
   return lines.join("\n");
 }
 
+function buildStatsShareBlocks({
+  periodName,
+  totalGames,
+  totalKok,
+  paid,
+  unpaid,
+  expense,
+  showKas,
+  players,
+}: {
+  periodName: string;
+  totalGames: number;
+  totalKok: number;
+  paid: number;
+  unpaid: number;
+  expense: number;
+  showKas: boolean;
+  players: PlayerStat[];
+}): ShareCardBlock[] {
+  const net = paid - expense;
+  const blocks: ShareCardBlock[] = [
+    { kind: "header", title: "Statistik", subtitle: periodName },
+    { kind: "section", title: "Ringkasan" },
+    { kind: "kv", label: "Total game", value: String(totalGames) },
+    { kind: "kv", label: "Total kok", value: String(totalKok) },
+    { kind: "kv", label: "Masuk (lunas)", value: fmt(paid), tone: "paid" },
+    {
+      kind: "kv",
+      label: "Belum bayar",
+      value: fmt(unpaid),
+      tone: unpaid > 0 ? "owe" : "paid",
+    },
+  ];
+
+  if (showKas) {
+    blocks.push(
+      { kind: "kv", label: "Keluar (beli stok)", value: fmt(expense), tone: "danger" },
+      {
+        kind: "kv",
+        label: "Saldo bersih",
+        value: fmt(net),
+        tone: net >= 0 ? "paid" : "danger",
+      },
+    );
+  }
+
+  blocks.push({ kind: "section", title: `Pemain (${players.length})` });
+  if (players.length === 0) {
+    blocks.push({ kind: "kv", label: "Status", value: "Belum ada yang main", tone: "muted" });
+  } else {
+    for (const [i, p] of players.entries()) {
+      blocks.push({
+        kind: "person",
+        rank: i + 1,
+        name: p.name,
+        detail: `${p.main} main · ${p.kok} kok · ${fmt(p.keluar)}`,
+        right: p.nunggak > 0 ? fmt(p.nunggak) : "Lunas",
+        rightTone: p.nunggak > 0 ? "owe" : "paid",
+      });
+    }
+  }
+
+  blocks.push({ kind: "footer", text: "kok.ryanprayoga.dev" });
+  return blocks;
+}
+
 export function StatsView({
   games,
   debts,
@@ -121,6 +181,7 @@ export function StatsView({
   expenses?: ExpenseRow[];
 }) {
   const [period, setPeriod] = useState("all");
+  const [shareOpen, setShareOpen] = useState(false);
 
   const periods = useMemo(() => {
     const keys = new Set<string>();
@@ -140,7 +201,6 @@ export function StatsView({
   const paidIn = scoped.reduce((s, g) => s + g.summary.paidTotal, 0);
   const unpaidIn = scoped.reduce((s, g) => s + g.summary.unpaidTotal, 0);
 
-  // Kas keluar: filter expense by bulan (createdAt) bila period dipilih; all-time pakai total.
   const expenseIn = useMemo(() => {
     if (!kas) return 0;
     if (period === "all") return kas.expense;
@@ -154,7 +214,6 @@ export function StatsView({
   const stockLeft = kokTypes.reduce((s, t) => s + Math.max(0, Number(t.stock) || 0), 0);
   const typesWithStock = kokTypes.filter((t) => (Number(t.stock) || 0) > 0).length;
 
-  // Belum bayar: periode → unpaid game di scope; semua waktu → debt summary (carry-aware).
   const totalDebt =
     period === "all" ? debts.reduce((s, d) => s + d.total, 0) : unpaidIn;
   const debtPeople =
@@ -185,20 +244,22 @@ export function StatsView({
 
   const periodName = period === "all" ? "Semua waktu" : periodLabel(period);
 
-  const onShare = () => {
-    doShare(
-      buildShareText({
-        periodName,
-        totalGames: scoped.length,
-        totalKok,
-        paid: paidIn,
-        unpaid: totalDebt,
-        expense: expenseIn,
-        showKas: Boolean(kas),
-        players,
-      }),
-    );
-  };
+  const sharePayload = useMemo(() => {
+    const args = {
+      periodName,
+      totalGames: scoped.length,
+      totalKok,
+      paid: paidIn,
+      unpaid: totalDebt,
+      expense: expenseIn,
+      showKas: Boolean(kas),
+      players,
+    };
+    return {
+      text: buildStatsShareText(args),
+      blocks: buildStatsShareBlocks(args),
+    };
+  }, [periodName, scoped.length, totalKok, paidIn, totalDebt, expenseIn, kas, players]);
 
   return (
     <section className="flex flex-col gap-4">
@@ -206,7 +267,7 @@ export function StatsView({
         <PeriodFilter value={period} periods={periods} onChange={setPeriod} />
         <button
           type="button"
-          onClick={onShare}
+          onClick={() => setShareOpen(true)}
           aria-label="Bagikan statistik"
           className="inline-flex h-[34px] items-center gap-1.5 rounded-full border border-line bg-surface px-3 text-xs font-semibold text-ink-soft shadow-card transition hover:border-court/30 hover:text-court active:scale-95"
         >
@@ -214,6 +275,16 @@ export function StatsView({
           Bagikan
         </button>
       </div>
+
+      <ShareChoiceDialog
+        open={shareOpen}
+        onOpenChange={setShareOpen}
+        title="Bagikan statistik"
+        description={`Periode: ${periodName}`}
+        text={sharePayload.text}
+        imageBlocks={sharePayload.blocks}
+        imageName={`statistik-${period === "all" ? "semua" : period}.png`}
+      />
 
       <div className="grid grid-cols-2 gap-3">
         {kas && (
