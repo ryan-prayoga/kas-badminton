@@ -5,7 +5,12 @@ import { toast } from "sonner";
 import type { EnrichedGame, KokType, PlayerRow } from "@/lib/domain/types";
 import { fmt } from "@/lib/format";
 import { cn } from "@/lib/utils";
-import { deleteGameAction, markAllPaidAction, setPaidAction } from "@/server/actions/games";
+import {
+  addKokAction,
+  deleteGameAction,
+  markAllPaidAction,
+  setPaidAction,
+} from "@/server/actions/games";
 import { useConfirm } from "@/components/confirm-dialog";
 import type { PhotoMap } from "@/components/kok/avatar";
 import { KIcon } from "@/components/kok/icons";
@@ -138,6 +143,20 @@ export function GameCard({
     });
   };
 
+  const addKok = () => {
+    // Kok baru ikut jenis + harga snapshot kok terakhir di game ini.
+    const last = game.koks[game.koks.length - 1];
+    start(async () => {
+      const res = await addKokAction(game.id, {
+        typeId: last?.typeId ?? null,
+        typeName: last?.typeName ?? null,
+        pricePerPerson: last?.pricePerPerson,
+      });
+      if (res.ok) toast.success("Kok ditambah");
+      else toast.error(res.error);
+    });
+  };
+
   const remove = async () => {
     const ok = await confirm({
       title: "Hapus game?",
@@ -215,7 +234,7 @@ export function GameCard({
       <div className="mt-2.5 flex items-center gap-2 border-t border-line pt-2">
         <div className="flex min-w-0 flex-1 items-center gap-1 text-[11px] text-ink-faint">
           <KIcon name="pencil" className="size-3 shrink-0" />
-          <span className="truncate">dicatat {game.recordedBy || "Admin"}</span>
+          <span className="truncate">{game.recordedBy || "Admin"}</span>
         </div>
         {editable && (
           <div className="flex shrink-0 items-center gap-1">
@@ -229,6 +248,15 @@ export function GameCard({
                 <KIcon name="check" className="size-3.5" /> Lunasin semua
               </button>
             )}
+            <button
+              type="button"
+              onClick={addKok}
+              disabled={pending}
+              aria-label="Tambah kok"
+              className="grid size-8 place-items-center rounded-lg text-ink-faint transition hover:bg-court/10 hover:text-court"
+            >
+              <KIcon name="plus" className="size-4" />
+            </button>
             {kokTypes && players && defaultPrice !== undefined && (
               <EditGameSheet
                 game={game}
