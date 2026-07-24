@@ -94,8 +94,6 @@ type Palette = {
   courtBorder: string;
   /** Radial glow di background kartu. */
   glow: string;
-  shadowCard: string;
-  shadowCourt: string;
 };
 
 const LIGHT: Palette = {
@@ -122,8 +120,6 @@ const LIGHT: Palette = {
   dangerBorder: "rgba(220,38,38,0.25)",
   courtBorder: "rgba(21,96,214,0.25)",
   glow: "rgba(21, 96, 214, 0.08)",
-  shadowCard: "0 1px 2px rgba(15,27,45,0.04), 0 8px 24px -14px rgba(15,27,45,0.18)",
-  shadowCourt: "0 10px 30px -12px rgba(21,96,214,0.35)",
 };
 
 const DARK: Palette = {
@@ -151,8 +147,6 @@ const DARK: Palette = {
   dangerBorder: "rgba(242,107,107,0.32)",
   courtBorder: "rgba(59,130,246,0.32)",
   glow: "rgba(59, 130, 246, 0.16)",
-  shadowCard: "0 1px 2px rgba(0,0,0,0.4), 0 8px 24px -14px rgba(0,0,0,0.7)",
-  shadowCourt: "0 10px 30px -12px rgba(59,130,246,0.55)",
 };
 
 // Palet aktif — di-set ulang tiap render (lihat applyPalette / renderShareCard).
@@ -160,7 +154,6 @@ let C: Palette = LIGHT;
 let TONE: Record<ShareCardTone, string>;
 let TONE_SOFT: Record<ShareCardTone, string>;
 let TONE_BORDER: Record<ShareCardTone, string>;
-let SHADOW_CARD: string;
 
 /** Pasang palet + turunan tone-nya. Dipanggil sebelum DOM kartu dibangun. */
 function applyPalette(dark: boolean): void {
@@ -189,7 +182,6 @@ function applyPalette(dark: boolean): void {
     muted: C.line,
     court: C.courtBorder,
   };
-  SHADOW_CARD = C.shadowCard;
 }
 
 applyPalette(false);
@@ -364,9 +356,17 @@ const AVATAR_ROW = 36;
  * Ini kunci biar fotonya gak meluber: hasilnya sudah 1:1 dan sudah bulat,
  * jadi kartu share cukup naruh gambarnya apa adanya tanpa object-fit atau
  * background-size — dua properti yang gak konsisten di dalam foreignObject.
+ *
+ * Sudut di luar lingkaran diisi warna surface parent (bukan transparan).
+ * PNG ber-alpha di foreignObject sering bikin fringe gelap di tepi lingkaran
+ * yang kelihatan kayak bayangan — padahal di web avatar gak punya itu.
  * Balikin null kalau fotonya gagal dimuat, biar jatuh ke avatar inisial.
  */
-async function circlePhoto(src: string, size: number): Promise<string | null> {
+async function circlePhoto(
+  src: string,
+  size: number,
+  cornerFill: string,
+): Promise<string | null> {
   try {
     const img = new Image();
     img.crossOrigin = "anonymous";
@@ -387,6 +387,10 @@ async function circlePhoto(src: string, size: number): Promise<string | null> {
     canvas.height = px;
     const ctx = canvas.getContext("2d");
     if (!ctx) return null;
+
+    // Isi full square dulu biar gak ada pixel alpha di sudut (hindari fringe).
+    ctx.fillStyle = cornerFill;
+    ctx.fillRect(0, 0, px, px);
 
     ctx.beginPath();
     ctx.arc(px / 2, px / 2, px / 2, 0, Math.PI * 2);
@@ -409,10 +413,11 @@ async function circlePhoto(src: string, size: number): Promise<string | null> {
 async function preparePhotos(blocks: ShareCardBlock[]): Promise<ShareCardBlock[]> {
   return Promise.all(
     blocks.map(async (b) => {
+      // Hero duduk di kartu surface; baris person di surface-2.
       if (b.kind === "hero" && b.photo)
-        return { ...b, photo: await circlePhoto(b.photo, AVATAR_HERO) };
+        return { ...b, photo: await circlePhoto(b.photo, AVATAR_HERO, C.surface) };
       if (b.kind === "person" && b.photo)
-        return { ...b, photo: await circlePhoto(b.photo, AVATAR_ROW) };
+        return { ...b, photo: await circlePhoto(b.photo, AVATAR_ROW, C.surface2) };
       return b;
     }),
   );
@@ -434,10 +439,12 @@ function avatarNode(opts: {
     // dua-duanya diabaikan sebagian engine (WebKit) waktu html-to-image
     // rasterisasi lewat foreignObject, dan fotonya kerender seukuran aslinya.
     // Ukuran dikunci lewat atribut width/height sekalian CSS-nya.
+    // Ring 1px keras (sama Avatar web) — cuma outline, bukan soft shadow.
     const img = el("img", {
       width: `${size}px`,
       height: `${size}px`,
       borderRadius: "999px",
+      boxShadow: `0 0 0 1px ${C.lineStrong}`,
       flexShrink: "0",
       display: "block",
     }) as HTMLImageElement;
@@ -490,7 +497,10 @@ function buildShareDom(blocks: ShareCardBlock[]): HTMLElement {
 
   const stack = el("div", { display: "flex", flexDirection: "column", gap: "16px" });
 
-  // ── App header — persis AppFrame ──
+  // ── App header — AppFrame tanpa soft shadow.
+  // box-shadow multi-layer (shadow-card / shadow-court) di raster html-to-image
+  // jadi smudge gelap yang kelihatan di PNG padahal di web hampir tak nampak.
+  // Pemisah kartu cukup dari border + bg surface, sama visual weight-nya.
   const appHeader = el("div", {
     display: "flex",
     alignItems: "center",
@@ -500,7 +510,6 @@ function buildShareDom(blocks: ShareCardBlock[]): HTMLElement {
     borderRadius: "20px",
     border: `1px solid ${C.line}`,
     background: C.surface,
-    boxShadow: SHADOW_CARD,
   });
 
   const headLeft = el("div", {
@@ -519,7 +528,6 @@ function buildShareDom(blocks: ShareCardBlock[]): HTMLElement {
     display: "grid",
     placeItems: "center",
     flexShrink: "0",
-    boxShadow: C.shadowCourt,
   });
   logo.innerHTML = iconSvg("racket", 24);
 
@@ -589,13 +597,12 @@ function buildShareDom(blocks: ShareCardBlock[]): HTMLElement {
 
   const openSection = (sectionTitle: string, icon: ShareIconName = "trophy"): HTMLElement => {
     closeSection();
-    // rounded-xl2 + border-line + bg-surface + p-4 + shadow-card
+    // rounded-xl2 + border-line + bg-surface + p-4 (tanpa shadow-card — lihat catatan header)
     const wrap = el("div", {
       borderRadius: "20px",
       border: `1px solid ${C.line}`,
       background: C.surface,
       padding: "16px",
-      boxShadow: SHADOW_CARD,
     });
 
     const head = el("div", {
@@ -648,7 +655,6 @@ function buildShareDom(blocks: ShareCardBlock[]): HTMLElement {
         border: `1px solid ${C.line}`,
         background: C.surface,
         padding: "16px",
-        boxShadow: SHADOW_CARD,
       });
 
       box.appendChild(
@@ -698,13 +704,12 @@ function buildShareDom(blocks: ShareCardBlock[]): HTMLElement {
 
       for (const item of b.items) {
         const tone = item.tone ?? "default";
-        // rounded-xl2 + p-3.5 + shadow-card
+        // rounded-xl2 + p-3.5 (tanpa shadow-card — lihat catatan header)
         const card = el("div", {
           borderRadius: "20px",
           border: `1px solid ${C.line}`,
           background: C.surface,
           padding: "14px",
-          boxShadow: SHADOW_CARD,
         });
 
         const lab = el("div", {
@@ -813,7 +818,6 @@ function buildShareDom(blocks: ShareCardBlock[]): HTMLElement {
         borderRadius: inSection ? "16px" : "20px",
         border: `1px solid ${C.line}`,
         background: inSection ? C.surface2 : C.surface,
-        boxShadow: inSection ? "none" : SHADOW_CARD,
       });
 
       const l = el("span", {
@@ -1007,7 +1011,6 @@ function footerNode(text?: string): HTMLElement {
     fontSize: "12px",
     fontWeight: "700",
     lineHeight: "1.2",
-    boxShadow: SHADOW_CARD,
   });
   const lIc = el("span", { display: "inline-flex", color: C.court });
   lIc.innerHTML = iconSvg("shuttle", 13);
