@@ -5,7 +5,6 @@ import { toBlob } from "html-to-image";
 /** Alamat publik app — dipakai di caption teks & footer kartu gambar. */
 export const APP_URL = "https://kok.ryanprayoga.dev";
 export const APP_HOST = "kok.ryanprayoga.dev";
-export const APP_TAGLINE = "dibuat buat patungan yang rapi";
 
 export type ShareCardTone = "default" | "paid" | "owe" | "danger" | "muted" | "court";
 
@@ -284,18 +283,27 @@ function avatarNode(opts: {
 }): HTMLElement {
   const { name, photo, initial, size, tone } = opts;
   if (photo) {
-    const img = el("img", {
+    // Sengaja pakai div + background-image, bukan <img> + object-fit:
+    // sebagian engine (WebKit) gak nerapin object-fit di dalam foreignObject,
+    // jadi fotonya kerender seukuran aslinya dan meluber keluar avatar.
+    // `overflow: hidden` dipasang sebagai jaring pengaman terakhir.
+    const box = el("div", {
       width: `${size}px`,
       height: `${size}px`,
+      minWidth: `${size}px`,
+      minHeight: `${size}px`,
       borderRadius: "999px",
-      objectFit: "cover",
+      overflow: "hidden",
       flexShrink: "0",
+      backgroundImage: `url("${photo}")`,
+      backgroundSize: "cover",
+      backgroundPosition: "center",
+      backgroundRepeat: "no-repeat",
+      backgroundColor: C.surface2,
       boxShadow: `0 0 0 1px ${C.lineStrong}`,
       display: "block",
     });
-    (img as HTMLImageElement).src = photo;
-    (img as HTMLImageElement).alt = "";
-    return img;
+    return box;
   }
   const safeTone: ShareCardTone = tone === "default" || tone === "muted" ? "court" : tone;
   const box = el("div", {
@@ -845,9 +853,6 @@ function footerNode(text?: string): HTMLElement {
     padding: "2px 0 0",
   });
 
-  const line = el("div", { fontSize: "12px", color: C.inkFaint, textAlign: "center" });
-  line.textContent = text || `Kok Badminton · ${APP_TAGLINE}`;
-
   const link = el("div", {
     display: "inline-flex",
     alignItems: "center",
@@ -867,7 +872,14 @@ function footerNode(text?: string): HTMLElement {
   lIc.innerHTML = iconSvg("shuttle", 13);
   link.append(lIc, document.createTextNode(APP_HOST));
 
-  foot.append(line, link);
+  // Cuma pill alamat app — tagline dihapus biar kartunya bersih.
+  // `text` masih dipakai kalau sebuah blok footer minta catatan tambahan.
+  if (text) {
+    const line = el("div", { fontSize: "12px", color: C.inkFaint, textAlign: "center" });
+    line.textContent = text;
+    foot.appendChild(line);
+  }
+  foot.appendChild(link);
   return foot;
 }
 
@@ -886,14 +898,18 @@ export async function renderShareCard(blocks: ShareCardBlock[]): Promise<Blob> {
   try {
     // pastikan font + foto ter-decode sebelum snapshot
     if (document.fonts?.ready) await document.fonts.ready;
+    const photoUrls = [...card.querySelectorAll<HTMLElement>("[style*='background-image']")]
+      .map((n) => /url\("?(.*?)"?\)/.exec(n.style.backgroundImage)?.[1])
+      .filter((u): u is string => Boolean(u));
     await Promise.all(
-      [...card.querySelectorAll("img")].map((img) =>
-        img.complete
-          ? Promise.resolve()
-          : new Promise<void>((r) => {
-              img.onload = () => r();
-              img.onerror = () => r();
-            }),
+      photoUrls.map(
+        (src) =>
+          new Promise<void>((r) => {
+            const probe = new Image();
+            probe.onload = () => r();
+            probe.onerror = () => r();
+            probe.src = src;
+          }),
       ),
     );
     // double rAF biar layout stabil
