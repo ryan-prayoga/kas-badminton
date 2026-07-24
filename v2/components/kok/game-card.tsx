@@ -6,6 +6,7 @@ import type { EnrichedGame, KokType, PlayerRow } from "@/lib/domain/types";
 import { fmt } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { deleteGameAction, markAllPaidAction, setPaidAction } from "@/server/actions/games";
+import { useConfirm } from "@/components/confirm-dialog";
 import type { PhotoMap } from "@/components/kok/avatar";
 import { KIcon } from "@/components/kok/icons";
 import { EditGameSheet } from "@/components/kok/edit-game-sheet";
@@ -90,6 +91,7 @@ export function GameCard({
   players?: PlayerRow[];
   defaultPrice?: number;
 }) {
+  const confirm = useConfirm();
   const [pending, start] = useTransition();
   const [paid, setPaid] = useState(() => game.players.map((p) => p.paid));
 
@@ -116,7 +118,14 @@ export function GameCard({
     });
   };
 
-  const markAll = () =>
+  const markAll = async () => {
+    const ok = await confirm({
+      title: "Lunasin semua?",
+      message: `Tandai SEMUA pemain di game ini sudah bayar (${unpaidCount} belum lunas)?`,
+      confirmLabel: "Ya, lunasin",
+      destructive: false,
+    });
+    if (!ok) return;
     start(async () => {
       setPaid(paid.map(() => true));
       const res = await markAllPaidAction(game.id, true);
@@ -126,14 +135,21 @@ export function GameCard({
         toast.error(res.error);
       }
     });
+  };
 
-  const remove = () =>
+  const remove = async () => {
+    const ok = await confirm({
+      title: "Hapus game?",
+      message: "Game ini dihapus permanen. Stok kok dikembalikan. Data tidak bisa dikembalikan.",
+      confirmLabel: "Ya, hapus",
+    });
+    if (!ok) return;
     start(async () => {
-      if (!confirm("Hapus game ini? Stok kok dikembalikan.")) return;
       const res = await deleteGameAction(game.id);
       if (res.ok) toast.success("Game dihapus");
       else toast.error(res.error);
     });
+  };
 
   return (
     <div

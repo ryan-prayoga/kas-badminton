@@ -14,6 +14,7 @@ import {
   deleteKokTypeAction,
   patchKokTypeAction,
 } from "@/server/actions/kokTypes";
+import { useConfirm } from "@/components/confirm-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -175,17 +176,24 @@ function EditDialog({ type }: { type: KokType }) {
 
 function TypeRow({ type }: { type: KokType }) {
   const router = useRouter();
+  const confirm = useConfirm();
   const [pending, startTransition] = useTransition();
 
-  const del = () =>
+  const del = async () => {
+    const ok = await confirm({
+      title: "Hapus jenis kok?",
+      message: `Hapus jenis "${type.name}"? History game tetap pakai snapshot nama lama.`,
+      confirmLabel: "Ya, hapus",
+    });
+    if (!ok) return;
     startTransition(async () => {
-      if (!confirm(`Hapus jenis kok ${type.name}?`)) return;
       const res = await deleteKokTypeAction(type.id);
       if (res.ok) {
         toast.success("Jenis kok dihapus");
         router.refresh();
       } else toast.error(res.error);
     });
+  };
 
   const tweak = (delta: number) =>
     startTransition(async () => {

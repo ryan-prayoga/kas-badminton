@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { Archivo, Hanken_Grotesk, JetBrains_Mono } from "next/font/google";
 import "./globals.css";
+import { ConfirmProvider } from "@/components/confirm-dialog";
 import { Toaster } from "@/components/ui/sonner";
 import { RealtimeRefresher } from "@/components/realtime-refresher";
 import { BottomNav } from "@/components/kok/bottom-nav";
@@ -30,21 +31,23 @@ export default async function RootLayout({ children }: Readonly<{ children: Reac
   return (
     <html lang="id" className={`${archivo.variable} ${hanken.variable} ${mono.variable} h-full`}>
       <body className="min-h-full font-sans antialiased">
-        {children}
-        <BottomNav
-          role={data.me.role}
-          recordGame={
-            canRecord
-              ? {
-                  kokTypes: data.kokTypes,
-                  players: data.players,
-                  defaultPrice: data.settings.defaultPricePerPerson,
-                }
-              : undefined
-          }
-        />
-        <Toaster position="top-center" richColors />
-        <RealtimeRefresher />
+        <ConfirmProvider>
+          {children}
+          <BottomNav
+            role={data.me.role}
+            recordGame={
+              canRecord
+                ? {
+                    kokTypes: data.kokTypes,
+                    players: data.players,
+                    defaultPrice: data.settings.defaultPricePerPerson,
+                  }
+                : undefined
+            }
+          />
+          <Toaster position="top-center" richColors />
+          <RealtimeRefresher />
+        </ConfirmProvider>
       </body>
     </html>
   );

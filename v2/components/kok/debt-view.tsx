@@ -6,6 +6,7 @@ import type { DebtEntry, DebtItem } from "@/lib/domain/types";
 import { fmt, fmtDate, relativeDay } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { payInstallmentAction, settleAllAction } from "@/server/actions/players";
+import { useConfirm } from "@/components/confirm-dialog";
 import { Avatar, type PhotoMap } from "@/components/kok/avatar";
 import { EmptyPanel } from "@/components/kok/empty-panel";
 import { KIcon } from "@/components/kok/icons";
@@ -61,6 +62,7 @@ function DebtCard({
   editable: boolean;
   qrisEnabled: boolean;
 }) {
+  const confirm = useConfirm();
   const [pending, start] = useTransition();
   const [open, setOpen] = useState(false);
   const [cicil, setCicil] = useState(false);
@@ -68,13 +70,20 @@ function DebtCard({
   const grouped = groupItems(d.items);
   const totalKoks = d.items.reduce((s, it) => s + (Number(it.kokCount) || 0), 0);
 
-  const settle = () =>
+  const settle = async () => {
+    const ok = await confirm({
+      title: "Lunasin semua?",
+      message: `Lunasin SEMUA tagihan ${d.name} (${fmt(d.total)})? Semua game-nya ditandai bayar.`,
+      confirmLabel: "Ya, lunasin",
+      destructive: false,
+    });
+    if (!ok) return;
     start(async () => {
-      if (!confirm(`Lunasin semua tagihan ${d.name}?`)) return;
       const res = await settleAllAction(d.name);
       if (res.ok) toast.success(`${d.name} lunas`);
       else toast.error(res.error);
     });
+  };
 
   const pay = () => {
     const amt = Number(amount);

@@ -5,6 +5,7 @@ import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import type { PlayerRow } from "@/lib/domain/types";
 import { updatePlayerAction } from "@/server/actions/players";
+import { useConfirm } from "@/components/confirm-dialog";
 import { Avatar } from "@/components/kok/avatar";
 import { KIcon } from "@/components/kok/icons";
 import { Card } from "@/components/ui/card";
@@ -19,6 +20,7 @@ function fileToDataUrl(file: File): Promise<string> {
 }
 
 function PlayerRowItem({ player }: { player: PlayerRow }) {
+  const confirm = useConfirm();
   const [name, setName] = useState(player.name);
   const [pending, start] = useTransition();
   const fileRef = useRef<HTMLInputElement>(null);
@@ -44,12 +46,19 @@ function PlayerRowItem({ player }: { player: PlayerRow }) {
     });
   };
 
-  const clearPhoto = () =>
+  const clearPhoto = async () => {
+    const ok = await confirm({
+      title: "Hapus foto?",
+      message: `Foto ${player.name} akan dihapus. Bisa diunggah lagi kapan saja.`,
+      confirmLabel: "Ya, hapus",
+    });
+    if (!ok) return;
     start(async () => {
       const res = await updatePlayerAction(player.name, { photo: null });
       if (res.ok) toast.success("Foto dihapus");
       else toast.error(res.error);
     });
+  };
 
   return (
     <Card className="flex-row items-center gap-3 p-3">

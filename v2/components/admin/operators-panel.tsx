@@ -7,6 +7,7 @@ import type { PlayerRow } from "@/lib/domain/types";
 import type { OperatorView } from "@/lib/repo/operators";
 import { fmtDate, fmtDateTime } from "@/lib/format";
 import { createOperatorAction, revokeOperatorAction } from "@/server/actions/operators";
+import { useConfirm } from "@/components/confirm-dialog";
 import { buildPhotoMap } from "@/components/kok/avatar";
 import { PlayerNameInput } from "@/components/kok/player-name-input";
 import { Badge } from "@/components/ui/badge";
@@ -66,6 +67,7 @@ export function OperatorsPanel({
   operators: OperatorView[];
   players: PlayerRow[];
 }) {
+  const confirm = useConfirm();
   const [name, setName] = useState("");
   const [duration, setDuration] = useState<DurationValue>("7d");
   const [customDate, setCustomDate] = useState(todayLocal());
@@ -100,13 +102,19 @@ export function OperatorsPanel({
       }
     });
 
-  const revoke = (id: string, n: string) =>
+  const revoke = async (id: string, n: string) => {
+    const ok = await confirm({
+      title: "Cabut delegasi?",
+      message: `Cabut akses delegasi "${n}"? Sesi yang lagi login langsung ke-logout.`,
+      confirmLabel: "Ya, cabut",
+    });
+    if (!ok) return;
     startTransition(async () => {
-      if (!confirm(`Cabut akses delegasi "${n}"? Sesi yang lagi login langsung ke-logout.`)) return;
       const res = await revokeOperatorAction(id);
       if (res.ok) toast.success("Delegasi dicabut");
       else toast.error(res.error);
     });
+  };
 
   return (
     <div className="space-y-3">
