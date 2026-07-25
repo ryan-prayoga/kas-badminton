@@ -3,7 +3,7 @@
 import { useMemo, useState, useTransition } from "react";
 import { toast } from "sonner";
 import type { DebtEntry, DebtItem } from "@/lib/domain/types";
-import { fmt, fmtDate, relativeDay, toLocalIso } from "@/lib/format";
+import { fmt, fmtDate, fmtDateFull, relativeDay, toLocalIso } from "@/lib/format";
 import { APP_URL, type ShareCardBlock } from "@/lib/share";
 import { cn } from "@/lib/utils";
 import { payInstallmentAction, settleAllAction } from "@/server/actions/players";
@@ -39,7 +39,7 @@ function groupItems(items: DebtItem[]): DateGroup[] {
 }
 
 function todayLabel(): string {
-  return fmtDate(toLocalIso(new Date()));
+  return fmtDateFull(toLocalIso(new Date()));
 }
 
 function debtShareText(d: DebtEntry): string {
@@ -121,7 +121,7 @@ function debtShareBlocks(d: DebtEntry, photo?: string): ShareCardBlock[] {
     blocks.push({
       kind: "person",
       rank: i + 1,
-      name: fmtDate(g.date),
+      name: fmtDateFull(g.date),
       chips: [
         { icon: "racket", text: `${g.count} main` },
         { icon: "shuttle", text: `${g.koks} kok` },
@@ -329,7 +329,7 @@ function DebtCard({
                     <div className="flex items-center justify-between gap-2">
                       <span className="flex min-w-0 items-center gap-1.5 text-xs font-semibold text-ink-soft">
                         <KIcon name="calendar" className="size-3.5 shrink-0 text-ink-faint" />
-                        <span className="truncate">{fmtDate(g.date)}</span>
+                        <span className="truncate">{fmtDateFull(g.date)}</span>
                       </span>
                       <span className="tabular shrink-0 font-mono text-sm font-bold text-owe">{fmt(g.total)}</span>
                     </div>

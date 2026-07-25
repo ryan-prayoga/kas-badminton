@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { EnrichedGame } from "@/lib/domain/types";
-import { currentPeriodKey, fmt, fmtDate, periodKey } from "@/lib/format";
+import { currentPeriodKey, fmt, fmtDateFull, periodKey } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { GameCard } from "@/components/kok/game-card";
 import { PeriodFilter } from "@/components/kok/period-filter";
@@ -125,7 +125,7 @@ export function HistoryView({
                   <div className="min-w-0">
                     <div className="flex items-center gap-1.5 font-display font-bold text-ink">
                       <KIcon name="calendar" className="size-4 shrink-0 text-ink-faint" />
-                      <span className="truncate">{fmtDate(grp.date)}</span>
+                      <span className="truncate">{fmtDateFull(grp.date)}</span>
                     </div>
                     <div className="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-ink-soft">
                       <span className="inline-flex items-center gap-1">
