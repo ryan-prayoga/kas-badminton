@@ -32,12 +32,14 @@ export function QrisDialog({
 }) {
   const [open, setOpen] = useState(false);
   const [amount, setAmount] = useState(String(defaultAmount || ""));
-  const [qr, setQr] = useState<string | null>(null);
+  const [qr, setQr] = useState<{ url: string; amount: number } | null>(null);
   const [loading, setLoading] = useState(false);
 
+  const amt = Number(amount);
+  const validAmount = Number.isInteger(amt) && amt > 0;
+
   const generate = async () => {
-    const amt = Number(amount);
-    if (!Number.isInteger(amt) || amt <= 0) {
+    if (!validAmount) {
       toast.error("Nominal harus angka bulat > 0");
       return;
     }
@@ -52,7 +54,7 @@ export function QrisDialog({
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Gagal buat QRIS");
       const url = await QRCode.toDataURL(data.payload, { width: 320, margin: 1 });
-      setQr(url);
+      setQr({ url, amount: amt });
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Gagal buat QRIS");
     } finally {
@@ -93,7 +95,11 @@ export function QrisDialog({
               id="qris-amount"
               inputMode="numeric"
               value={amount}
-              onChange={(e) => setAmount(e.target.value.replace(/[^\d]/g, ""))}
+              onChange={(e) => {
+                setAmount(e.target.value.replace(/[^\d]/g, ""));
+                // QR yang sudah dibuat jadi basi begitu nominal diubah — buang biar wajib generate ulang.
+                setQr(null);
+              }}
               placeholder="cth. 12000"
             />
           </div>
@@ -101,18 +107,23 @@ export function QrisDialog({
           {qr ? (
             <div className="flex flex-col items-center gap-2 rounded-xl bg-white p-4">
               {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={qr} alt="QRIS" className="size-56" />
+              <img src={qr.url} alt="QRIS" className="size-56" />
               <p className="tabular text-sm font-semibold text-neutral-900">
-                {formatRupiah(Number(amount))}
+                {formatRupiah(qr.amount)}
               </p>
             </div>
           ) : (
-            <Button onClick={generate} disabled={loading} className="w-full">
+            <Button onClick={generate} disabled={loading || !validAmount} className="w-full">
               {loading ? <Loader2 className="size-4 animate-spin" /> : "Buat QR"}
             </Button>
           )}
           {qr && (
-            <Button variant="outline" onClick={generate} disabled={loading} className="w-full">
+            <Button
+              variant="outline"
+              onClick={generate}
+              disabled={loading || !validAmount}
+              className="w-full"
+            >
               Buat ulang
             </Button>
           )}
