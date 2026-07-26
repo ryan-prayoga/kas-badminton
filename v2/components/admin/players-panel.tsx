@@ -9,20 +9,13 @@ import { useConfirm } from "@/components/confirm-dialog";
 import { Avatar } from "@/components/kok/avatar";
 import { KIcon } from "@/components/kok/icons";
 import { Card } from "@/components/ui/card";
-
-function fileToDataUrl(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const r = new FileReader();
-    r.onload = () => resolve(String(r.result));
-    r.onerror = reject;
-    r.readAsDataURL(file);
-  });
-}
+import { compressPhoto, ImageCompressError } from "@/lib/image-compress";
 
 function PlayerRowItem({ player }: { player: PlayerRow }) {
   const confirm = useConfirm();
   const [name, setName] = useState(player.name);
   const [pending, start] = useTransition();
+  const [compressing, setCompressing] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
   // list pakai key={player.name} → remount otomatis kalau rename remote
 
@@ -36,10 +29,22 @@ function PlayerRowItem({ player }: { player: PlayerRow }) {
     });
   };
 
+  // Foto dikompres di client dulu (lihat lib/image-compress) — foto kamera HP
+  // gede-gede, jadi user gak perlu mikirin ukuran file sama sekali.
   const pickPhoto = async (file: File | undefined) => {
     if (!file) return;
-    if (file.size > 500_000) return toast.error("Foto maks 500KB");
-    const dataUrl = await fileToDataUrl(file);
+    setCompressing(true);
+    let dataUrl: string;
+    try {
+      dataUrl = await compressPhoto(file);
+    } catch (e) {
+      toast.error(e instanceof ImageCompressError ? e.message : "Foto gagal diproses");
+      return;
+    } finally {
+      setCompressing(false);
+      // reset biar milih file yang sama lagi tetap ngetrigger onChange
+      if (fileRef.current) fileRef.current.value = "";
+    }
     start(async () => {
       const res = await updatePlayerAction(player.name, { photo: dataUrl });
       if (res.ok) toast.success("Foto diperbarui");
@@ -66,20 +71,27 @@ function PlayerRowItem({ player }: { player: PlayerRow }) {
       <button
         type="button"
         onClick={() => fileRef.current?.click()}
+        disabled={compressing}
         className="relative shrink-0"
         aria-label="Ganti foto"
       >
         <Avatar name={player.name} photo={player.photo} size="size-11" />
         <span className="absolute -bottom-1 -right-1 grid size-5 place-items-center rounded-full bg-court text-white ring-2 ring-surface">
-          <KIcon name="camera" className="size-3" />
+          {compressing ? (
+            <Loader2 className="size-3 animate-spin" />
+          ) : (
+            <KIcon name="camera" className="size-3" />
+          )}
         </span>
       </button>
+      {/* image/* biar iOS ngasih opsi kamera + HEIC dari galeri; formatnya
+          dinormalisasi ke JPEG waktu dikompres. */}
       <input
         ref={fileRef}
         type="file"
-        accept="image/png,image/jpeg,image/webp"
+        accept="image/*"
         className="hidden"
-        onChange={(e) => pickPhoto(e.target.files?.[0])}
+        onChange={(e) => void pickPhoto(e.target.files?.[0])}
       />
 
       <input
