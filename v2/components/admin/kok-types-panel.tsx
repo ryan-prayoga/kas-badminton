@@ -333,7 +333,9 @@ export function KokTypesPanel({ kokTypes }: { kokTypes: KokType[] }) {
     });
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col gap-3">
+    // Satu kontainer scroll: form + daftar jenis kok/stok ikut ke-scroll di layar kecil,
+    // supaya form yang tinggi tak meremukkan daftar sampai tak bisa di-scroll.
+    <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto overscroll-contain">
       <Card className="shrink-0 gap-3 rounded-xl2 p-4">
         <p className="text-sm font-semibold">Tambah jenis kok</p>
         <p className="text-xs text-muted-foreground">
@@ -396,14 +398,12 @@ export function KokTypesPanel({ kokTypes }: { kokTypes: KokType[] }) {
         </Button>
       </Card>
 
-      <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
-        <div className="space-y-3 p-px">
-          {kokTypes.length === 0 ? (
-            <p className="py-6 text-center text-sm text-muted-foreground">Belum ada jenis kok.</p>
-          ) : (
-            kokTypes.map((t) => <TypeRow key={t.id} type={t} />)
-          )}
-        </div>
+      <div className="space-y-3 p-px pb-1">
+        {kokTypes.length === 0 ? (
+          <p className="py-6 text-center text-sm text-muted-foreground">Belum ada jenis kok.</p>
+        ) : (
+          kokTypes.map((t) => <TypeRow key={t.id} type={t} />)
+        )}
       </div>
     </div>
   );
