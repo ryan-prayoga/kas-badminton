@@ -2,13 +2,14 @@
 
 import { prisma } from "@/lib/db";
 import { DomainError } from "@/lib/domain/errors";
-import { normalizeKokEntry, normalizeStoredGame } from "@/lib/domain/game";
+import { gameCost, normalizeKokEntry, normalizeStoredGame } from "@/lib/domain/game";
 import { stockDeltas, stockDiffError } from "@/lib/domain/stock";
 import type { Kok, Player, StoredGame } from "@/lib/domain/types";
 import { todayWIB, uid } from "@/lib/domain/util";
 import type { Prisma } from "@/lib/generated/prisma/client";
 import { rowToGame } from "./mappers";
 import { applyStockDeltasTx, readKokTypesTx, rememberPlayersTx } from "./helpers";
+import { recordPaymentTx } from "./payments";
 
 type JsonArray = Prisma.InputJsonValue;
 
@@ -98,13 +99,33 @@ export async function deleteGame(id: string): Promise<void> {
   });
 }
 
-export async function setPlayerPaid(gameId: string, index: number, paid: boolean): Promise<void> {
+export async function setPlayerPaid(
+  gameId: string,
+  index: number,
+  paid: boolean,
+  by?: string,
+): Promise<void> {
   await prisma.$transaction(async (tx) => {
     const game = await getGameTx(tx, gameId);
     if (!Number.isInteger(index) || index < 0 || index > 3) {
       throw new DomainError("Index pemain 0-3");
     }
-    game.players[index].paid = paid;
+    const p = game.players[index];
+    p.paid = paid;
+    if (paid) {
+      p.paidAt = new Date().toISOString();
+      p.paidBy = by || undefined;
+      await recordPaymentTx(tx, {
+        name: p.name,
+        amount: gameCost(game).perPerson,
+        type: "lunas",
+        recordedBy: by,
+        gameId,
+      });
+    } else {
+      p.paidAt = undefined;
+      p.paidBy = undefined;
+    }
     await tx.games.update({
       where: { id: gameId },
       data: { players: game.players as unknown as JsonArray, updated_at: new Date() },
@@ -112,10 +133,25 @@ export async function setPlayerPaid(gameId: string, index: number, paid: boolean
   });
 }
 
-export async function setAllPaid(gameId: string, paid: boolean): Promise<void> {
+export async function setAllPaid(gameId: string, paid: boolean, by?: string): Promise<void> {
   await prisma.$transaction(async (tx) => {
     const game = await getGameTx(tx, gameId);
-    const players = game.players.map((p) => ({ ...p, paid }));
+    const stamp = new Date().toISOString();
+    const perPerson = gameCost(game).perPerson;
+    const players: Player[] = [];
+    for (const p of game.players) {
+      if (!paid) {
+        players.push({ ...p, paid: false, paidAt: undefined, paidBy: undefined });
+        continue;
+      }
+      // Sudah lunas sebelumnya → pertahankan waktu asli; yang baru lunas → stempel sekarang + catat riwayat.
+      if (p.paid && p.paidAt) {
+        players.push({ ...p, paid: true });
+        continue;
+      }
+      players.push({ ...p, paid: true, paidAt: stamp, paidBy: by || undefined });
+      await recordPaymentTx(tx, { name: p.name, amount: perPerson, type: "lunas", recordedBy: by, gameId });
+    }
     await tx.games.update({
       where: { id: gameId },
       data: { players: players as unknown as JsonArray, updated_at: new Date() },

@@ -5,22 +5,12 @@ import { planInstallment, planSettle } from "@/lib/domain/debt";
 import { DomainError } from "@/lib/domain/errors";
 import { normalizeName } from "@/lib/domain/game";
 import type { CarryMap, StoredGame } from "@/lib/domain/types";
-import { uid } from "@/lib/domain/util";
 import type { Prisma } from "@/lib/generated/prisma/client";
 import { rowToGame } from "./mappers";
+import { recordPaymentTx } from "./payments";
 
 type JsonArray = Prisma.InputJsonValue;
 const PHOTO_RE = /^data:image\/(png|jpe?g|webp);base64,/;
-
-async function recordPaymentTx(
-  tx: Prisma.TransactionClient,
-  name: string,
-  amount: number,
-): Promise<void> {
-  const amt = Math.round(Number(amount) || 0);
-  if (amt <= 0) return;
-  await tx.payments.create({ data: { id: uid(), name, amount: amt } });
-}
 
 async function loadGamesTx(tx: Prisma.TransactionClient): Promise<StoredGame[]> {
   const rows = await tx.games.findMany();
@@ -76,7 +66,7 @@ async function applyTouchedTx(
 }
 
 /** Bayar sebagian (greedy game terlama dulu). */
-export async function payInstallment(name: string, amount: number): Promise<void> {
+export async function payInstallment(name: string, amount: number, by?: string): Promise<void> {
   const n = normalizeName(name);
   if (!n) throw new DomainError("Nama wajib diisi");
   if (!Number.isFinite(amount) || !Number.isInteger(amount) || amount <= 0) {
@@ -88,12 +78,12 @@ export async function payInstallment(name: string, amount: number): Promise<void
     const plan = planInstallment(games, carry, n, amount);
     await applyTouchedTx(tx, games, plan.touched);
     await writeCarryTx(tx, n, plan.carryAfter);
-    await recordPaymentTx(tx, n, plan.paymentAmount);
+    await recordPaymentTx(tx, { name: n, amount: plan.paymentAmount, type: "cicil", recordedBy: by });
   });
 }
 
 /** Lunasin semua tagihan orang. */
-export async function settleAll(name: string): Promise<void> {
+export async function settleAll(name: string, by?: string): Promise<void> {
   const n = normalizeName(name);
   if (!n) throw new DomainError("Nama wajib diisi");
   await prisma.$transaction(async (tx) => {
@@ -102,7 +92,9 @@ export async function settleAll(name: string): Promise<void> {
     const plan = planSettle(games, carry, n);
     await applyTouchedTx(tx, games, plan.touched);
     await writeCarryTx(tx, n, null);
-    await recordPaymentTx(tx, n, plan.paymentAmount);
+    if (plan.touched.length > 0) {
+      await recordPaymentTx(tx, { name: n, amount: plan.paymentAmount, type: "lunas", recordedBy: by });
+    }
   });
 }
 

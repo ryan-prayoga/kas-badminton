@@ -3,7 +3,7 @@
 import { useEffect, useState, useTransition } from "react";
 import { toast } from "sonner";
 import type { EnrichedGame, KokType, PlayerRow } from "@/lib/domain/types";
-import { fmt } from "@/lib/format";
+import { fmt, fmtDateTime, fmtPaidAt } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { deleteGameAction, markAllPaidAction, setPaidAction } from "@/server/actions/games";
 import { useConfirm } from "@/components/confirm-dialog";
@@ -32,6 +32,8 @@ function CourtSide({
   indexes,
   names,
   paid,
+  paidAt,
+  paidBy,
   editable,
   pending,
   onToggle,
@@ -40,6 +42,8 @@ function CourtSide({
   indexes: number[];
   names: string[];
   paid: boolean[];
+  paidAt: (string | undefined)[];
+  paidBy: (string | undefined)[];
   editable: boolean;
   pending: boolean;
   onToggle: (i: number) => void;
@@ -49,7 +53,12 @@ function CourtSide({
     <div className={cn("flex min-w-0 flex-col gap-1.5", align === "left" ? "pr-3.5" : "pl-3.5")}>
       {indexes.map((i) => {
         const isPaid = paid[i];
+        const at = isPaid ? paidAt[i] : undefined;
+        const by = isPaid ? paidBy[i] : undefined;
         const Tag = editable ? "button" : "div";
+        const title = at
+          ? `${names[i] || "—"} · lunas ${fmtDateTime(at)}${by ? ` oleh ${by}` : ""}`
+          : names[i] || undefined;
         return (
           <Tag
             key={i}
@@ -68,8 +77,15 @@ function CourtSide({
               name={isPaid ? "checkCircle" : "clock"}
               className="size-[15px] shrink-0"
             />
-            <span className="min-w-0 flex-1 truncate text-sm font-semibold text-ink" title={names[i] || undefined}>
-              {names[i] || "—"}
+            <span className="flex min-w-0 flex-1 flex-col" title={title}>
+              <span className="truncate text-sm font-semibold leading-tight text-ink">
+                {names[i] || "—"}
+              </span>
+              {at && (
+                <span className="truncate text-[10px] font-medium leading-tight text-paid/80">
+                  {fmtPaidAt(at)}
+                </span>
+              )}
             </span>
           </Tag>
         );
@@ -110,6 +126,8 @@ export function GameCard({
   }
 
   const names = game.players.map((p) => p.name);
+  const paidAt = game.players.map((p) => p.paidAt);
+  const paidBy = game.players.map((p) => p.paidBy);
   const allPaid = paid.every(Boolean);
   const unpaidCount = paid.filter((x) => !x).length;
 
@@ -201,6 +219,8 @@ export function GameCard({
             indexes={[0, 1]}
             names={names}
             paid={paid}
+            paidAt={paidAt}
+            paidBy={paidBy}
             editable={editable}
             pending={pending}
             onToggle={toggle}
@@ -210,6 +230,8 @@ export function GameCard({
             indexes={[2, 3]}
             names={names}
             paid={paid}
+            paidAt={paidAt}
+            paidBy={paidBy}
             editable={editable}
             pending={pending}
             onToggle={toggle}

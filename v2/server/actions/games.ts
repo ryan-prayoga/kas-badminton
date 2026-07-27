@@ -94,16 +94,16 @@ export async function setPaidAction(
   paid: boolean,
 ): Promise<ActionResult> {
   return mutate(async () => {
-    await requireStaff();
+    const sess = await requireStaff();
     if (typeof paid !== "boolean") throw new DomainError("paid harus boolean");
-    await setPlayerPaid(gameId, index, paid);
+    await setPlayerPaid(gameId, index, paid, recordedByFor(sess));
   });
 }
 
 export async function markAllPaidAction(gameId: string, paid = true): Promise<ActionResult> {
   return mutate(async () => {
-    await requireStaff();
-    await setAllPaid(gameId, paid !== false);
+    const sess = await requireStaff();
+    await setAllPaid(gameId, paid !== false, recordedByFor(sess));
   });
 }
 

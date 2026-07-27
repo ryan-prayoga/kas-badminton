@@ -25,7 +25,7 @@ import {
 type PanelKey = "kok" | "pemain" | "delegasi" | "setelan" | "tampilan" | null;
 
 const MENU: {
-  key: PanelKey | "public" | "lock";
+  key: PanelKey | "public" | "lock" | "history";
   label: string;
   icon: IconName;
   adminOnly?: boolean;
@@ -67,6 +67,7 @@ const MENU: {
     icon: "themeAuto",
     desc: "Mode terang, gelap, atau ikut setelan sistem.",
   },
+  { key: "history", label: "History bayar", icon: "history", href: "/riwayat-bayar" },
   { key: "public", label: "Halaman publik", icon: "back", href: "/" },
   { key: "lock", label: "Kunci", icon: "lock", danger: true },
 ];

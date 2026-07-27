@@ -25,10 +25,18 @@ export function normalizeNameType(name: unknown): string {
 export function normalizeStoredGame<T extends Partial<StoredGame>>(game: T): StoredGame {
   const raw = (Array.isArray(game.players) ? game.players.slice(0, 4) : []) as unknown[];
   while (raw.length < 4) raw.push({ name: "", paid: false });
-  const players: Player[] = raw.map((p) => ({
-    name: normalizeName(typeof p === "string" ? p : (p as Player)?.name),
-    paid: Boolean(typeof p === "object" && p ? (p as Player).paid : false),
-  }));
+  const players: Player[] = raw.map((p) => {
+    const obj = typeof p === "object" && p ? (p as Player) : null;
+    const paid = Boolean(obj?.paid);
+    const player: Player = {
+      name: normalizeName(typeof p === "string" ? p : obj?.name),
+      paid,
+    };
+    // Riwayat bayar hanya relevan saat lunas; buang kalau tidak.
+    if (paid && obj?.paidAt) player.paidAt = String(obj.paidAt);
+    if (paid && obj?.paidBy) player.paidBy = String(obj.paidBy);
+    return player;
+  });
 
   return {
     id: game.id ?? "",
@@ -84,14 +92,23 @@ export function parsePlayersFromBody(
   existing?: Player[],
 ): { players: Player[]; error?: undefined } | { error: string; players?: undefined } {
   const mapEntry = (p: unknown, i: number): Player => {
+    const ex = existing?.[i];
     if (typeof p === "string") {
-      return { name: normalizeName(p), paid: Boolean(existing?.[i]?.paid) };
+      const paid = Boolean(ex?.paid);
+      const out: Player = { name: normalizeName(p), paid };
+      if (paid && ex?.paidAt) out.paidAt = ex.paidAt;
+      if (paid && ex?.paidBy) out.paidBy = ex.paidBy;
+      return out;
     }
     const obj = p as Player | undefined;
-    return {
-      name: normalizeName(obj?.name),
-      paid: obj?.paid !== undefined ? Boolean(obj.paid) : Boolean(existing?.[i]?.paid),
-    };
+    const paid = obj?.paid !== undefined ? Boolean(obj.paid) : Boolean(ex?.paid);
+    const out: Player = { name: normalizeName(obj?.name), paid };
+    // Pertahankan riwayat bayar: pakai yang dikirim, kalau tidak ada ambil dari existing.
+    const at = obj?.paidAt ?? (paid ? ex?.paidAt : undefined);
+    const by = obj?.paidBy ?? (paid ? ex?.paidBy : undefined);
+    if (paid && at) out.paidAt = at;
+    if (paid && by) out.paidBy = by;
+    return out;
   };
 
   if (body.pairs && typeof body.pairs === "object") {

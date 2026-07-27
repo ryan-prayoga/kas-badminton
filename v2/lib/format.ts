@@ -94,6 +94,18 @@ export function fmtDateTime(iso: string): string {
   return `${fmtDate(`${y}-${mo}-${day}`)}, ${hh}.${mm}`;
 }
 
+/** Ringkas kapan ditandai lunas: "Hari ini · 09.39" / "18 Jul · 09.39". */
+export function fmtPaidAt(iso: string): string {
+  if (!iso) return "";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "";
+  const hh = String(d.getHours()).padStart(2, "0");
+  const mm = String(d.getMinutes()).padStart(2, "0");
+  const rel = relativeDay(toLocalIso(d));
+  const day = rel || `${d.getDate()} ${MONTHS[d.getMonth()]}`;
+  return `${day} · ${hh}.${mm}`;
+}
+
 function todayLocal(): string {
   const d = new Date();
   const off = d.getTimezoneOffset();

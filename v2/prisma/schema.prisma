@@ -50,10 +50,14 @@ model operators {
 }
 
 model payments {
-  id         String   @id
-  name       String
-  amount     Int
-  created_at DateTime @default(now()) @db.Timestamptz(6)
+  id          String   @id
+  name        String
+  amount      Int
+  /// "lunas" (tandai langsung / lunasin semua) atau "cicil" (bayar sebagian).
+  type        String   @default("lunas")
+  recorded_by String?
+  game_id     String?
+  created_at  DateTime @default(now()) @db.Timestamptz(6)
 }
 
 model player_carry {

@@ -3,6 +3,10 @@
 export interface Player {
   name: string;
   paid: boolean;
+  /** ISO datetime saat pemain ditandai lunas. Absen kalau belum bayar. */
+  paidAt?: string;
+  /** Nama admin/operator yang menandai lunas. */
+  paidBy?: string;
 }
 
 export interface Kok {
@@ -82,6 +86,19 @@ export interface DebtEntry {
 }
 
 export type CarryMap = Record<string, number>;
+
+export type PaymentType = "lunas" | "cicil";
+
+/** Satu event bayar: tandai lunas (per game) atau cicil (dari halaman kas). */
+export interface PaymentHistoryEntry {
+  id: string;
+  name: string;
+  amount: number;
+  type: PaymentType;
+  recordedBy: string | null;
+  gameId: string | null;
+  createdAt: string;
+}
 
 /** Pengeluaran kas (beli stok), untuk filter per-periode di statistik. */
 export interface ExpenseRow {

@@ -44,6 +44,16 @@ function buildItems(adminChrome: boolean, role: Role): NavItem[] {
     },
   ];
 
+  // History bayar: nav sendiri di chrome publik; admin akses lewat menu Lainnya.
+  if (!adminChrome) {
+    items.push({
+      href: "/riwayat-bayar",
+      label: "Bayar",
+      icon: "cash",
+      match: (p) => p.startsWith("/riwayat-bayar"),
+    });
+  }
+
   if (adminChrome && role === "admin") {
     items.push({
       href: "/admin/lainnya",
