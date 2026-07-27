@@ -28,8 +28,10 @@ const buttonVariants = cva(
         icon: "size-8",
         "icon-xs":
           "size-6 rounded-[min(var(--radius-md),10px)] in-data-[slot=button-group]:rounded-lg [&_svg:not([class*='size-'])]:size-3",
+        // Visual tetap 28px, tapi hit-area diperluas ke 44px lewat pseudo-element
+        // (hanya dipakai tombol tutup dialog/sheet — isolated, tak berdempetan).
         "icon-sm":
-          "size-7 rounded-[min(var(--radius-md),12px)] in-data-[slot=button-group]:rounded-lg",
+          "relative size-7 rounded-[min(var(--radius-md),12px)] in-data-[slot=button-group]:rounded-lg after:absolute after:top-1/2 after:left-1/2 after:size-11 after:-translate-x-1/2 after:-translate-y-1/2 after:content-['']",
         "icon-lg": "size-9",
       },
     },
