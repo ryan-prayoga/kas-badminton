@@ -516,7 +516,7 @@ export function StatsView({
                   <div className="truncate font-semibold text-ink" title={s.name}>
                     {s.name}
                   </div>
-                  <div className="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[11px] text-ink-faint">
+                  <div className="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-ink-faint">
                     <span className="inline-flex items-center gap-1">
                       <KIcon name="racket" className="size-3" /> {s.main} main
                     </span>
