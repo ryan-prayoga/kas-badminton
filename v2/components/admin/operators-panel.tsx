@@ -73,6 +73,8 @@ export function OperatorsPanel({
   const [customDate, setCustomDate] = useState(todayLocal());
   const [pin, setPin] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
+  // Revoke pakai state per-id supaya nyabut satu delegasi tak men-disable tombol Buat & baris lain.
+  const [busyId, setBusyId] = useState<string | null>(null);
 
   const photoMap = useMemo(() => buildPhotoMap(players), [players]);
   const playerNames = useMemo(() => players.map((p) => p.name), [players]);
@@ -109,11 +111,14 @@ export function OperatorsPanel({
       confirmLabel: "Ya, cabut",
     });
     if (!ok) return;
-    startTransition(async () => {
+    setBusyId(id);
+    try {
       const res = await revokeOperatorAction(id);
       if (res.ok) toast.success("Delegasi dicabut");
       else toast.error(res.error);
-    });
+    } finally {
+      setBusyId(null);
+    }
   };
 
   return (
@@ -177,7 +182,7 @@ export function OperatorsPanel({
           )}
         </div>
 
-        <Button onClick={create} disabled={pending || !name.trim()} className="w-full gap-1.5">
+        <Button onClick={create} disabled={pending || !name.trim() || !previewExpiry} className="w-full gap-1.5">
           {pending ? <Loader2 className="size-4 animate-spin" /> : <UserPlus className="size-4" />}
           Buat & tampilkan PIN
         </Button>
@@ -219,10 +224,10 @@ export function OperatorsPanel({
                   variant="ghost"
                   className="size-8 shrink-0 text-muted-foreground hover:text-destructive"
                   onClick={() => revoke(op.id, op.name)}
-                  disabled={pending}
+                  disabled={busyId === op.id}
                   title="Cabut"
                 >
-                  <X className="size-4" />
+                  {busyId === op.id ? <Loader2 className="size-4 animate-spin" /> : <X className="size-4" />}
                 </Button>
               </Card>
             ))
