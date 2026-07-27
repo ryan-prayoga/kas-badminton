@@ -104,8 +104,11 @@ function BuyDialog({ type }: { type: KokType }) {
         <p className="rounded-lg bg-accent px-3 py-2 text-xs font-semibold text-accent-foreground">
           +{slopN * 12} kok · kas −{formatRupiah(total)}
         </p>
+        {slopN > 0 && !(priceN > 0) && (
+          <p className="text-xs font-medium text-danger">Harga/slop belum diisi — kas tidak akan berkurang.</p>
+        )}
         <DialogFooter>
-          <Button onClick={buy} disabled={pending || !(slopN > 0)} className="w-full">
+          <Button onClick={buy} disabled={pending || !(slopN > 0) || !(priceN > 0)} className="w-full">
             {pending ? <Loader2 className="size-4 animate-spin" /> : "Catat pembelian"}
           </Button>
         </DialogFooter>
@@ -134,10 +137,20 @@ function EditDialog({ type }: { type: KokType }) {
 
   const save = () =>
     startTransition(async () => {
+      const nm = name.trim();
+      const p = Number(price);
+      if (!nm) {
+        toast.error("Nama wajib diisi");
+        return;
+      }
+      if (!(p > 0)) {
+        toast.error("Harga/org harus lebih dari 0");
+        return;
+      }
       const res = await patchKokTypeAction(type.id, {
-        name,
-        pricePerPerson: Number(price),
-        pricePerSlop: Number(slop),
+        name: nm,
+        pricePerPerson: p,
+        pricePerSlop: Number(slop) || 0,
       });
       if (res.ok) {
         toast.success("Jenis kok diperbarui");
@@ -184,7 +197,11 @@ function EditDialog({ type }: { type: KokType }) {
           </div>
         </div>
         <DialogFooter>
-          <Button onClick={save} disabled={pending} className="w-full">
+          <Button
+            onClick={save}
+            disabled={pending || !name.trim() || !(Number(price) > 0)}
+            className="w-full"
+          >
             {pending ? <Loader2 className="size-4 animate-spin" /> : "Simpan"}
           </Button>
         </DialogFooter>
@@ -244,7 +261,7 @@ function TypeRow({ type }: { type: KokType }) {
             aria-label="Kurangi 1 kok"
             disabled={pending || type.stock <= 0}
             onClick={() => tweak(-1)}
-            className="grid size-8 place-items-center rounded-lg text-ink-soft transition hover:bg-surface-2 hover:text-ink active:scale-95 disabled:opacity-40"
+            className="grid size-10 place-items-center rounded-lg text-ink-soft transition hover:bg-surface-2 hover:text-ink active:scale-95 disabled:opacity-40"
           >
             <KIcon name="minus" className="size-4" />
           </button>
@@ -256,7 +273,7 @@ function TypeRow({ type }: { type: KokType }) {
             aria-label="Tambah 1 kok"
             disabled={pending}
             onClick={() => tweak(1)}
-            className="grid size-8 place-items-center rounded-lg text-ink-soft transition hover:bg-surface-2 hover:text-ink active:scale-95 disabled:opacity-40"
+            className="grid size-10 place-items-center rounded-lg text-ink-soft transition hover:bg-surface-2 hover:text-ink active:scale-95 disabled:opacity-40"
           >
             <KIcon name="plus" className="size-4" />
           </button>
