@@ -85,6 +85,8 @@ export function EditGameSheet({
 
   const submit = () => {
     if (names.some((n) => !n.trim())) return toast.error("Isi 4 nama pemain");
+    const lower = names.map((n) => n.trim().toLowerCase());
+    if (new Set(lower).size !== lower.length) return toast.error("Nama pemain tidak boleh sama");
     if (koks.length === 0) return toast.error("Minimal 1 kok");
     start(async () => {
       const res = await updateGameAction(game.id, {

@@ -157,6 +157,11 @@ export function RecordGameSheet({
       toast.error("Isi 4 nama pemain");
       return;
     }
+    const lower = names.map((n) => n.trim().toLowerCase());
+    if (new Set(lower).size !== lower.length) {
+      toast.error("Nama pemain tidak boleh sama");
+      return;
+    }
     if (lines.length === 0) {
       toast.error("Minimal 1 kok");
       return;
@@ -315,7 +320,8 @@ export function RecordGameSheet({
                         <button
                           type="button"
                           onClick={() => bumpCount(line.key, -1)}
-                          className="grid size-10 place-items-center text-ink-soft transition hover:text-ink"
+                          disabled={(Number(line.count) || 0) <= 1}
+                          className="grid size-10 place-items-center text-ink-soft transition hover:text-ink disabled:opacity-30"
                           aria-label="Kurangi jumlah"
                         >
                           <KIcon name="minus" className="size-4" />
@@ -325,16 +331,20 @@ export function RecordGameSheet({
                           value={line.count}
                           onChange={(e) =>
                             setLine(line.key, {
-                              count: e.target.value.replace(/[^\d]/g, "") || "1",
+                              count: e.target.value.replace(/[^\d]/g, ""),
                             })
                           }
+                          onBlur={(e) => {
+                            if (!e.target.value) setLine(line.key, { count: "1" });
+                          }}
                           className="w-8 bg-transparent text-center text-sm font-bold tabular-nums outline-none"
                           aria-label="Jumlah kok"
                         />
                         <button
                           type="button"
                           onClick={() => bumpCount(line.key, 1)}
-                          className="grid size-10 place-items-center text-ink-soft transition hover:text-ink"
+                          disabled={(Number(line.count) || 0) >= 50}
+                          className="grid size-10 place-items-center text-ink-soft transition hover:text-ink disabled:opacity-30"
                           aria-label="Tambah jumlah"
                         >
                           <KIcon name="plus" className="size-4" />
