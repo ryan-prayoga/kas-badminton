@@ -623,11 +623,20 @@ function wireDebtActions() {
 
 // --- Data load ---
 var lastUpdatedAt = null;
+var refreshFailed = false;
 
 function updateLastUpdatedLabel() {
   var el = $('#lastUpdated');
   if (!el || !lastUpdatedAt) return;
-  el.textContent = 'Diperbarui ' + humanAgo(Date.now() - lastUpdatedAt);
+  var ago = humanAgo(Date.now() - lastUpdatedAt);
+  if (refreshFailed) {
+    // Refresh 45s/visibilitychange gagal → beri tahu data mungkin usang, jangan diam-diam.
+    el.textContent = 'Gagal memperbarui · data ' + ago;
+    el.classList.add('text-danger');
+  } else {
+    el.textContent = 'Diperbarui ' + ago;
+    el.classList.remove('text-danger');
+  }
 }
 
 function applyData(data) {
@@ -641,6 +650,7 @@ function applyData(data) {
   renderDebt();
   renderGames();
   lastUpdatedAt = Date.now();
+  refreshFailed = false;
   updateLastUpdatedLabel();
 }
 
@@ -652,6 +662,8 @@ function loadData(silent) {
     .then(applyData)
     .catch(function (err) {
       console.error(err);
+      refreshFailed = true;
+      updateLastUpdatedLabel();
       if (!silent) {
         $('#gameList').innerHTML = emptyState('mdi:alert-circle-outline', 'Gagal load data.');
         $('#debtList').innerHTML = emptyState('mdi:alert-circle-outline', 'Gagal load data.');
