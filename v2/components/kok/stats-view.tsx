@@ -48,12 +48,6 @@ interface PlayerStat {
   nunggak: number;
 }
 
-/** Kok per pemain adalah porsi (kokCount dibagi jumlah pemain), jadi bisa pecahan. Tampilkan ≤1 desimal. */
-function fmtKok(n: number): string {
-  const r = Math.round(n * 10) / 10;
-  return Number.isInteger(r) ? String(r) : r.toFixed(1);
-}
-
 /** Teks share WhatsApp-friendly (*bold*, rapi, mudah dibaca). */
 function buildStatsShareText({
   periodName,
@@ -107,7 +101,7 @@ function buildStatsShareText({
     nunggak.forEach((p, i) => {
       lines.push(
         `${i + 1}. *${p.name}* — ${fmt(p.nunggak)}`,
-        `   ${p.main} main · ${fmtKok(p.kok)} kok · total keluar ${fmt(p.keluar)}`,
+        `   ${p.main} main · ${p.kok} kok · total keluar ${fmt(p.keluar)}`,
       );
     });
   }
@@ -117,7 +111,7 @@ function buildStatsShareText({
     // ringkas: max 12 nama, sisanya digabung
     const show = lunas.slice(0, 12);
     show.forEach((p, i) => {
-      lines.push(`${i + 1}. ${p.name} — ${p.main} main · ${fmtKok(p.kok)} kok`);
+      lines.push(`${i + 1}. ${p.name} — ${p.main} main · ${p.kok} kok`);
     });
     if (lunas.length > 12) {
       lines.push(`… +${lunas.length - 12} pemain lain`);
@@ -266,7 +260,7 @@ function buildStatsShareBlocks({
         photo: photoMap?.[p.name],
         chips: [
           { icon: "racket", text: `${p.main} main` },
-          { icon: "shuttle", text: `${fmtKok(p.kok)} kok` },
+          { icon: "shuttle", text: `${p.kok} kok` },
           { icon: "cash", text: fmt(p.keluar) },
         ],
         right: p.nunggak > 0 ? fmt(p.nunggak) : "Lunas",
@@ -347,13 +341,12 @@ export function StatsView({
     const map = new Map<string, PlayerStat>();
     for (const g of scoped) {
       const kokCount = Number(g.cost.kokCount) || 0;
-      const validPlayers = g.players.filter((pp) => pp.name).length;
-      const kokShare = validPlayers > 0 ? kokCount / validPlayers : 0;
       for (const p of g.players) {
         if (!p.name) continue;
         const s = map.get(p.name) ?? { name: p.name, main: 0, kok: 0, keluar: 0, nunggak: 0 };
         s.main += 1;
-        s.kok += kokShare;
+        // Total kok di game yang diikuti pemain ini (sengaja ≠ total kok unik global).
+        s.kok += kokCount;
         s.keluar += g.cost.perPerson;
         if (!p.paid) s.nunggak += g.cost.perPerson;
         map.set(p.name, s);
@@ -521,7 +514,7 @@ export function StatsView({
                       <KIcon name="racket" className="size-3" /> {s.main} main
                     </span>
                     <span className="inline-flex items-center gap-1">
-                      <KIcon name="shuttle" className="size-3" /> {fmtKok(s.kok)} kok
+                      <KIcon name="shuttle" className="size-3" /> {s.kok} kok
                     </span>
                     <span className="tabular inline-flex items-center gap-1 font-mono">
                       <KIcon name="cash" className="size-3" /> {fmt(s.keluar)}
