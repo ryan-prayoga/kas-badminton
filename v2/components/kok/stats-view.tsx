@@ -313,7 +313,6 @@ export function StatsView({
 
   const totalKok = scoped.reduce((s, g) => s + g.cost.kokCount, 0);
   const paidIn = scoped.reduce((s, g) => s + g.summary.paidTotal, 0);
-  const unpaidIn = scoped.reduce((s, g) => s + g.summary.unpaidTotal, 0);
 
   const expenseIn = useMemo(() => {
     if (!kas) return 0;
@@ -328,14 +327,11 @@ export function StatsView({
   const stockLeft = kokTypes.reduce((s, t) => s + Math.max(0, Number(t.stock) || 0), 0);
   const typesWithStock = kokTypes.filter((t) => (Number(t.stock) || 0) > 0).length;
 
-  const totalDebt =
-    period === "all" ? debts.reduce((s, d) => s + d.total, 0) : unpaidIn;
-  const debtPeople =
-    period === "all"
-      ? debts.length
-      : new Set(
-          scoped.flatMap((g) => g.players.filter((p) => p.name && !p.paid).map((p) => p.name)),
-        ).size;
+  // Samakan dengan Rekap: total & jumlah orang belum bayar selalu dari debtSummary
+  // (sudah dipotong cicilan), bukan dihitung ulang per periode.
+  const totalDebt = debts.reduce((s, d) => s + d.total, 0);
+  const debtPeople = debts.length;
+  const debtMap = useMemo(() => new Map(debts.map((d) => [d.name, d.total])), [debts]);
 
   const players = useMemo(() => {
     const map = new Map<string, PlayerStat>();
@@ -348,14 +344,17 @@ export function StatsView({
         // Total kok di game yang diikuti pemain ini (sengaja ≠ total kok unik global).
         s.kok += kokCount;
         s.keluar += g.cost.perPerson;
-        if (!p.paid) s.nunggak += g.cost.perPerson;
         map.set(p.name, s);
       }
+    }
+    for (const s of map.values()) {
+      // Sisa tagihan asli (sudah dipotong cicilan), sama seperti Rekap — bukan per periode.
+      s.nunggak = debtMap.get(s.name) ?? 0;
     }
     return [...map.values()].sort(
       (a, b) => b.nunggak - a.nunggak || b.main - a.main || a.name.localeCompare(b.name, "id"),
     );
-  }, [scoped]);
+  }, [scoped, debtMap]);
 
   const periodName = period === "all" ? "Semua waktu" : periodLabel(period);
 
