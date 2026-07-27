@@ -2,6 +2,7 @@
 
 import { useEffect, useRef } from "react";
 import { usePathname, useRouter } from "next/navigation";
+import { toast } from "sonner";
 import { setNavMode } from "@/lib/nav-mode";
 import { setSessionAlive } from "@/lib/session-alive";
 import { logout } from "@/server/actions/auth";
@@ -35,7 +36,8 @@ export function RealtimeRefresher() {
         // tetap di /admin biar Lockscreen muncul; refresh bersihin props role
         router.replace("/admin");
       } else {
-        // chrome admin di halaman publik → drop ke state publik
+        // chrome admin di halaman publik → drop ke state publik + kasih tahu kenapa chrome hilang
+        toast.info("Sesi admin berakhir");
         router.refresh();
       }
 
