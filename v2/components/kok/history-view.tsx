@@ -46,6 +46,9 @@ function useFlash(games: EnrichedGame[]): Set<string> {
     }
     prev.current = new Map(games.map((g) => [g.id, g.updatedAt]));
     if (changed.size) {
+      // Flash transien dari perubahan data eksternal (realtime): butuh state + timer
+      // yang stabil 1.7s lintas re-render insidental — pemakaian efek yang sah di sini.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setFlash(changed);
       const t = setTimeout(() => setFlash(new Set()), 1700);
       return () => clearTimeout(t);

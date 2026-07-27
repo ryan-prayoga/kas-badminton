@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useId, useState, useTransition } from "react";
+import { useId, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
@@ -56,15 +56,17 @@ export function EditGameSheet({
   // ditambah lewat tombol cepat di kartu (addKokAction) sementara sheet ini udah
   // pernah kebuka, `game` prop-nya update tapi state lokal gak ikut — muncul
   // seolah kok baru "gak ada" di sini dan kesave-hilang pas Simpan. Re-sync
-  // dari `game` tiap sheet dibuka biar selalu mulai dari data terbaru.
-  useEffect(() => {
-    if (!open) return;
-    setNames(game.players.map((p) => p.name));
-    setDate(game.date);
-    setNotes(game.notes ?? "");
-    setKoks(game.koks.map((k) => ({ id: k.id, typeId: k.typeId ?? "", price: String(k.pricePerPerson) })));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open]);
+  // dari `game` tiap sheet dibuka (pola reset-saat-render) biar mulai dari data terbaru.
+  const [wasOpen, setWasOpen] = useState(open);
+  if (open !== wasOpen) {
+    setWasOpen(open);
+    if (open) {
+      setNames(game.players.map((p) => p.name));
+      setDate(game.date);
+      setNotes(game.notes ?? "");
+      setKoks(game.koks.map((k) => ({ id: k.id, typeId: k.typeId ?? "", price: String(k.pricePerPerson) })));
+    }
+  }
 
   const photoMap = buildPhotoMap(players);
   const active = kokTypes.filter((t) => t.active || game.koks.some((k) => k.typeId === t.id));

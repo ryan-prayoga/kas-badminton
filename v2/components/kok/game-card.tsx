@@ -101,10 +101,13 @@ export function GameCard({
   const [pending, start] = useTransition();
   const [paid, setPaid] = useState(() => game.players.map((p) => p.paid));
 
-  // resync dari server (realtime / setelah mutasi)
-  useEffect(() => {
+  // resync dari server (realtime / setelah mutasi) via pola reset-saat-render:
+  // begitu updatedAt berubah, buang state optimistik dan ikut data server terbaru.
+  const [syncedAt, setSyncedAt] = useState(game.updatedAt);
+  if (syncedAt !== game.updatedAt) {
+    setSyncedAt(game.updatedAt);
     setPaid(game.players.map((p) => p.paid));
-  }, [game.updatedAt, game.players]);
+  }
 
   const names = game.players.map((p) => p.name);
   const allPaid = paid.every(Boolean);
