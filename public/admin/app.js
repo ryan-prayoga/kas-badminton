@@ -275,7 +275,7 @@ function renderRoleUI() {
   if (info) {
     info.hidden = !isOperator;
     if (isOperator) {
-      $('#operatorInfoText').textContent = state.operatorName + ' · berlaku sampai ' + fmtDate(state.operatorExpiresAt.slice(0, 10)) + ' ' + new Date(state.operatorExpiresAt).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
+      $('#operatorInfoText').textContent = state.operatorName + ' · berlaku sampai ' + fmtDateTime(state.operatorExpiresAt);
     }
   }
 }
@@ -354,6 +354,19 @@ function closeAllPlayerSuggests() {
   $$('.player-suggest-list').forEach(function (el) { el.remove(); });
 }
 
+function highlightSuggest(box, idx) {
+  var items = box.querySelectorAll('[data-name]');
+  if (!items.length) return;
+  var n = ((idx % items.length) + items.length) % items.length;
+  items.forEach(function (el, i) {
+    var on = i === n;
+    el.classList.toggle('bg-surface', on);
+    el.setAttribute('aria-selected', on ? 'true' : 'false');
+    if (on) el.scrollIntoView({ block: 'nearest' });
+  });
+  box.dataset.active = String(n);
+}
+
 function showPlayerSuggest(input) {
   closeAllPlayerSuggests();
   var matches = playerMatches(input.value);
@@ -361,8 +374,10 @@ function showPlayerSuggest(input) {
   var wrap = input.parentElement;
   var box = document.createElement('div');
   box.className = 'player-suggest-list absolute inset-x-0 top-full z-20 mt-1 max-h-48 overflow-auto rounded-xl border border-line bg-elevated shadow-card';
+  box.setAttribute('role', 'listbox');
+  box.dataset.active = '-1';
   box.innerHTML = matches.map(function (name) {
-    return '<button type="button" class="block w-full truncate px-3 py-2 text-left text-sm text-ink50 hover:bg-surface active:bg-surface" data-name="' + escapeAttr(name) + '">' + escapeHtml(name) + '</button>';
+    return '<button type="button" role="option" aria-selected="false" class="block w-full truncate px-3 py-2 text-left text-sm text-ink50 hover:bg-surface active:bg-surface" data-name="' + escapeAttr(name) + '">' + escapeHtml(name) + '</button>';
   }).join('');
   box.onmousedown = function (e) {
     e.preventDefault();
@@ -379,6 +394,24 @@ function wirePlayerAutocomplete(input) {
   input.dataset.autocompleteWired = '1';
   input.addEventListener('focus', function () { showPlayerSuggest(input); });
   input.addEventListener('input', function () { showPlayerSuggest(input); });
+  input.addEventListener('keydown', function (e) {
+    var box = input.parentElement && input.parentElement.querySelector('.player-suggest-list');
+    if (!box) return;
+    var active = Number(box.dataset.active);
+    if (e.key === 'ArrowDown') { e.preventDefault(); highlightSuggest(box, active + 1); }
+    else if (e.key === 'ArrowUp') { e.preventDefault(); highlightSuggest(box, active - 1); }
+    else if (e.key === 'Enter') {
+      var items = box.querySelectorAll('[data-name]');
+      if (active >= 0 && items[active]) {
+        e.preventDefault();
+        input.value = items[active].getAttribute('data-name');
+        closeAllPlayerSuggests();
+      }
+    } else if (e.key === 'Escape') {
+      e.preventDefault();
+      closeAllPlayerSuggests();
+    }
+  });
   input.addEventListener('blur', function () {
     setTimeout(closeAllPlayerSuggests, 150);
   });
