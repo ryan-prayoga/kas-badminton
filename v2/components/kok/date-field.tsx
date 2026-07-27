@@ -105,6 +105,7 @@ export function DateField({
   };
 
   const pick = (iso: string) => {
+    if (iso > today) return; // game dicatat setelah dimainkan — tanggal masa depan hampir pasti salah
     onChange(iso);
     setOpen(false);
   };
@@ -215,13 +216,15 @@ export function DateField({
               if (!cell) return <div key={`e-${i}`} className="h-9" />;
               const isSel = cell.iso === value;
               const isToday = cell.iso === today;
+              const isFuture = cell.iso > today;
               return (
                 <button
                   key={cell.iso}
                   type="button"
                   onClick={() => pick(cell.iso)}
+                  disabled={isFuture}
                   className={cn(
-                    "grid h-9 place-items-center rounded-xl text-sm font-semibold transition",
+                    "grid h-9 place-items-center rounded-xl text-sm font-semibold transition disabled:cursor-not-allowed disabled:opacity-30 disabled:hover:bg-transparent",
                     isSel
                       ? "bg-court text-white shadow-court"
                       : isToday

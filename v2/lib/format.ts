@@ -77,7 +77,7 @@ export function fmtDateHuman(iso: string): string {
   const full = fmtDateFull(iso);
   if (!full) return "";
   if (rel === "Hari ini" || rel === "Kemarin") return `${rel} · ${full}`;
-  if (rel) return `${rel} · ${fmtDateLong(iso)}`;
+  if (rel) return `${rel} · ${fmtDateFull(iso)}`;
   return full;
 }
 

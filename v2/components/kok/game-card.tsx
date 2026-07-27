@@ -68,7 +68,7 @@ function CourtSide({
               name={isPaid ? "checkCircle" : "clock"}
               className="size-[15px] shrink-0"
             />
-            <span className="min-w-0 flex-1 truncate text-sm font-semibold text-ink">
+            <span className="min-w-0 flex-1 truncate text-sm font-semibold text-ink" title={names[i] || undefined}>
               {names[i] || "—"}
             </span>
           </Tag>
