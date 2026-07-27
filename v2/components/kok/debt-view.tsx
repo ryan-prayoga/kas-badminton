@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
+import { useId, useMemo, useState, useTransition } from "react";
 import { toast } from "sonner";
 import type { DebtEntry, DebtItem } from "@/lib/domain/types";
 import { fmt, fmtDate, fmtDateFull, relativeDay, toLocalIso } from "@/lib/format";
@@ -248,6 +248,7 @@ function DebtCard({
   const [shareOpen, setShareOpen] = useState(false);
   const [cicil, setCicil] = useState(false);
   const [amount, setAmount] = useState("");
+  const panelId = useId();
   const grouped = groupItems(d.items);
   const totalKoks = d.items.reduce((s, it) => s + (Number(it.kokCount) || 0), 0);
   const photo = photoMap[d.name];
@@ -273,6 +274,7 @@ function DebtCard({
   const pay = () => {
     const amt = Number(amount);
     if (!Number.isInteger(amt) || amt <= 0) return toast.error("Nominal harus lebih dari 0");
+    if (amt > d.total) return toast.error(`Nominal melebihi sisa tagihan (${fmt(d.total)})`);
     start(async () => {
       const res = await payInstallmentAction(d.name, amt);
       if (res.ok) {
@@ -288,12 +290,16 @@ function DebtCard({
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}
+        aria-expanded={open}
+        aria-controls={panelId}
         className="flex w-full select-none items-center justify-between gap-3 p-3.5 text-left"
       >
         <div className="flex min-w-0 items-center gap-2.5">
           <Avatar name={d.name} photo={photoMap[d.name]} tone="owe" />
           <div className="min-w-0">
-            <div className="font-display truncate font-bold text-ink">{d.name}</div>
+            <div className="font-display truncate font-bold text-ink" title={d.name}>
+              {d.name}
+            </div>
             <div className="inline-flex items-center gap-2.5 text-xs text-ink-soft">
               <span className="inline-flex items-center gap-1">
                 <KIcon name="racket" className="size-3.5" /> {d.items.length} main
@@ -318,7 +324,7 @@ function DebtCard({
         </div>
       </button>
 
-      <div className="acc-panel" data-open={open}>
+      <div className="acc-panel" data-open={open} id={panelId}>
         <div className="acc-inner">
           <div className="px-3.5 pb-3.5">
             <div className="grid gap-px overflow-hidden rounded-xl border border-owe/15 bg-surface">
@@ -329,7 +335,9 @@ function DebtCard({
                     <div className="flex items-center justify-between gap-2">
                       <span className="flex min-w-0 items-center gap-1.5 text-xs font-semibold text-ink-soft">
                         <KIcon name="calendar" className="size-3.5 shrink-0 text-ink-faint" />
-                        <span className="truncate">{fmtDateFull(g.date)}</span>
+                        <span className="truncate" title={fmtDateFull(g.date)}>
+                          {fmtDateFull(g.date)}
+                        </span>
                       </span>
                       <span className="tabular shrink-0 font-mono text-sm font-bold text-owe">{fmt(g.total)}</span>
                     </div>
@@ -385,16 +393,24 @@ function DebtCard({
                       <input
                         inputMode="numeric"
                         autoFocus
+                        aria-label="Nominal cicilan"
                         value={amount}
                         onChange={(e) => setAmount(e.target.value.replace(/[^\d]/g, ""))}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter" && !pending) {
+                            e.preventDefault();
+                            pay();
+                          }
+                        }}
                         placeholder={`maks ${d.total}`}
-                        className="w-28 rounded-xl border border-input bg-surface px-3 py-2 text-sm text-ink outline-none focus:border-court/50"
+                        className="h-11 w-28 rounded-xl border border-input bg-surface px-3 text-sm text-ink outline-none focus:border-court/50"
                       />
                       <button
                         type="button"
                         onClick={pay}
                         disabled={pending}
-                        className="grid size-9 place-items-center rounded-xl bg-court text-white shadow-court transition active:scale-95"
+                        aria-label="Simpan cicilan"
+                        className="grid size-11 place-items-center rounded-xl bg-court text-white shadow-court transition active:scale-95"
                       >
                         <KIcon name="check" className="size-4" />
                       </button>
