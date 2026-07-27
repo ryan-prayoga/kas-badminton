@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useTransition } from "react";
+import { useEffect, useId, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
@@ -39,6 +39,7 @@ export function EditGameSheet({
   defaultPrice: number;
 }) {
   const router = useRouter();
+  const notesId = useId();
   const [open, setOpen] = useState(false);
   const [pending, start] = useTransition();
   const [names, setNames] = useState(game.players.map((p) => p.name));
@@ -65,7 +66,14 @@ export function EditGameSheet({
 
   const photoMap = buildPhotoMap(players);
   const active = kokTypes.filter((t) => t.active || game.koks.some((k) => k.typeId === t.id));
-  const perPerson = koks.reduce((s, k) => s + (Number(k.price) || 0), 0);
+
+  // Harga kosong jatuh ke harga tipe kok, lalu defaultPrice — jangan diam-diam Rp0.
+  const kokPrice = (k: KokRow) => {
+    if (k.price) return Number(k.price) || 0;
+    const t = kokTypes.find((x) => x.id === k.typeId);
+    return t?.pricePerPerson ?? defaultPrice;
+  };
+  const perPerson = koks.reduce((s, k) => s + kokPrice(k), 0);
 
   const setKok = (i: number, patch: Partial<KokRow>) =>
     setKoks((ks) => ks.map((k, idx) => (idx === i ? { ...k, ...patch } : k)));
@@ -84,7 +92,7 @@ export function EditGameSheet({
         koks: koks.map((k) => ({
           id: k.id,
           typeId: k.typeId || null,
-          pricePerPerson: Number(k.price) || 0,
+          pricePerPerson: kokPrice(k),
         })),
       });
       if (res.ok) {
@@ -120,10 +128,10 @@ export function EditGameSheet({
 
         <div className="space-y-4 px-4 pb-2">
           {([0, 1] as const).map((pair) => (
-            <div key={pair} className="space-y-1.5">
-              <label className="text-xs font-bold uppercase tracking-wide text-ink-faint">
+            <div key={pair} role="group" aria-label={`Pasangan ${pair === 0 ? "A" : "B"}`} className="space-y-1.5">
+              <span className="block text-xs font-bold uppercase tracking-wide text-ink-faint">
                 Pasangan {pair === 0 ? "A" : "B"}
-              </label>
+              </span>
               <div className="grid grid-cols-2 gap-2">
                 {[0, 1].map((j) => {
                   const idx = pair * 2 + j;
@@ -134,6 +142,7 @@ export function EditGameSheet({
                       photoMap={photoMap}
                       value={names[idx]}
                       onChange={(v) => setNames((n) => n.map((x, k) => (k === idx ? v : x)))}
+                      placeholder={`Pemain ${idx + 1}`}
                     />
                   );
                 })}
@@ -168,8 +177,10 @@ export function EditGameSheet({
                   </select>
                   <input
                     inputMode="numeric"
+                    aria-label="Harga per orang"
                     value={k.price}
                     onChange={(e) => setKok(i, { price: e.target.value.replace(/[^\d]/g, "") })}
+                    placeholder={String(kokTypes.find((x) => x.id === k.typeId)?.pricePerPerson ?? defaultPrice)}
                     className="h-10 w-24 rounded-xl border border-input bg-surface px-3 text-sm text-ink outline-none focus:border-court/50"
                   />
                   <button
@@ -198,8 +209,11 @@ export function EditGameSheet({
           </div>
 
           <div className="space-y-1.5">
-            <label className="text-xs font-bold uppercase tracking-wide text-ink-faint">Catatan</label>
+            <label htmlFor={notesId} className="text-xs font-bold uppercase tracking-wide text-ink-faint">
+              Catatan
+            </label>
             <input
+              id={notesId}
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
               className="h-11 w-full rounded-xl border border-input bg-surface px-3 text-sm text-ink outline-none focus:border-court/50"

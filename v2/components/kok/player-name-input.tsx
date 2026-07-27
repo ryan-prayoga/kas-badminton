@@ -10,6 +10,7 @@ export function PlayerNameInput({
   names,
   photoMap,
   placeholder,
+  ariaLabel,
   className,
 }: {
   value: string;
@@ -17,6 +18,7 @@ export function PlayerNameInput({
   names: string[];
   photoMap?: PhotoMap;
   placeholder?: string;
+  ariaLabel?: string;
   className?: string;
 }) {
   const [open, setOpen] = useState(false);
@@ -50,6 +52,7 @@ export function PlayerNameInput({
           onFocus={() => setOpen(true)}
           onBlur={() => setTimeout(() => setOpen(false), 120)}
           placeholder={placeholder}
+          aria-label={ariaLabel ?? placeholder}
           autoComplete="off"
           autoCorrect="off"
           autoCapitalize="words"
