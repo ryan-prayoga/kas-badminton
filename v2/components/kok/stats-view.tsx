@@ -297,6 +297,8 @@ export function StatsView({
 }) {
   const periods = useMemo(() => {
     const keys = new Set<string>();
+    // Bulan berjalan selalu tersedia sebagai opsi, walau belum ada game bulan ini.
+    keys.add(currentPeriodKey());
     for (const g of games) {
       const k = periodKey(g.date);
       if (k) keys.add(k);
@@ -526,7 +528,10 @@ export function StatsView({
                 </div>
                 <div className="shrink-0 text-right">
                   {s.nunggak > 0 ? (
-                    <div className="tabular font-mono text-sm font-bold text-owe">{fmt(s.nunggak)}</div>
+                    <div className="inline-flex items-center gap-1 text-sm font-bold text-owe">
+                      <KIcon name="alert" className="size-3.5" />
+                      <span className="tabular font-mono">{fmt(s.nunggak)}</span>
+                    </div>
                   ) : (
                     <div className="inline-flex items-center gap-1 text-sm font-bold text-paid">
                       <KIcon name="checkCircle" className="size-3.5" /> Lunas
