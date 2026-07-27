@@ -193,6 +193,22 @@ function api(path, options) {
   });
 }
 
+// Cegah double-submit: kunci tombol pemicu selama request in-flight, lepas saat selesai.
+function lockDuring(btn, run) {
+  if (btn && btn.dataset.busy === '1') return null;
+  if (btn) { btn.dataset.busy = '1'; btn.disabled = true; }
+  var release = function () { if (btn) { btn.dataset.busy = ''; btn.disabled = false; } };
+  var p;
+  try { p = run(); } catch (e) { release(); throw e; }
+  if (p && typeof p.then === 'function') { p.then(release, release); return p; }
+  release();
+  return p;
+}
+
+function formSubmitBtn(form) {
+  return form ? form.querySelector('button[type="submit"], input[type="submit"]') : null;
+}
+
 // --- Lockscreen (PIN gate) ---
 var pinBuffer = '';
 
@@ -854,14 +870,16 @@ function wireOperators() {
     var name = $('#operatorName').value;
     var expiresAt = operatorExpiresAtFromForm();
     if (!expiresAt) { toast('Isi tanggal kadaluarsa.', 'error'); return; }
-    api('/api/operators', { method: 'POST', body: JSON.stringify({ name: name, expiresAt: expiresAt }) })
-      .then(function (data) {
-        state.operatorRevealed.unshift({ id: data.operator.id, name: data.operator.name, pin: data.pin, expiresAt: data.operator.expiresAt });
-        $('#operatorForm').reset();
-        $('#operatorCustomDate').hidden = true;
-        fetchOperators();
-        toast('PIN delegasi dibuat.', 'success');
-      }).catch(function (err) { toast(err.message, 'error'); });
+    lockDuring(formSubmitBtn(this), function () {
+      return api('/api/operators', { method: 'POST', body: JSON.stringify({ name: name, expiresAt: expiresAt }) })
+        .then(function (data) {
+          state.operatorRevealed.unshift({ id: data.operator.id, name: data.operator.name, pin: data.pin, expiresAt: data.operator.expiresAt });
+          $('#operatorForm').reset();
+          $('#operatorCustomDate').hidden = true;
+          fetchOperators();
+          toast('PIN delegasi dibuat.', 'success');
+        }).catch(function (err) { toast(err.message, 'error'); });
+    });
   };
 
   $('#operatorList').onclick = function (e) {
@@ -1311,7 +1329,7 @@ function generateQris() {
   if (!(amount > 0)) { toast('Nominal harus > 0', 'error'); return; }
   var canvas = $('#qrisCanvas');
   canvas.innerHTML = '<iconify-icon icon="svg-spinners:180-ring" width="24" class="text-soft"></iconify-icon>';
-  api('/api/qris', { method: 'POST', body: JSON.stringify({ amount: amount }) })
+  return api('/api/qris', { method: 'POST', body: JSON.stringify({ amount: amount }) })
     .then(function (data) {
       qrisPayload = data.payload;
       renderQr(canvas, data.payload);
@@ -1642,17 +1660,19 @@ function wire() {
       pricePerSlop: Number($('#kokTypeSlopPrice').value || 0),
       stock: Number($('#kokTypeStock').value || 0),
     };
-    var req = editId
-      ? api('/api/kok-types/' + editId, { method: 'PATCH', body: JSON.stringify(body) })
-      : api('/api/kok-types', { method: 'POST', body: JSON.stringify(body) });
-    req.then(function (data) {
-      syncKokTypesFromResponse(data);
-      resetKokTypeForm();
-      renderKokTypeList();
-      renderFormKoks();
-      if (state.edit) renderEditKoks();
-      toast(editId ? 'Jenis kok diupdate.' : 'Jenis kok ditambah.', 'success');
-    }).catch(function (err) { toast(err.message, 'error'); });
+    lockDuring(formSubmitBtn(this), function () {
+      var req = editId
+        ? api('/api/kok-types/' + editId, { method: 'PATCH', body: JSON.stringify(body) })
+        : api('/api/kok-types', { method: 'POST', body: JSON.stringify(body) });
+      return req.then(function (data) {
+        syncKokTypesFromResponse(data);
+        resetKokTypeForm();
+        renderKokTypeList();
+        renderFormKoks();
+        if (state.edit) renderEditKoks();
+        toast(editId ? 'Jenis kok diupdate.' : 'Jenis kok ditambah.', 'success');
+      }).catch(function (err) { toast(err.message, 'error'); });
+    });
   };
 
   $('#kokTypeList').onclick = function (e) {
@@ -1748,13 +1768,15 @@ function wire() {
     var newName = $('#playerEditName').value;
     var body = { name: newName };
     if (pendingPlayerPhoto !== undefined) body.photo = pendingPlayerPhoto;
-    api('/api/players/' + encodeURIComponent(original), { method: 'PATCH', body: JSON.stringify(body) })
-      .then(function (data) {
-        applyServerState(data);
-        closePlayerEditForm();
-        renderPlayerList();
-        toast('Pemain diupdate.', 'success');
-      }).catch(function (err) { toast(err.message, 'error'); });
+    lockDuring(formSubmitBtn(this), function () {
+      return api('/api/players/' + encodeURIComponent(original), { method: 'PATCH', body: JSON.stringify(body) })
+        .then(function (data) {
+          applyServerState(data);
+          closePlayerEditForm();
+          renderPlayerList();
+          toast('Pemain diupdate.', 'success');
+        }).catch(function (err) { toast(err.message, 'error'); });
+    });
   };
 
   // Settings
@@ -1784,44 +1806,48 @@ function wire() {
 
   $('#settingsForm').onsubmit = function (e) {
     e.preventDefault();
-    api('/api/settings', {
-      method: 'PUT',
-      body: JSON.stringify({
-        merchantQris: $('#merchantQris').value,
-      }),
-    }).then(function (data) {
-      if (data.settings) {
-        state.settings = { defaultPricePerPerson: data.settings.defaultPricePerPerson };
-        state.qrisEnabled = !!data.settings.qrisEnabled;
-        state.merchantQris = data.settings.merchantQris || '';
-      }
-      renderDebt();
-      $('#settingsDialog').close();
-      toast('Pengaturan disimpan.', 'success');
-    }).catch(function (err) { toast(err.message, 'error'); });
+    lockDuring(formSubmitBtn(this), function () {
+      return api('/api/settings', {
+        method: 'PUT',
+        body: JSON.stringify({
+          merchantQris: $('#merchantQris').value,
+        }),
+      }).then(function (data) {
+        if (data.settings) {
+          state.settings = { defaultPricePerPerson: data.settings.defaultPricePerPerson };
+          state.qrisEnabled = !!data.settings.qrisEnabled;
+          state.merchantQris = data.settings.merchantQris || '';
+        }
+        renderDebt();
+        $('#settingsDialog').close();
+        toast('Pengaturan disimpan.', 'success');
+      }).catch(function (err) { toast(err.message, 'error'); });
+    });
   };
 
   // Catat main
   $('#gameForm').onsubmit = function (e) {
     e.preventDefault();
     var parsed = readPairsFrom($('#gameForm'));
-    api('/api/games', {
-      method: 'POST',
-      body: JSON.stringify({
-        date: $('#date').value,
-        notes: $('#notes').value,
-        pairs: parsed.pairs,
-        koks: payloadKoks(state.formKoks),
-      }),
-    }).then(function (data) {
-      $('#gameDialog').close();
-      $('#notes').value = '';
-      clearFormPairs();
-      state.formKoks = [defaultKokEntry()];
-      renderFormKoks();
-      applyServerState(data);
-      toast('Game tersimpan.', 'success');
-    }).catch(function (err) { toast(err.message, 'error'); });
+    lockDuring(formSubmitBtn(this), function () {
+      return api('/api/games', {
+        method: 'POST',
+        body: JSON.stringify({
+          date: $('#date').value,
+          notes: $('#notes').value,
+          pairs: parsed.pairs,
+          koks: payloadKoks(state.formKoks),
+        }),
+      }).then(function (data) {
+        $('#gameDialog').close();
+        $('#notes').value = '';
+        clearFormPairs();
+        state.formKoks = [defaultKokEntry()];
+        renderFormKoks();
+        applyServerState(data);
+        toast('Game tersimpan.', 'success');
+      }).catch(function (err) { toast(err.message, 'error'); });
+    });
   };
 
   // Riwayat card actions
@@ -1830,24 +1856,28 @@ function wire() {
     if (!btn) return;
     var id = btn.getAttribute('data-id');
     var action = btn.getAttribute('data-action');
-    var p;
+    var run;
 
     if (action === 'toggle-paid') {
       var game = state.games.filter(function (g) { return g.id === id; })[0];
       var index = Number(btn.getAttribute('data-index'));
       var paid = !(game.players[index] && game.players[index].paid);
-      p = api('/api/games/' + id + '/players/' + index + '/paid', { method: 'PATCH', body: JSON.stringify({ paid: paid }) });
+      run = function () { return api('/api/games/' + id + '/players/' + index + '/paid', { method: 'PATCH', body: JSON.stringify({ paid: paid }) }); };
     } else if (action === 'mark-all') {
-      p = api('/api/games/' + id + '/mark-all-paid', { method: 'POST', body: JSON.stringify({ paid: btn.getAttribute('data-paid') === 'true' }) });
+      run = function () { return api('/api/games/' + id + '/mark-all-paid', { method: 'POST', body: JSON.stringify({ paid: btn.getAttribute('data-paid') === 'true' }) }); };
     } else if (action === 'add-kok') {
       var entry = defaultKokEntry();
-      p = api('/api/games/' + id + '/koks', { method: 'POST', body: JSON.stringify({ typeId: entry.typeId, typeName: entry.typeName, pricePerPerson: entry.pricePerPerson }) });
+      run = function () { return api('/api/games/' + id + '/koks', { method: 'POST', body: JSON.stringify({ typeId: entry.typeId, typeName: entry.typeName, pricePerPerson: entry.pricePerPerson }) }); };
     } else if (action === 'edit') {
       openEdit(state.games.filter(function (g) { return g.id === id; })[0]);
       return;
     }
 
-    if (p) p.then(applyServerState).catch(function (err) { toast(err.message, 'error'); });
+    if (run) {
+      lockDuring(btn, function () {
+        return run().then(applyServerState).catch(function (err) { toast(err.message, 'error'); });
+      });
+    }
   };
 
   // Belum bayar card actions
@@ -1883,14 +1913,16 @@ function wire() {
     var slops = Math.round(Number($('#buySlops').value) || 0);
     var price = Math.round(Number($('#buyPrice').value) || 0);
     if (!(slops > 0)) { toast('Jumlah slop harus > 0', 'error'); return; }
-    api('/api/kok-types/' + id + '/buy', { method: 'POST', body: JSON.stringify({ slops: slops, pricePerSlop: price }) })
-      .then(function (data) {
-        applyServerState(data);
-        renderKokTypeList();
-        renderFormKoks();
-        $('#buyDialog').close();
-        toast('Stok ditambah, kas berkurang.', 'success');
-      }).catch(function (err) { toast(err.message, 'error'); });
+    lockDuring(formSubmitBtn(this), function () {
+      return api('/api/kok-types/' + id + '/buy', { method: 'POST', body: JSON.stringify({ slops: slops, pricePerSlop: price }) })
+        .then(function (data) {
+          applyServerState(data);
+          renderKokTypeList();
+          renderFormKoks();
+          $('#buyDialog').close();
+          toast('Stok ditambah, kas berkurang.', 'success');
+        }).catch(function (err) { toast(err.message, 'error'); });
+    });
   };
 
   // Pay dialog
@@ -1900,11 +1932,13 @@ function wire() {
     var name = $('#payName').value;
     var amount = Math.round(Number($('#payAmount').value) || 0);
     if (!(amount > 0)) { toast('Nominal harus > 0', 'error'); return; }
-    submitPay(name, amount).then(function () { $('#payDialog').close(); });
+    lockDuring(formSubmitBtn(this), function () {
+      return submitPay(name, amount).then(function () { $('#payDialog').close(); });
+    });
   };
 
   // QRIS dialog
-  $('#qrisGen').onclick = generateQris;
+  $('#qrisGen').onclick = function () { lockDuring(this, generateQris); };
   $('[data-close-qris]').onclick = function () { $('#qrisDialog').close(); };
   $('#qrisCopy').onclick = function () {
     if (!qrisPayload) { toast('Buat QR dulu.', 'error'); return; }
@@ -1917,7 +1951,9 @@ function wire() {
   $('#qrisPaid').onclick = function () {
     var amount = Math.round(Number($('#qrisAmount').value) || 0);
     if (!qrisName || !(amount > 0)) { toast('Isi nominal dulu.', 'error'); return; }
-    submitPay(qrisName, amount).then(function () { $('#qrisDialog').close(); });
+    lockDuring(this, function () {
+      return submitPay(qrisName, amount).then(function () { $('#qrisDialog').close(); });
+    });
   };
 
   // Edit dialog
@@ -1937,16 +1973,18 @@ function wire() {
     var players = parsed.names.map(function (name, idx) {
       return { name: name, paid: !!(state.edit.players[idx] && state.edit.players[idx].paid) };
     });
-    api('/api/games/' + id, {
-      method: 'PATCH',
-      body: JSON.stringify({
-        date: $('#editDate').value,
-        notes: $('#editNotes').value,
-        pairs: { a: players.slice(0, 2), b: players.slice(2, 4) },
-        koks: payloadKoks(state.edit.koks),
-      }),
-    }).then(function (data) { $('#editDialog').close(); applyServerState(data); toast('Perubahan disimpan.', 'success'); })
-      .catch(function (err) { toast(err.message, 'error'); });
+    lockDuring(formSubmitBtn(this), function () {
+      return api('/api/games/' + id, {
+        method: 'PATCH',
+        body: JSON.stringify({
+          date: $('#editDate').value,
+          notes: $('#editNotes').value,
+          pairs: { a: players.slice(0, 2), b: players.slice(2, 4) },
+          koks: payloadKoks(state.edit.koks),
+        }),
+      }).then(function (data) { $('#editDialog').close(); applyServerState(data); toast('Perubahan disimpan.', 'success'); })
+        .catch(function (err) { toast(err.message, 'error'); });
+    });
   };
 }
 
