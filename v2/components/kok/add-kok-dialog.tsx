@@ -52,10 +52,12 @@ export function AddKokDialog({
   game,
   kokTypes,
   defaultPrice,
+  disabled = false,
 }: {
   game: EnrichedGame;
   kokTypes: KokType[];
   defaultPrice: number;
+  disabled?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const [pending, start] = useTransition();
@@ -146,7 +148,8 @@ export function AddKokDialog({
           <button
             type="button"
             aria-label="Tambah kok"
-            className="grid size-8 shrink-0 place-items-center rounded-lg text-ink-faint transition hover:bg-court/10 hover:text-court"
+            disabled={disabled}
+            className="grid size-10 shrink-0 place-items-center rounded-lg text-ink-faint transition hover:bg-court/10 hover:text-court disabled:pointer-events-none disabled:opacity-40"
           />
         }
       >
@@ -227,7 +230,8 @@ export function AddKokDialog({
                       <button
                         type="button"
                         onClick={() => bumpCount(line.key, -1)}
-                        className="grid size-10 place-items-center text-ink-soft transition hover:text-ink"
+                        disabled={(Number(line.count) || 0) <= 1}
+                        className="grid size-10 place-items-center text-ink-soft transition hover:text-ink disabled:opacity-30"
                         aria-label="Kurangi jumlah"
                       >
                         <KIcon name="minus" className="size-4" />
@@ -236,15 +240,19 @@ export function AddKokDialog({
                         inputMode="numeric"
                         value={line.count}
                         onChange={(e) =>
-                          setLine(line.key, { count: e.target.value.replace(/[^\d]/g, "") || "1" })
+                          setLine(line.key, { count: e.target.value.replace(/[^\d]/g, "") })
                         }
+                        onBlur={(e) => {
+                          if (!e.target.value) setLine(line.key, { count: "1" });
+                        }}
                         className="w-8 bg-transparent text-center text-sm font-bold tabular-nums outline-none"
                         aria-label="Jumlah kok"
                       />
                       <button
                         type="button"
                         onClick={() => bumpCount(line.key, 1)}
-                        className="grid size-10 place-items-center text-ink-soft transition hover:text-ink"
+                        disabled={(Number(line.count) || 0) >= 50}
+                        className="grid size-10 place-items-center text-ink-soft transition hover:text-ink disabled:opacity-30"
                         aria-label="Tambah jumlah"
                       >
                         <KIcon name="plus" className="size-4" />

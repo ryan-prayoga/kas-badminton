@@ -32,11 +32,13 @@ export function EditGameSheet({
   kokTypes,
   players,
   defaultPrice,
+  disabled = false,
 }: {
   game: EnrichedGame;
   kokTypes: KokType[];
   players: PlayerRow[];
   defaultPrice: number;
+  disabled?: boolean;
 }) {
   const router = useRouter();
   const notesId = useId();
@@ -111,7 +113,9 @@ export function EditGameSheet({
         render={
           <button
             type="button"
-            className="grid size-8 place-items-center rounded-lg text-ink-faint transition hover:bg-court/10 hover:text-court"
+            aria-label="Edit game"
+            disabled={disabled}
+            className="grid size-10 place-items-center rounded-lg text-ink-faint transition hover:bg-court/10 hover:text-court disabled:pointer-events-none disabled:opacity-40"
           />
         }
       >

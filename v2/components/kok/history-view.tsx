@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { EnrichedGame } from "@/lib/domain/types";
 import { currentPeriodKey, fmt, fmtDateFull, periodKey } from "@/lib/format";
 import { cn } from "@/lib/utils";
@@ -85,6 +85,12 @@ export function HistoryView({
   const [open, setOpen] = useState<Record<string, boolean>>({});
   const flash = useFlash(games);
 
+  // Kartu lapor jumlah "belum bayar" optimistiknya → badge grup ikut live, tak basi selama round-trip.
+  const [liveUnpaid, setLiveUnpaid] = useState<Record<string, number>>({});
+  const handlePaidChange = useCallback((gameId: string, unpaid: number) => {
+    setLiveUnpaid((m) => (m[gameId] === unpaid ? m : { ...m, [gameId]: unpaid }));
+  }, []);
+
   const filtered = period === "all" ? games : games.filter((g) => periodKey(g.date) === period);
   const groups = groupByDate(filtered);
   const isOpen = (date: string, i: number) => (date in open ? open[date] : i === 0);
@@ -111,15 +117,27 @@ export function HistoryView({
         <div className="flex flex-col gap-3">
           {groups.map((grp, i) => {
             const opened = isOpen(grp.date, i);
-            const allPaid = grp.unpaidCount === 0;
+            const grpUnpaid = grp.games.reduce(
+              (s, g) => s + (liveUnpaid[g.id] ?? g.summary.unpaidCount),
+              0,
+            );
+            const allPaid = grpUnpaid === 0;
+            const panelId = `grp-${grp.date}`;
+            // Flash realtime tak kelihatan kalau grup terlipat — pulse headernya biar sinyalnya sampai.
+            const groupFlashing = !opened && grp.games.some((g) => flash.has(g.id));
             return (
               <div
                 key={grp.date}
-                className="animate-rise overflow-hidden rounded-xl2 border border-line bg-surface-2/60"
+                className={cn(
+                  "animate-rise overflow-hidden rounded-xl2 border border-line bg-surface-2/60",
+                  groupFlashing && "flash-update",
+                )}
               >
                 <button
                   type="button"
                   onClick={() => setOpen((s) => ({ ...s, [grp.date]: !opened }))}
+                  aria-expanded={opened}
+                  aria-controls={panelId}
                   className="flex w-full select-none items-center justify-between gap-2 p-3.5 text-left"
                 >
                   <div className="min-w-0">
@@ -143,7 +161,7 @@ export function HistoryView({
                       </span>
                     ) : (
                       <span className="inline-flex items-center gap-1 whitespace-nowrap rounded-full bg-owe/12 px-2 py-0.5 text-[11px] font-bold text-owe">
-                        <KIcon name="alert" className="size-3" /> {grp.unpaidCount} belum
+                        <KIcon name="alert" className="size-3" /> {grpUnpaid} belum
                       </span>
                     )}
                     <KIcon
@@ -155,7 +173,7 @@ export function HistoryView({
                     />
                   </div>
                 </button>
-                <div className="acc-panel" data-open={opened}>
+                <div className="acc-panel" data-open={opened} id={panelId}>
                   <div className="acc-inner">
                     {/* p-3 + gap: ruang border/shadow GameCard biar gak kepotong overflow parent */}
                     <div className="grid gap-3 border-t border-line p-3">
@@ -169,6 +187,7 @@ export function HistoryView({
                           kokTypes={kokTypes}
                           players={players}
                           defaultPrice={defaultPrice}
+                          onPaidChange={handlePaidChange}
                         />
                       ))}
                     </div>

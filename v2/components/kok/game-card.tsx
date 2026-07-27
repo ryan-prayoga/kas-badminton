@@ -60,7 +60,8 @@ function CourtSide({
               isPaid
                 ? "border-paid/40 bg-paid/10 text-paid"
                 : "border-owe/40 bg-owe/10 text-owe",
-              editable && "transition active:scale-[0.98] disabled:opacity-60",
+              // target sentuh ≥44px saat chip jadi tombol toggle
+              editable && "min-h-11 transition active:scale-[0.98] disabled:opacity-60",
             )}
           >
             <KIcon
@@ -84,6 +85,7 @@ export function GameCard({
   kokTypes,
   players,
   defaultPrice,
+  onPaidChange,
 }: {
   game: EnrichedGame;
   photoMap: PhotoMap;
@@ -92,6 +94,8 @@ export function GameCard({
   kokTypes?: KokType[];
   players?: PlayerRow[];
   defaultPrice?: number;
+  /** Lapor jumlah "belum bayar" optimistik ke parent biar badge grup sinkron dgn kartu. */
+  onPaidChange?: (gameId: string, unpaidCount: number) => void;
 }) {
   const confirm = useConfirm();
   const [pending, start] = useTransition();
@@ -105,6 +109,11 @@ export function GameCard({
   const names = game.players.map((p) => p.name);
   const allPaid = paid.every(Boolean);
   const unpaidCount = paid.filter((x) => !x).length;
+
+  // Header grup pakai hitungan ini juga — kabari tiap kali state paid berubah.
+  useEffect(() => {
+    onPaidChange?.(game.id, unpaidCount);
+  }, [onPaidChange, game.id, unpaidCount]);
 
   const toggle = (index: number) => {
     if (!editable) return;
@@ -226,13 +235,13 @@ export function GameCard({
                 onClick={markAll}
                 disabled={pending}
                 aria-label="Centang semua"
-                className="grid size-8 place-items-center rounded-lg text-court transition hover:bg-court/10"
+                className="grid size-10 place-items-center rounded-lg text-court transition hover:bg-court/10 disabled:opacity-40"
               >
                 <KIcon name="checkAll" className="size-4" />
               </button>
             )}
             {kokTypes && (
-              <AddKokDialog game={game} kokTypes={kokTypes} defaultPrice={defaultPrice ?? 0} />
+              <AddKokDialog game={game} kokTypes={kokTypes} defaultPrice={defaultPrice ?? 0} disabled={pending} />
             )}
             {kokTypes && players && defaultPrice !== undefined && (
               <EditGameSheet
@@ -240,6 +249,7 @@ export function GameCard({
                 kokTypes={kokTypes}
                 players={players}
                 defaultPrice={defaultPrice}
+                disabled={pending}
               />
             )}
             <button
@@ -247,7 +257,7 @@ export function GameCard({
               onClick={remove}
               disabled={pending}
               aria-label="Hapus game"
-              className="grid size-8 place-items-center rounded-lg text-ink-faint transition hover:bg-danger/10 hover:text-danger"
+              className="grid size-10 place-items-center rounded-lg text-ink-faint transition hover:bg-danger/10 hover:text-danger disabled:opacity-40"
             >
               <KIcon name="trash" className="size-4" />
             </button>
