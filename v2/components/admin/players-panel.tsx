@@ -142,7 +142,7 @@ function PlayerRowItem({ player }: { player: PlayerRow }) {
         className="grid size-9 shrink-0 place-items-center rounded-xl border border-line text-ink-faint hover:border-danger/50 hover:text-danger"
         aria-label={`Hapus pemain ${player.name}`}
       >
-        <KIcon name="trash" className="size-4" />
+        <KIcon name="accountRemove" className="size-4" />
       </button>
     </Card>
   );
