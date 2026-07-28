@@ -41,6 +41,8 @@ export interface SettlePlan {
   carryAfter: number | null;
   /** nominal yang dicatat di ledger payments. */
   paymentAmount: number;
+  /** true kalau setelah bayar ini semua tagihannya habis → dicatat sebagai "lunas". */
+  clearsDebt: boolean;
 }
 
 function unpaidRefs(games: StoredGame[], name: string) {
@@ -83,6 +85,8 @@ export function planInstallment(
     touched,
     carryAfter: credit > 0 ? credit : null,
     paymentAmount: amount,
+    // Cicilan yang menutup semua game tersisa dihitung lunas (sisa kredit jadi titipan).
+    clearsDebt: refs.length > 0 && touched.length === refs.length,
   };
 }
 
@@ -104,5 +108,6 @@ export function planSettle(games: StoredGame[], carry: CarryMap, name: string): 
     touched,
     carryAfter: null,
     paymentAmount: Math.max(0, settled - carryBefore),
+    clearsDebt: true,
   };
 }

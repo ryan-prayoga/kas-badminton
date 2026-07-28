@@ -48,16 +48,25 @@ async function applyTouchedTx(
   tx: Prisma.TransactionClient,
   games: StoredGame[],
   touched: { gameId: string; index: number }[],
+  at: Date,
+  by?: string,
 ): Promise<void> {
   const byGame = new Map<string, number[]>();
   for (const t of touched) {
     if (!byGame.has(t.gameId)) byGame.set(t.gameId, []);
     byGame.get(t.gameId)!.push(t.index);
   }
+  const stamp = at.toISOString();
   for (const [gameId, indexes] of byGame) {
     const game = games.find((g) => g.id === gameId);
     if (!game) continue;
-    for (const i of indexes) game.players[i].paid = true;
+    // Stempel waktu sama dengan entri ledger-nya biar jam di rekap == jam di history bayar.
+    for (const i of indexes) {
+      const p = game.players[i];
+      p.paid = true;
+      p.paidAt = stamp;
+      p.paidBy = by || undefined;
+    }
     await tx.games.update({
       where: { id: gameId },
       data: { players: game.players as unknown as JsonArray, updated_at: new Date() },
@@ -76,9 +85,17 @@ export async function payInstallment(name: string, amount: number, by?: string):
     const games = await loadGamesTx(tx);
     const carry = await loadCarryTx(tx);
     const plan = planInstallment(games, carry, n, amount);
-    await applyTouchedTx(tx, games, plan.touched);
+    const at = new Date();
+    await applyTouchedTx(tx, games, plan.touched, at, by);
     await writeCarryTx(tx, n, plan.carryAfter);
-    await recordPaymentTx(tx, { name: n, amount: plan.paymentAmount, type: "cicil", recordedBy: by });
+    await recordPaymentTx(tx, {
+      name: n,
+      amount: plan.paymentAmount,
+      // Cicilan yang menutup sisa tagihan tercatat "lunas" di history bayar.
+      type: plan.clearsDebt ? "lunas" : "cicil",
+      recordedBy: by,
+      at,
+    });
   });
 }
 
@@ -90,10 +107,17 @@ export async function settleAll(name: string, by?: string): Promise<void> {
     const games = await loadGamesTx(tx);
     const carry = await loadCarryTx(tx);
     const plan = planSettle(games, carry, n);
-    await applyTouchedTx(tx, games, plan.touched);
+    const at = new Date();
+    await applyTouchedTx(tx, games, plan.touched, at, by);
     await writeCarryTx(tx, n, null);
     if (plan.touched.length > 0) {
-      await recordPaymentTx(tx, { name: n, amount: plan.paymentAmount, type: "lunas", recordedBy: by });
+      await recordPaymentTx(tx, {
+        name: n,
+        amount: plan.paymentAmount,
+        type: "lunas",
+        recordedBy: by,
+        at,
+      });
     }
   });
 }
@@ -163,5 +187,17 @@ export async function updatePlayer(
         await tx.players.update({ where: { name: currentName }, data: { photo: input.photo } });
       }
     }
+  });
+}
+
+/** Hapus pemain dari daftar (foto+carry ikut hilang). Riwayat game/pembayaran tetap tersimpan apa adanya. */
+export async function deletePlayer(name: string): Promise<void> {
+  const n = normalizeName(name);
+  if (!n) throw new DomainError("Nama wajib diisi");
+  await prisma.$transaction(async (tx) => {
+    const player = await tx.players.findUnique({ where: { name: n } });
+    if (!player) throw new DomainError("Pemain tidak ditemukan", 404);
+    await tx.player_carry.deleteMany({ where: { name: n } });
+    await tx.players.delete({ where: { name: n } });
   });
 }

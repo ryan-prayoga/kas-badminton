@@ -20,7 +20,15 @@ function rowToPayment(r: PaymentRow): PaymentHistoryEntry {
 /** Catat satu event bayar dalam transaksi yang sama dengan mutasi paid-nya. */
 export async function recordPaymentTx(
   tx: Prisma.TransactionClient,
-  input: { name: string; amount: number; type: PaymentType; recordedBy?: string; gameId?: string },
+  input: {
+    name: string;
+    amount: number;
+    type: PaymentType;
+    recordedBy?: string;
+    gameId?: string;
+    /** Stempel waktu yang sama dengan `paidAt` pemain — biar jam di rekap & history identik. */
+    at?: Date;
+  },
 ): Promise<void> {
   await tx.payments.create({
     data: {
@@ -30,6 +38,7 @@ export async function recordPaymentTx(
       type: input.type,
       recorded_by: input.recordedBy || null,
       game_id: input.gameId || null,
+      created_at: input.at ?? new Date(),
     },
   });
 }

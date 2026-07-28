@@ -195,6 +195,7 @@ describe("planInstallment (greedy oldest-first)", () => {
     expect(plan.touched).toEqual([{ gameId: "old", index: 0 }]);
     expect(plan.carryAfter).toBe(1000);
     expect(plan.paymentAmount).toBe(4000);
+    expect(plan.clearsDebt).toBe(false);
   });
   it("carry lama ikut jadi kredit", () => {
     const plan = planInstallment(games, { A: 2000 }, "A", 4000); // 6000 → lunasi 2 game
@@ -203,6 +204,14 @@ describe("planInstallment (greedy oldest-first)", () => {
       { gameId: "new", index: 0 },
     ]);
     expect(plan.carryAfter).toBeNull();
+    // cicilan yang menutup semua tagihan → dicatat lunas
+    expect(plan.clearsDebt).toBe(true);
+  });
+  it("cicil tanpa tagihan tersisa cuma nambah titipan, bukan lunas", () => {
+    const plan = planInstallment([], {}, "A", 5000);
+    expect(plan.touched).toEqual([]);
+    expect(plan.carryAfter).toBe(5000);
+    expect(plan.clearsDebt).toBe(false);
   });
 });
 

@@ -3,7 +3,7 @@
 import { useEffect, useState, useTransition } from "react";
 import { toast } from "sonner";
 import type { EnrichedGame, KokType, PlayerRow } from "@/lib/domain/types";
-import { fmt, fmtDateTime, fmtPaidAt } from "@/lib/format";
+import { fmt, fmtDateTime } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { deleteGameAction, markAllPaidAction, setPaidAction } from "@/server/actions/games";
 import { useConfirm } from "@/components/confirm-dialog";
@@ -77,15 +77,11 @@ function CourtSide({
               name={isPaid ? "checkCircle" : "clock"}
               className="size-[15px] shrink-0"
             />
+            {/* Kapan-nya cukup di halaman History bayar — di sini nama saja (tooltip tetap bawa detail). */}
             <span className="flex min-w-0 flex-1 flex-col" title={title}>
               <span className="truncate text-sm font-semibold leading-tight text-ink">
                 {names[i] || "—"}
               </span>
-              {at && (
-                <span className="truncate text-[10px] font-medium leading-tight text-paid/80">
-                  {fmtPaidAt(at)}
-                </span>
-              )}
             </span>
           </Tag>
         );

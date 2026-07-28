@@ -113,7 +113,8 @@ export async function setPlayerPaid(
     const p = game.players[index];
     p.paid = paid;
     if (paid) {
-      p.paidAt = new Date().toISOString();
+      const at = new Date();
+      p.paidAt = at.toISOString();
       p.paidBy = by || undefined;
       await recordPaymentTx(tx, {
         name: p.name,
@@ -121,6 +122,7 @@ export async function setPlayerPaid(
         type: "lunas",
         recordedBy: by,
         gameId,
+        at,
       });
     } else {
       p.paidAt = undefined;
@@ -136,7 +138,8 @@ export async function setPlayerPaid(
 export async function setAllPaid(gameId: string, paid: boolean, by?: string): Promise<void> {
   await prisma.$transaction(async (tx) => {
     const game = await getGameTx(tx, gameId);
-    const stamp = new Date().toISOString();
+    const at = new Date();
+    const stamp = at.toISOString();
     const perPerson = gameCost(game).perPerson;
     const players: Player[] = [];
     for (const p of game.players) {
@@ -150,7 +153,14 @@ export async function setAllPaid(gameId: string, paid: boolean, by?: string): Pr
         continue;
       }
       players.push({ ...p, paid: true, paidAt: stamp, paidBy: by || undefined });
-      await recordPaymentTx(tx, { name: p.name, amount: perPerson, type: "lunas", recordedBy: by, gameId });
+      await recordPaymentTx(tx, {
+        name: p.name,
+        amount: perPerson,
+        type: "lunas",
+        recordedBy: by,
+        gameId,
+        at,
+      });
     }
     await tx.games.update({
       where: { id: gameId },

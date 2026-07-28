@@ -1,29 +1,37 @@
+"use client";
+
 // History bayar — riwayat kapan admin/operator nandain lunas (per game / lunasin semua) atau cicil.
 
+import { useMemo, useState } from "react";
 import type { PaymentHistoryEntry } from "@/lib/domain/types";
-import { fmt, fmtDateFull, fmtPaidAt, relativeDay, toLocalIso } from "@/lib/format";
+import { currentPeriodKey, fmt, fmtDateFull, fmtPaidAt, periodKey, toLocalIso } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { Avatar, type PhotoMap } from "@/components/kok/avatar";
 import { EmptyPanel } from "@/components/kok/empty-panel";
 import { KIcon } from "@/components/kok/icons";
+import { PeriodFilter } from "@/components/kok/period-filter";
 
 interface DayGroup {
   date: string;
   entries: PaymentHistoryEntry[];
+  total: number;
 }
 
 function groupByDay(entries: PaymentHistoryEntry[]): DayGroup[] {
-  const map = new Map<string, PaymentHistoryEntry[]>();
+  const map = new Map<string, DayGroup>();
   const order: string[] = [];
   for (const e of entries) {
     const day = toLocalIso(new Date(e.createdAt));
-    if (!map.has(day)) {
-      map.set(day, []);
+    let g = map.get(day);
+    if (!g) {
+      g = { date: day, entries: [], total: 0 };
+      map.set(day, g);
       order.push(day);
     }
-    map.get(day)!.push(e);
+    g.entries.push(e);
+    g.total += e.amount;
   }
-  return order.map((date) => ({ date, entries: map.get(date)! }));
+  return order.map((date) => map.get(date)!);
 }
 
 function EntryRow({ entry, photoMap }: { entry: PaymentHistoryEntry; photoMap: PhotoMap }) {
@@ -72,38 +80,92 @@ export function PaymentHistoryView({
   entries: PaymentHistoryEntry[];
   photoMap: PhotoMap;
 }) {
-  const groups = groupByDay(entries);
+  const periods = useMemo(() => {
+    const keys = new Set<string>();
+    for (const e of entries) {
+      const k = periodKey(toLocalIso(new Date(e.createdAt)));
+      if (k) keys.add(k);
+    }
+    return [...keys].sort().reverse();
+  }, [entries]);
+
+  const [period, setPeriod] = useState(() => {
+    const cur = currentPeriodKey();
+    return periods.includes(cur) ? cur : "all";
+  });
+  const [open, setOpen] = useState<Record<string, boolean>>({});
+
+  const filtered =
+    period === "all"
+      ? entries
+      : entries.filter((e) => periodKey(toLocalIso(new Date(e.createdAt))) === period);
+  const groups = groupByDay(filtered);
+  const isOpen = (date: string, i: number) => (date in open ? open[date] : i === 0);
 
   return (
     <section className="rounded-xl2 border border-line bg-surface p-4 shadow-card">
-      <div className="mb-3 flex items-center gap-2">
-        <span className="grid size-7 place-items-center rounded-lg bg-court/10 text-court">
-          <KIcon name="history" className="size-4" />
-        </span>
-        <h2 className="font-display text-base font-bold tracking-tight">History bayar</h2>
+      <div className="mb-3 flex items-center justify-between gap-2">
+        <div className="flex items-center gap-2">
+          <span className="grid size-7 place-items-center rounded-lg bg-court/10 text-court">
+            <KIcon name="history" className="size-4" />
+          </span>
+          <h2 className="font-display text-base font-bold tracking-tight">History bayar</h2>
+          <span className="tabular inline-flex items-center gap-1 rounded-full bg-court/10 px-2 py-0.5 text-[11px] font-bold text-court">
+            {filtered.length}
+          </span>
+        </div>
+        <PeriodFilter value={period} periods={periods} onChange={setPeriod} />
       </div>
 
-      {entries.length === 0 ? (
+      {groups.length === 0 ? (
         <EmptyPanel icon="history" text="Belum ada riwayat bayar" />
       ) : (
         <div className="flex flex-col gap-3">
-          {groups.map((g) => {
-            const rel = relativeDay(g.date);
+          {groups.map((g, i) => {
+            const opened = isOpen(g.date, i);
+            const panelId = `pay-${g.date}`;
             return (
-              <div key={g.date}>
-                <div className="mb-1.5 flex items-center gap-1.5 px-0.5 text-xs font-semibold text-ink-soft">
-                  <KIcon name="calendar" className="size-3.5 text-ink-faint" />
-                  <span>{fmtDateFull(g.date)}</span>
-                  {rel && (
-                    <span className="rounded-full bg-court/10 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-court">
-                      {rel}
-                    </span>
-                  )}
-                </div>
-                <div className="grid gap-px overflow-hidden rounded-xl border border-line">
-                  {g.entries.map((e) => (
-                    <EntryRow key={e.id} entry={e} photoMap={photoMap} />
-                  ))}
+              <div
+                key={g.date}
+                className="animate-rise overflow-hidden rounded-xl2 border border-line bg-surface-2/60"
+              >
+                <button
+                  type="button"
+                  onClick={() => setOpen((s) => ({ ...s, [g.date]: !opened }))}
+                  aria-expanded={opened}
+                  aria-controls={panelId}
+                  className="flex w-full select-none items-center justify-between gap-2 p-3.5 text-left"
+                >
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-1.5 font-display font-bold text-ink">
+                      <KIcon name="calendar" className="size-4 shrink-0 text-ink-faint" />
+                      <span className="truncate">{fmtDateFull(g.date)}</span>
+                    </div>
+                    <div className="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-ink-soft">
+                      <span className="inline-flex items-center gap-1">
+                        <KIcon name="cash" className="size-3.5" /> {g.entries.length} transaksi
+                      </span>
+                    </div>
+                  </div>
+                  <div className="flex shrink-0 items-center gap-1.5">
+                    <span className="tabular font-mono text-sm font-bold text-paid">{fmt(g.total)}</span>
+                    <KIcon
+                      name="chevronDown"
+                      className={cn(
+                        "size-5 shrink-0 text-ink-faint transition-transform duration-200",
+                        opened && "rotate-180",
+                      )}
+                    />
+                  </div>
+                </button>
+                <div className="acc-panel" data-open={opened} id={panelId}>
+                  <div className="acc-inner">
+                    <div className="grid gap-px overflow-hidden border-t border-line">
+                      {g.entries.map((e) => (
+                        <EntryRow key={e.id} entry={e} photoMap={photoMap} />
+                      ))}
+                    </div>
+                  </div>
                 </div>
               </div>
             );
