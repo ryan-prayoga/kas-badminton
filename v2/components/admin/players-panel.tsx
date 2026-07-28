@@ -4,7 +4,7 @@ import { useRef, useState, useTransition } from "react";
 import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import type { PlayerRow } from "@/lib/domain/types";
-import { updatePlayerAction } from "@/server/actions/players";
+import { deletePlayerAction, updatePlayerAction } from "@/server/actions/players";
 import { useConfirm } from "@/components/confirm-dialog";
 import { Avatar } from "@/components/kok/avatar";
 import { KIcon } from "@/components/kok/icons";
@@ -66,6 +66,20 @@ function PlayerRowItem({ player }: { player: PlayerRow }) {
     });
   };
 
+  const removePlayer = async () => {
+    const ok = await confirm({
+      title: "Hapus pemain?",
+      message: `${player.name} akan dihapus dari daftar pemain. Riwayat game & pembayaran yang sudah ada tetap tersimpan.`,
+      confirmLabel: "Ya, hapus",
+    });
+    if (!ok) return;
+    start(async () => {
+      const res = await deletePlayerAction(player.name);
+      if (res.ok) toast.success("Pemain dihapus");
+      else toast.error(res.error);
+    });
+  };
+
   return (
     <Card className="flex-row items-center gap-3 p-3">
       <button
@@ -120,6 +134,16 @@ function PlayerRowItem({ player }: { player: PlayerRow }) {
           <KIcon name="trash" className="size-4" />
         </button>
       ) : null}
+
+      <button
+        type="button"
+        onClick={removePlayer}
+        disabled={pending}
+        className="grid size-9 shrink-0 place-items-center rounded-xl border border-line text-ink-faint hover:border-danger/50 hover:text-danger"
+        aria-label={`Hapus pemain ${player.name}`}
+      >
+        <KIcon name="trash" className="size-4" />
+      </button>
     </Card>
   );
 }

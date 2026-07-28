@@ -2,7 +2,7 @@
 
 import { mutate, type ActionResult } from "@/lib/action-util";
 import { recordedByFor, requireAdmin } from "@/lib/auth";
-import { payInstallment, settleAll, updatePlayer } from "@/lib/repo/players";
+import { deletePlayer, payInstallment, settleAll, updatePlayer } from "@/lib/repo/players";
 
 export async function payInstallmentAction(name: string, amount: number): Promise<ActionResult> {
   return mutate(async () => {
@@ -25,5 +25,12 @@ export async function updatePlayerAction(
   return mutate(async () => {
     await requireAdmin();
     await updatePlayer(originalName, input);
+  });
+}
+
+export async function deletePlayerAction(name: string): Promise<ActionResult> {
+  return mutate(async () => {
+    await requireAdmin();
+    await deletePlayer(name);
   });
 }
