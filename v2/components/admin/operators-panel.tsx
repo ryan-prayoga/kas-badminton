@@ -22,6 +22,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { safeAction } from "@/lib/action-result";
 
 const DURATIONS = [
   { value: "1h", label: "1 jam" },
@@ -92,7 +93,7 @@ export function OperatorsPanel({
         toast.error("Isi tanggal kadaluarsa");
         return;
       }
-      const res = await createOperatorAction({ name, expiresAt });
+      const res = await safeAction(() => createOperatorAction({ name, expiresAt }));
       if (res.ok) {
         setPin(res.data.pin);
         setName("");
@@ -113,7 +114,7 @@ export function OperatorsPanel({
     if (!ok) return;
     setBusyId(id);
     try {
-      const res = await revokeOperatorAction(id);
+      const res = await safeAction(() => revokeOperatorAction(id));
       if (res.ok) toast.success("Delegasi dicabut");
       else toast.error(res.error);
     } finally {

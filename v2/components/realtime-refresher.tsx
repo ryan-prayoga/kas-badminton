@@ -21,6 +21,7 @@ export function RealtimeRefresher() {
     let es: EventSource | null = null;
     let stopped = false;
     let debounce: ReturnType<typeof setTimeout> | null = null;
+    let retry: ReturnType<typeof setTimeout> | null = null;
     let loggingOut = false;
 
     const handleSessionInvalid = () => {
@@ -52,7 +53,7 @@ export function RealtimeRefresher() {
     };
 
     const connect = () => {
-      if (stopped) return;
+      if (stopped || es) return;
       es = new EventSource("/api/events");
 
       es.addEventListener("session", (ev) => {
@@ -68,14 +69,33 @@ export function RealtimeRefresher() {
       es.onerror = () => {
         es?.close();
         es = null;
-        if (!stopped) setTimeout(connect, 3000);
+        if (retry) clearTimeout(retry);
+        if (!stopped) retry = setTimeout(connect, 3000);
       };
     };
     connect();
 
+    /* iOS bekuin webview app standalone pas di-background. Balik ke foreground,
+       EventSource sering "hidup" tapi mati diam-diam — `onerror` gak pernah
+       nembak, jadi tanpa ini app nampak normal tapi datanya beku selamanya.
+       Tiap balik visible: putus paksa, sambung ulang, tarik data terbaru. */
+    const onVisible = () => {
+      if (stopped || document.visibilityState !== "visible") return;
+      if (retry) clearTimeout(retry);
+      es?.close();
+      es = null;
+      connect();
+      router.refresh();
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    window.addEventListener("pageshow", onVisible);
+
     return () => {
       stopped = true;
+      document.removeEventListener("visibilitychange", onVisible);
+      window.removeEventListener("pageshow", onVisible);
       if (debounce) clearTimeout(debounce);
+      if (retry) clearTimeout(retry);
       es?.close();
     };
   }, [router]);

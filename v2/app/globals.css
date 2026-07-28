@@ -175,6 +175,9 @@
   }
   html {
     -webkit-text-size-adjust: 100%;
+    /* iOS: kotak abu-abu yang muncul sepersekian detik tiap tap link/tombol —
+       paling kelihatan "web" pas app dipasang di home screen. */
+    -webkit-tap-highlight-color: transparent;
     /* Safari nolak `overscroll-behavior` di ROOT scroller (html/body) — bounce
        rubber-band tetap jalan native meski di-`none`-in, dan pas mantul situ
        Safari nyeret elemen `position: fixed` (bottom nav) ikut naik ke tengah
@@ -202,6 +205,35 @@
   input[type="number"],
   input[type="text"] {
     color-scheme: inherit;
+  }
+
+  /* ── Rasa native di iOS standalone ──
+     `manipulation`: matiin double-tap-to-zoom (pinch tetap jalan) biar tap
+     kedua yang cepat gak ketahan ~300ms.
+     `-webkit-touch-callout`/`user-select`: tahan-lama di tombol/link gak lagi
+     munculin menu share/copy iOS atau nyeleksi label. Teks konten (nominal,
+     nama) sengaja dibiarkan bisa diseleksi. */
+  a,
+  button,
+  label,
+  summary,
+  select,
+  [role="button"],
+  [role="tab"],
+  [role="switch"] {
+    touch-action: manipulation;
+    -webkit-touch-callout: none;
+    -webkit-user-select: none;
+    user-select: none;
+  }
+  img,
+  svg {
+    -webkit-user-drag: none;
+  }
+  /* Scroll di sheet/dialog mentok → jangan nyeret scroller di belakangnya */
+  [data-slot="sheet-content"],
+  [data-slot="dialog-content"] {
+    overscroll-behavior: contain;
   }
 }
 

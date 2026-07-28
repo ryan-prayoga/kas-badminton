@@ -9,6 +9,7 @@ import {
   setSessionAlive,
   subscribeSessionAlive,
 } from "@/lib/session-alive";
+import { safeAction } from "@/lib/action-result";
 import { logout } from "@/server/actions/auth";
 import { KIcon } from "@/components/kok/icons";
 
@@ -38,7 +39,7 @@ export function SessionBadge({ role, name }: { role: "admin" | "operator" | null
   const doLogout = () =>
     startTransition(async () => {
       setSessionAlive(false);
-      await logout();
+      await safeAction(() => logout());
       setNavMode("admin"); // reset preferensi
       // Langsung ke halaman publik, bukan lockscreen PIN
       router.push("/");

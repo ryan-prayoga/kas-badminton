@@ -3,9 +3,8 @@ import { revalidatePath } from "next/cache";
 import { DomainError } from "@/lib/domain/errors";
 import { publish } from "@/lib/realtime";
 
-export type ActionResult<T = void> =
-  | { ok: true; data: T }
-  | { ok: false; error: string; status: number };
+export type { ActionResult } from "@/lib/action-result";
+import type { ActionResult } from "@/lib/action-result";
 
 /** Jalankan fn, map DomainError → hasil error. Tidak ada side-effect. */
 export async function run<T>(fn: () => Promise<T>): Promise<ActionResult<T>> {

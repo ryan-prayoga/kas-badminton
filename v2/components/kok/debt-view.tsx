@@ -13,6 +13,7 @@ import { EmptyPanel } from "@/components/kok/empty-panel";
 import { ShareChoiceDialog } from "@/components/kok/share-choice";
 import { KIcon } from "@/components/kok/icons";
 import { QrisDialog } from "@/components/qris-dialog";
+import { safeAction } from "@/lib/action-result";
 
 interface DateGroup {
   date: string;
@@ -265,7 +266,7 @@ function DebtCard({
     });
     if (!ok) return;
     start(async () => {
-      const res = await settleAllAction(d.name);
+      const res = await safeAction(() => settleAllAction(d.name));
       if (res.ok) toast.success(`${d.name} lunas`);
       else toast.error(res.error);
     });
@@ -276,7 +277,7 @@ function DebtCard({
     if (!Number.isInteger(amt) || amt <= 0) return toast.error("Nominal harus lebih dari 0");
     if (amt > d.total) return toast.error(`Nominal melebihi sisa tagihan (${fmt(d.total)})`);
     start(async () => {
-      const res = await payInstallmentAction(d.name, amt);
+      const res = await safeAction(() => payInstallmentAction(d.name, amt));
       if (res.ok) {
         toast.success(`Cicilan ${d.name} tercatat`);
         setCicil(false);

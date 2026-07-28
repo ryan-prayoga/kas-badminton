@@ -29,6 +29,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { KIcon } from "@/components/kok/icons";
+import { safeAction } from "@/lib/action-result";
 
 function BuyDialog({ type }: { type: KokType }) {
   const router = useRouter();
@@ -56,7 +57,9 @@ function BuyDialog({ type }: { type: KokType }) {
         toast.error("Jumlah slop harus > 0");
         return;
       }
-      const res = await buyStockAction(type.id, slopN, price ? priceN : undefined);
+      const res = await safeAction(() =>
+        buyStockAction(type.id, slopN, price ? priceN : undefined),
+      );
       if (res.ok) {
         const effPrice = price ? priceN : Number(type.pricePerSlop) || 0;
         toast.success(
@@ -147,11 +150,13 @@ function EditDialog({ type }: { type: KokType }) {
         toast.error("Harga/org harus lebih dari 0");
         return;
       }
-      const res = await patchKokTypeAction(type.id, {
-        name: nm,
-        pricePerPerson: p,
-        pricePerSlop: Number(slop) || 0,
-      });
+      const res = await safeAction(() =>
+        patchKokTypeAction(type.id, {
+          name: nm,
+          pricePerPerson: p,
+          pricePerSlop: Number(slop) || 0,
+        }),
+      );
       if (res.ok) {
         toast.success("Jenis kok diperbarui");
         setOpen(false);
@@ -223,7 +228,7 @@ function TypeRow({ type }: { type: KokType }) {
     });
     if (!ok) return;
     startTransition(async () => {
-      const res = await deleteKokTypeAction(type.id);
+      const res = await safeAction(() => deleteKokTypeAction(type.id));
       if (res.ok) {
         toast.success("Jenis kok dihapus");
         router.refresh();
@@ -233,7 +238,7 @@ function TypeRow({ type }: { type: KokType }) {
 
   const tweak = (delta: number) =>
     startTransition(async () => {
-      const res = await adjustStockAction(type.id, delta);
+      const res = await safeAction(() => adjustStockAction(type.id, delta));
       if (res.ok) {
         toast.success(delta > 0 ? `Stok +${delta}` : `Stok ${delta}`);
         router.refresh();
@@ -310,12 +315,14 @@ export function KokTypesPanel({ kokTypes }: { kokTypes: KokType[] }) {
 
   const add = () =>
     startTransition(async () => {
-      const res = await createKokTypeAction({
-        name,
-        pricePerPerson: Number(price),
-        pricePerSlop: slopN,
-        stock: stockN,
-      });
+      const res = await safeAction(() =>
+        createKokTypeAction({
+          name,
+          pricePerPerson: Number(price),
+          pricePerSlop: slopN,
+          stock: stockN,
+        }),
+      );
       if (res.ok) {
         toast.success(
           expense > 0

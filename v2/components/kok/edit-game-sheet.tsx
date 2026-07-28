@@ -20,6 +20,7 @@ import {
   SheetTitle,
   SheetTrigger,
 } from "@/components/ui/sheet";
+import { safeAction } from "@/lib/action-result";
 
 interface KokRow {
   id?: string;
@@ -91,16 +92,18 @@ export function EditGameSheet({
     if (new Set(lower).size !== lower.length) return toast.error("Nama pemain tidak boleh sama");
     if (koks.length === 0) return toast.error("Minimal 1 kok");
     start(async () => {
-      const res = await updateGameAction(game.id, {
-        pairs: { a: [names[0], names[1]], b: [names[2], names[3]] },
-        date,
-        notes: notes.trim(),
-        koks: koks.map((k) => ({
-          id: k.id,
-          typeId: k.typeId || null,
-          pricePerPerson: kokPrice(k),
-        })),
-      });
+      const res = await safeAction(() =>
+        updateGameAction(game.id, {
+          pairs: { a: [names[0], names[1]], b: [names[2], names[3]] },
+          date,
+          notes: notes.trim(),
+          koks: koks.map((k) => ({
+            id: k.id,
+            typeId: k.typeId || null,
+            pricePerPerson: kokPrice(k),
+          })),
+        }),
+      );
       if (res.ok) {
         toast.success("Game diperbarui");
         setOpen(false);

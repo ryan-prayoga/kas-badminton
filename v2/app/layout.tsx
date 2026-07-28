@@ -8,6 +8,9 @@ import { RealtimeRefresher } from "@/components/realtime-refresher";
 import { SessionGuard } from "@/components/session-guard";
 import { ScrollContainer } from "@/components/scroll-container";
 import { BottomNav } from "@/components/kok/bottom-nav";
+import { ServiceWorkerRegister } from "@/components/pwa/service-worker";
+import { ThemeColorSync } from "@/components/pwa/theme-color-sync";
+import { ViewportGuard } from "@/components/pwa/viewport-guard";
 import { getData } from "@/lib/data";
 
 const archivo = Archivo({ variable: "--font-archivo", subsets: ["latin"], weight: ["600", "700", "800"] });
@@ -29,6 +32,14 @@ export const metadata: Metadata = {
     capable: true,
     title: "Kok Badminton",
     statusBarStyle: "default",
+  },
+  // iOS gemar bikin angka (nominal Rp, tanggal) jadi link telepon/kalender
+  formatDetection: { telephone: false, date: false, address: false, email: false },
+  other: {
+    // `appleWebApp.capable` di Next 16 cuma nulis `mobile-web-app-capable`, yang
+    // baru dimengerti Safari 17.4+. iOS di bawah itu butuh nama lamanya, kalau
+    // gak app dari home screen kebuka dengan chrome Safari — bukan standalone.
+    "apple-mobile-web-app-capable": "yes",
   },
 };
 
@@ -73,6 +84,9 @@ export default async function RootLayout({ children }: Readonly<{ children: Reac
             </SessionGuard>
             <Toaster position="top-center" richColors />
             <RealtimeRefresher />
+            <ThemeColorSync />
+            <ViewportGuard />
+            <ServiceWorkerRegister />
           </ConfirmProvider>
         </ThemeProvider>
       </body>

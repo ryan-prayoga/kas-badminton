@@ -9,6 +9,7 @@ import { updateSettingsAction } from "@/server/actions/settings";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { KIcon } from "@/components/kok/icons";
+import { safeAction } from "@/lib/action-result";
 
 async function decodeQrisFromFile(file: File): Promise<string> {
   const dataUrl = await new Promise<string>((resolve, reject) => {
@@ -121,7 +122,7 @@ export function SettingsPanel({ merchantQris }: { merchantQris: string }) {
 
   const save = () =>
     startTransition(async () => {
-      const res = await updateSettingsAction({ merchantQris: qris.trim() });
+      const res = await safeAction(() => updateSettingsAction({ merchantQris: qris.trim() }));
       if (res.ok) {
         setDirty(false);
         toast.success("Pengaturan disimpan");

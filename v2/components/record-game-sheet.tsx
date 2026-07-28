@@ -30,6 +30,7 @@ import {
   SheetTitle,
   SheetTrigger,
 } from "@/components/ui/sheet";
+import { safeAction } from "@/lib/action-result";
 
 const CUSTOM = "__custom__";
 
@@ -183,12 +184,14 @@ export function RecordGameSheet({
     }
 
     startTransition(async () => {
-      const res = await createGameAction({
-        pairs: { a: [names[0], names[1]], b: [names[2], names[3]] },
-        koks,
-        date,
-        notes: notes.trim() || undefined,
-      });
+      const res = await safeAction(() =>
+        createGameAction({
+          pairs: { a: [names[0], names[1]], b: [names[2], names[3]] },
+          koks,
+          date,
+          notes: notes.trim() || undefined,
+        }),
+      );
       if (res.ok) {
         toast.success("Game dicatat");
         setOpen(false);

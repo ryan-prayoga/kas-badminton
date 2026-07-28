@@ -10,6 +10,7 @@ import { Avatar } from "@/components/kok/avatar";
 import { KIcon } from "@/components/kok/icons";
 import { Card } from "@/components/ui/card";
 import { compressPhoto, ImageCompressError } from "@/lib/image-compress";
+import { safeAction } from "@/lib/action-result";
 
 function PlayerRowItem({ player }: { player: PlayerRow }) {
   const confirm = useConfirm();
@@ -23,7 +24,7 @@ function PlayerRowItem({ player }: { player: PlayerRow }) {
     const n = name.trim();
     if (!n || n === player.name) return;
     start(async () => {
-      const res = await updatePlayerAction(player.name, { name: n });
+      const res = await safeAction(() => updatePlayerAction(player.name, { name: n }));
       if (res.ok) toast.success("Nama diperbarui");
       else toast.error(res.error);
     });
@@ -46,7 +47,7 @@ function PlayerRowItem({ player }: { player: PlayerRow }) {
       if (fileRef.current) fileRef.current.value = "";
     }
     start(async () => {
-      const res = await updatePlayerAction(player.name, { photo: dataUrl });
+      const res = await safeAction(() => updatePlayerAction(player.name, { photo: dataUrl }));
       if (res.ok) toast.success("Foto diperbarui");
       else toast.error(res.error);
     });
@@ -60,7 +61,7 @@ function PlayerRowItem({ player }: { player: PlayerRow }) {
     });
     if (!ok) return;
     start(async () => {
-      const res = await updatePlayerAction(player.name, { photo: null });
+      const res = await safeAction(() => updatePlayerAction(player.name, { photo: null }));
       if (res.ok) toast.success("Foto dihapus");
       else toast.error(res.error);
     });
@@ -74,7 +75,7 @@ function PlayerRowItem({ player }: { player: PlayerRow }) {
     });
     if (!ok) return;
     start(async () => {
-      const res = await deletePlayerAction(player.name);
+      const res = await safeAction(() => deletePlayerAction(player.name));
       if (res.ok) toast.success("Pemain dihapus");
       else toast.error(res.error);
     });

@@ -8,6 +8,7 @@ import { setSessionAlive } from "@/lib/session-alive";
 import { login } from "@/server/actions/auth";
 import { KIcon } from "@/components/kok/icons";
 import { cn } from "@/lib/utils";
+import { safeAction } from "@/lib/action-result";
 
 const LEN = 6;
 
@@ -42,7 +43,7 @@ export function Lockscreen() {
   const submit = useCallback(
     (pin: string) => {
       startTransition(async () => {
-        const res = await login(pin);
+        const res = await safeAction(() => login(pin));
         if (res.ok) {
           setSessionAlive(true);
           router.refresh();

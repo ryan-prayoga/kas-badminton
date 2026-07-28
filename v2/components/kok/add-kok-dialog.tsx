@@ -22,6 +22,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
+import { safeAction } from "@/lib/action-result";
 
 const CUSTOM = "__custom__";
 
@@ -125,7 +126,9 @@ export function AddKokDialog({
     });
 
     start(async () => {
-      const res = await updateGameAction(game.id, { koks: [...existing, ...added] });
+      const res = await safeAction(() =>
+        updateGameAction(game.id, { koks: [...existing, ...added] }),
+      );
       if (res.ok) {
         toast.success(totalNew > 1 ? `${totalNew} kok ditambah` : "Kok ditambah");
         setOpen(false);

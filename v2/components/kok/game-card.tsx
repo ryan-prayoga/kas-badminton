@@ -11,6 +11,7 @@ import type { PhotoMap } from "@/components/kok/avatar";
 import { KIcon } from "@/components/kok/icons";
 import { AddKokDialog } from "@/components/kok/add-kok-dialog";
 import { EditGameSheet } from "@/components/kok/edit-game-sheet";
+import { safeAction } from "@/lib/action-result";
 
 function kokSummaryLabel(g: EnrichedGame): string {
   const names: string[] = [];
@@ -138,7 +139,7 @@ export function GameCard({
     next[index] = !next[index];
     setPaid(next); // optimistic
     start(async () => {
-      const res = await setPaidAction(game.id, index, next[index]);
+      const res = await safeAction(() => setPaidAction(game.id, index, next[index]));
       if (!res.ok) {
         setPaid(game.players.map((p) => p.paid));
         toast.error(res.error);
@@ -156,7 +157,7 @@ export function GameCard({
     if (!ok) return;
     start(async () => {
       setPaid(paid.map(() => true));
-      const res = await markAllPaidAction(game.id, true);
+      const res = await safeAction(() => markAllPaidAction(game.id, true));
       if (res.ok) toast.success("Ditandai lunas semua");
       else {
         setPaid(game.players.map((p) => p.paid));
@@ -173,7 +174,7 @@ export function GameCard({
     });
     if (!ok) return;
     start(async () => {
-      const res = await deleteGameAction(game.id);
+      const res = await safeAction(() => deleteGameAction(game.id));
       if (res.ok) toast.success("Game dihapus");
       else toast.error(res.error);
     });
@@ -183,7 +184,9 @@ export function GameCard({
     <div
       className={cn(
         // border di dalam box-model (bukan ring) biar gak kepotong overflow parent
-        "rounded-xl2 border border-line bg-surface p-3 shadow-card",
+        // min-w-0: kartu ini item grid; tanpa ini `min-width: auto` bikin dia melar
+        // ke min-content (363px) dan kepotong di layar 375px (iPhone SE/mini)
+        "min-w-0 rounded-xl2 border border-line bg-surface p-3 shadow-card",
         flash && "flash-update",
         pending && "opacity-80",
       )}
