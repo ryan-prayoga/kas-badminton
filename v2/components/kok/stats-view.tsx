@@ -326,9 +326,9 @@ export function StatsView({
   const kasNet = paidIn - expenseIn;
   const stockLeft = kokTypes.reduce((s, t) => s + Math.max(0, Number(t.stock) || 0), 0);
   const typesWithStock = kokTypes.filter((t) => (Number(t.stock) || 0) > 0).length;
-  // stock dalam satuan kok (pcs) — nilai jual pakai pricePerPerson per kok
+  // stock dalam satuan kok (pcs) — nilai jual = pricePerPerson x 4 pemain per kok
   const stockValue = kokTypes.reduce(
-    (s, t) => s + Math.max(0, Number(t.stock) || 0) * (Number(t.pricePerPerson) || 0),
+    (s, t) => s + Math.max(0, Number(t.stock) || 0) * (Number(t.pricePerPerson) || 0) * 4,
     0,
   );
 
