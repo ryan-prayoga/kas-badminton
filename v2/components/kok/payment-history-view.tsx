@@ -53,8 +53,10 @@ function EntryRow({ entry, photoMap }: { entry: PaymentHistoryEntry; photoMap: P
     <div className="flex items-center gap-2.5 bg-surface px-3 py-2.5 odd:bg-surface-2">
       <Avatar name={entry.name} photo={photoMap[entry.name]} size="size-8" tone={tone} />
       <div className="min-w-0 flex-1">
-        <div className="flex items-center gap-1.5">
-          <span className="min-w-0 flex-1 truncate text-sm font-semibold text-ink">{entry.name}</span>
+        <span className="block truncate text-sm font-semibold text-ink">{entry.name}</span>
+        {/* Badge pindah ke baris meta (bukan sebaris sama nama) — nama panjang (cth. keterangan
+            penyesuaian saldo) gak lagi ngedorong badge/jumlah keluar layar di mobile. */}
+        <div className="mt-0.5 flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-[11px] text-ink-faint">
           <span
             className={cn(
               "shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide",
@@ -63,8 +65,7 @@ function EntryRow({ entry, photoMap }: { entry: PaymentHistoryEntry; photoMap: P
           >
             {label}
           </span>
-        </div>
-        <div className="mt-0.5 flex items-center gap-1.5 text-[11px] text-ink-faint">
+          <span aria-hidden>·</span>
           <span>{fmtPaidAt(entry.createdAt)}</span>
           {entry.recordedBy && (
             <>
