@@ -326,6 +326,11 @@ export function StatsView({
   const kasNet = paidIn - expenseIn;
   const stockLeft = kokTypes.reduce((s, t) => s + Math.max(0, Number(t.stock) || 0), 0);
   const typesWithStock = kokTypes.filter((t) => (Number(t.stock) || 0) > 0).length;
+  // stock dalam satuan kok (pcs) — nilai jual pakai pricePerPerson per kok
+  const stockValue = kokTypes.reduce(
+    (s, t) => s + Math.max(0, Number(t.stock) || 0) * (Number(t.pricePerPerson) || 0),
+    0,
+  );
 
   // Samakan dengan Rekap: total & jumlah orang belum bayar selalu dari debtSummary
   // (sudah dipotong cicilan), bukan dihitung ulang per periode.
@@ -482,6 +487,20 @@ export function StatsView({
           valueClass={stockLeft > 0 ? "" : "text-danger"}
           sub={stockLeft > 0 ? `${typesWithStock} jenis tersedia` : "stok habis"}
         />
+        {kas &&
+          (() => {
+            const totalUntung = kas.net + totalDebt + stockValue;
+            return (
+              <StatCard
+                icon="cash"
+                iconClass={totalUntung >= 0 ? "text-paid" : "text-danger"}
+                label="Total untung selama ini"
+                value={fmt(totalUntung)}
+                valueClass={totalUntung >= 0 ? "text-paid" : "text-danger"}
+                sub={`kas ${fmt(kas.net)} + piutang ${fmt(totalDebt)} + stok ${fmt(stockValue)}`}
+              />
+            );
+          })()}
       </div>
 
       <div className="rounded-xl2 border border-line bg-surface p-4 shadow-card">
