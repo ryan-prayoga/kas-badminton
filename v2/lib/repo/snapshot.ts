@@ -24,8 +24,9 @@ export async function loadSnapshot(): Promise<DbSnapshot> {
     .map(rowToKokType)
     .sort((a, b) => a.name.toLowerCase().localeCompare(b.name.toLowerCase()));
 
+  // Amount bisa negatif (penyesuaian saldo "kas masuk") — jangan di-clamp, biar net-nya bener.
   const expenses = expenseRows.map((r) => ({
-    amount: Math.max(0, Math.round(Number(r.amount) || 0)),
+    amount: Math.round(Number(r.amount) || 0),
     createdAt: r.created_at.toISOString(),
   }));
   const totalExpense = expenses.reduce((s, e) => s + e.amount, 0);

@@ -100,8 +100,9 @@ export interface PaymentHistoryEntry {
   createdAt: string;
 }
 
-/** Pengeluaran kas (beli stok), untuk filter per-periode di statistik. */
+/** Pengeluaran kas (beli stok / penyesuaian saldo), untuk filter per-periode di statistik. */
 export interface ExpenseRow {
+  /** Positif = kas keluar, negatif = kas masuk (penyesuaian saldo). */
   amount: number;
   /** ISO datetime created_at */
   createdAt: string;

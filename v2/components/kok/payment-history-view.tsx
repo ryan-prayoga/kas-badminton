@@ -54,7 +54,7 @@ function EntryRow({ entry, photoMap }: { entry: PaymentHistoryEntry; photoMap: P
       <Avatar name={entry.name} photo={photoMap[entry.name]} size="size-8" tone={tone} />
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-1.5">
-          <span className="truncate text-sm font-semibold text-ink">{entry.name}</span>
+          <span className="min-w-0 flex-1 truncate text-sm font-semibold text-ink">{entry.name}</span>
           <span
             className={cn(
               "shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide",

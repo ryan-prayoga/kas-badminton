@@ -45,7 +45,8 @@ export function summarize(db: DbSnapshot, isAdmin: boolean): SummaryPayload {
 
   if (isAdmin) {
     const paid = games.reduce((s, g) => s + g.summary.paidTotal, 0);
-    const expense = Math.max(0, Number(db.totalExpense) || 0);
+    // Bisa negatif kalau penyesuaian "kas masuk" > total keluar — net tetap harus bener.
+    const expense = Number(db.totalExpense) || 0;
     payload.kas = { paid, expense, net: paid - expense };
     payload.expenses = db.expenses ?? [];
   }
