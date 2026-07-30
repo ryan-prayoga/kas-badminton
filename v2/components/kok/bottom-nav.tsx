@@ -44,11 +44,11 @@ function buildItems(adminChrome: boolean, role: Role): NavItem[] {
     },
   ];
 
-  // History bayar: nav sendiri di chrome publik; admin akses lewat menu Lainnya.
+  // Riwayat transaksi: nav sendiri di chrome publik; admin akses lewat menu Lainnya.
   if (!adminChrome) {
     items.push({
       href: "/riwayat-bayar",
-      label: "Bayar",
+      label: "Transaksi",
       icon: "cash",
       match: (p) => p.startsWith("/riwayat-bayar"),
     });

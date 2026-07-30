@@ -78,7 +78,7 @@ function CourtSide({
               name={isPaid ? "checkCircle" : "clock"}
               className="size-[15px] shrink-0"
             />
-            {/* Kapan-nya cukup di halaman History bayar — di sini nama saja (tooltip tetap bawa detail). */}
+            {/* Kapan-nya cukup di halaman Riwayat transaksi — di sini nama saja (tooltip tetap bawa detail). */}
             <span className="flex min-w-0 flex-1 flex-col" title={title}>
               <span className="truncate text-sm font-semibold leading-tight text-ink">
                 {names[i] || "—"}

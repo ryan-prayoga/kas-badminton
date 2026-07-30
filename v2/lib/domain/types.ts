@@ -87,9 +87,9 @@ export interface DebtEntry {
 
 export type CarryMap = Record<string, number>;
 
-export type PaymentType = "lunas" | "cicil";
+export type PaymentType = "lunas" | "cicil" | "saldo_masuk" | "saldo_keluar";
 
-/** Satu event bayar: tandai lunas (per game) atau cicil (dari halaman kas). */
+/** Satu event bayar (lunas/cicil) atau penyesuaian saldo (saldo_masuk/saldo_keluar) — satu ledger di riwayat transaksi. */
 export interface PaymentHistoryEntry {
   id: string;
   name: string;

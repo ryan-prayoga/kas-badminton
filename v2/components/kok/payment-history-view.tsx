@@ -1,6 +1,6 @@
 "use client";
 
-// History bayar — riwayat kapan admin/operator nandain lunas (per game / lunasin semua) atau cicil.
+// Riwayat transaksi — kapan admin/operator nandain lunas/cicil, plus penyesuaian saldo kas.
 
 import { useMemo, useState } from "react";
 import type { PaymentHistoryEntry } from "@/lib/domain/types";
@@ -17,6 +17,11 @@ interface DayGroup {
   total: number;
 }
 
+/** Kas keluar (penyesuaian) mengurangi net; sisanya (lunas/cicil/kas masuk) menambah. */
+function signedAmount(e: PaymentHistoryEntry): number {
+  return e.type === "saldo_keluar" ? -e.amount : e.amount;
+}
+
 function groupByDay(entries: PaymentHistoryEntry[]): DayGroup[] {
   const map = new Map<string, DayGroup>();
   const order: string[] = [];
@@ -29,26 +34,34 @@ function groupByDay(entries: PaymentHistoryEntry[]): DayGroup[] {
       order.push(day);
     }
     g.entries.push(e);
-    g.total += e.amount;
+    g.total += signedAmount(e);
   }
   return order.map((date) => map.get(date)!);
 }
 
+const ENTRY_META: Record<PaymentHistoryEntry["type"], { label: string; tone: "paid" | "owe" }> = {
+  lunas: { label: "Lunas", tone: "paid" },
+  cicil: { label: "Cicil", tone: "owe" },
+  saldo_masuk: { label: "Kas masuk", tone: "paid" },
+  saldo_keluar: { label: "Kas keluar", tone: "owe" },
+};
+
 function EntryRow({ entry, photoMap }: { entry: PaymentHistoryEntry; photoMap: PhotoMap }) {
-  const isLunas = entry.type === "lunas";
+  const { label, tone } = ENTRY_META[entry.type];
+  const isPaidTone = tone === "paid";
   return (
     <div className="flex items-center gap-2.5 bg-surface px-3 py-2.5 odd:bg-surface-2">
-      <Avatar name={entry.name} photo={photoMap[entry.name]} size="size-8" tone={isLunas ? "paid" : "owe"} />
+      <Avatar name={entry.name} photo={photoMap[entry.name]} size="size-8" tone={tone} />
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-1.5">
           <span className="truncate text-sm font-semibold text-ink">{entry.name}</span>
           <span
             className={cn(
               "shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide",
-              isLunas ? "bg-paid/12 text-paid" : "bg-owe/12 text-owe",
+              isPaidTone ? "bg-paid/12 text-paid" : "bg-owe/12 text-owe",
             )}
           >
-            {isLunas ? "Lunas" : "Cicil"}
+            {label}
           </span>
         </div>
         <div className="mt-0.5 flex items-center gap-1.5 text-[11px] text-ink-faint">
@@ -64,7 +77,7 @@ function EntryRow({ entry, photoMap }: { entry: PaymentHistoryEntry; photoMap: P
       <span
         className={cn(
           "tabular shrink-0 font-mono text-sm font-bold",
-          isLunas ? "text-paid" : "text-owe",
+          isPaidTone ? "text-paid" : "text-owe",
         )}
       >
         {fmt(entry.amount)}
@@ -109,7 +122,7 @@ export function PaymentHistoryView({
           <span className="grid size-7 place-items-center rounded-lg bg-court/10 text-court">
             <KIcon name="history" className="size-4" />
           </span>
-          <h2 className="font-display text-base font-bold tracking-tight">History bayar</h2>
+          <h2 className="font-display text-base font-bold tracking-tight">Riwayat transaksi</h2>
           <span className="tabular inline-flex items-center gap-1 rounded-full bg-court/10 px-2 py-0.5 text-[11px] font-bold text-court">
             {filtered.length}
           </span>
@@ -118,7 +131,7 @@ export function PaymentHistoryView({
       </div>
 
       {groups.length === 0 ? (
-        <EmptyPanel icon="history" text="Belum ada riwayat bayar" />
+        <EmptyPanel icon="history" text="Belum ada riwayat transaksi" />
       ) : (
         <div className="flex flex-col gap-3">
           {groups.map((g, i) => {
@@ -148,7 +161,14 @@ export function PaymentHistoryView({
                     </div>
                   </div>
                   <div className="flex shrink-0 items-center gap-1.5">
-                    <span className="tabular font-mono text-sm font-bold text-paid">{fmt(g.total)}</span>
+                    <span
+                      className={cn(
+                        "tabular font-mono text-sm font-bold",
+                        g.total < 0 ? "text-owe" : "text-paid",
+                      )}
+                    >
+                      {fmt(g.total)}
+                    </span>
                     <KIcon
                       name="chevronDown"
                       className={cn(

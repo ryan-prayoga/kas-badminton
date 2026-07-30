@@ -9,6 +9,7 @@ import { setNavMode } from "@/lib/nav-mode";
 import { setSessionAlive } from "@/lib/session-alive";
 import { safeAction } from "@/lib/action-result";
 import { logout } from "@/server/actions/auth";
+import { BalancePanel } from "@/components/admin/balance-panel";
 import { KokTypesPanel } from "@/components/admin/kok-types-panel";
 import { OperatorsPanel } from "@/components/admin/operators-panel";
 import { PlayersPanel } from "@/components/admin/players-panel";
@@ -23,7 +24,7 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet";
 
-type PanelKey = "kok" | "pemain" | "delegasi" | "setelan" | "tampilan" | null;
+type PanelKey = "kok" | "saldo" | "pemain" | "delegasi" | "setelan" | "tampilan" | null;
 
 const MENU: {
   key: PanelKey | "public" | "lock" | "history";
@@ -40,6 +41,13 @@ const MENU: {
     icon: "shuttle",
     adminOnly: true,
     desc: "Katalog + stok. Beli slop mengurangi kas (1 slop = 12 kok).",
+  },
+  {
+    key: "saldo",
+    label: "Penyesuaian saldo",
+    icon: "wallet",
+    adminOnly: true,
+    desc: "Tambah/kurangi saldo kas bebas — di luar beli stok kok.",
   },
   {
     key: "pemain",
@@ -68,7 +76,7 @@ const MENU: {
     icon: "themeAuto",
     desc: "Mode terang, gelap, atau ikut setelan sistem.",
   },
-  { key: "history", label: "History bayar", icon: "history", href: "/riwayat-bayar" },
+  { key: "history", label: "Riwayat transaksi", icon: "history", href: "/riwayat-bayar" },
   { key: "public", label: "Halaman publik", icon: "back", href: "/" },
   { key: "lock", label: "Kunci", icon: "lock", danger: true },
 ];
@@ -173,6 +181,7 @@ export function LainnyaMenu({
               (bukan overflow-hidden generik) — sama clip-nya, stacking dropdown tetap aman. */}
           <div className="flex min-h-0 flex-1 flex-col overflow-x-hidden overflow-y-hidden px-4 pb-4">
             {panel === "kok" && <KokTypesPanel kokTypes={kokTypes} />}
+            {panel === "saldo" && <BalancePanel />}
             {panel === "pemain" && <PlayersPanel players={players} />}
             {panel === "delegasi" && <OperatorsPanel operators={operators} players={players} />}
             {panel === "setelan" && <SettingsPanel merchantQris={merchantQris} />}
