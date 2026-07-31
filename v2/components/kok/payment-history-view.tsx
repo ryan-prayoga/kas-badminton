@@ -54,32 +54,20 @@ function EntryRow({ entry, photoMap }: { entry: PaymentHistoryEntry; photoMap: P
   const isPaidTone = tone === "paid";
   return (
     <div className="flex items-center gap-2.5 bg-surface px-3 py-2.5 odd:bg-surface-2">
-      <Avatar name={entry.name} photo={photoMap[entry.name]} size="size-8" tone={tone} />
+      <Avatar name={entry.name} photo={photoMap[entry.name]} size="size-8" tone={tone} icon={icon} />
       <div className="min-w-0 flex-1">
         <span className="block truncate text-sm font-semibold text-ink">{entry.name}</span>
         {/* Badge pindah ke baris meta (bukan sebaris sama nama) — nama panjang (cth. keterangan
             penyesuaian saldo) gak lagi ngedorong badge/jumlah keluar layar di mobile. */}
         <div className="mt-0.5 flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-[11px] text-ink-faint">
-          {icon ? (
-            <span
-              className={cn(
-                "grid shrink-0 place-items-center rounded-full p-0.5",
-                isPaidTone ? "bg-paid/12 text-paid" : "bg-owe/12 text-owe",
-              )}
-              aria-label={label}
-            >
-              <KIcon name={icon} className="size-3" />
-            </span>
-          ) : (
-            <span
-              className={cn(
-                "shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide",
-                isPaidTone ? "bg-paid/12 text-paid" : "bg-owe/12 text-owe",
-              )}
-            >
-              {label}
-            </span>
-          )}
+          <span
+            className={cn(
+              "shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide",
+              isPaidTone ? "bg-paid/12 text-paid" : "bg-owe/12 text-owe",
+            )}
+          >
+            {label}
+          </span>
           <span aria-hidden>·</span>
           <span>{fmtPaidAt(entry.createdAt)}</span>
           {entry.recordedBy && (

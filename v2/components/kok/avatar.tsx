@@ -1,4 +1,5 @@
 import { cn } from "@/lib/utils";
+import { KIcon, type IconName } from "@/components/kok/icons";
 
 type Tone = "court" | "paid" | "owe";
 
@@ -13,11 +14,13 @@ export function Avatar({
   photo,
   size = "size-9",
   tone = "court",
+  icon,
 }: {
   name: string;
   photo?: string | null;
   size?: string;
   tone?: Tone;
+  icon?: IconName;
 }) {
   if (photo) {
     return (
@@ -37,7 +40,7 @@ export function Avatar({
         "font-display grid shrink-0 place-items-center rounded-full font-bold",
       )}
     >
-      {(name || "?").slice(0, 1).toUpperCase()}
+      {icon ? <KIcon name={icon} className="size-4" /> : (name || "?").slice(0, 1).toUpperCase()}
     </div>
   );
 }
