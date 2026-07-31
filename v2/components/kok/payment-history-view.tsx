@@ -8,7 +8,7 @@ import { currentPeriodKey, fmt, fmtDateFull, fmtPaidAt, periodKey, toLocalIso } 
 import { cn } from "@/lib/utils";
 import { Avatar, type PhotoMap } from "@/components/kok/avatar";
 import { EmptyPanel } from "@/components/kok/empty-panel";
-import { KIcon } from "@/components/kok/icons";
+import { KIcon, type IconName } from "@/components/kok/icons";
 import { PeriodFilter } from "@/components/kok/period-filter";
 
 interface DayGroup {
@@ -39,15 +39,18 @@ function groupByDay(entries: PaymentHistoryEntry[]): DayGroup[] {
   return order.map((date) => map.get(date)!);
 }
 
-const ENTRY_META: Record<PaymentHistoryEntry["type"], { label: string; tone: "paid" | "owe" }> = {
+const ENTRY_META: Record<
+  PaymentHistoryEntry["type"],
+  { label: string; tone: "paid" | "owe"; icon?: IconName }
+> = {
   lunas: { label: "Lunas", tone: "paid" },
   cicil: { label: "Cicil", tone: "owe" },
-  saldo_masuk: { label: "Kas masuk", tone: "paid" },
-  saldo_keluar: { label: "Kas keluar", tone: "owe" },
+  saldo_masuk: { label: "Kas masuk", tone: "paid", icon: "cashIn" },
+  saldo_keluar: { label: "Kas keluar", tone: "owe", icon: "cashOut" },
 };
 
 function EntryRow({ entry, photoMap }: { entry: PaymentHistoryEntry; photoMap: PhotoMap }) {
-  const { label, tone } = ENTRY_META[entry.type];
+  const { label, tone, icon } = ENTRY_META[entry.type];
   const isPaidTone = tone === "paid";
   return (
     <div className="flex items-center gap-2.5 bg-surface px-3 py-2.5 odd:bg-surface-2">
@@ -57,14 +60,26 @@ function EntryRow({ entry, photoMap }: { entry: PaymentHistoryEntry; photoMap: P
         {/* Badge pindah ke baris meta (bukan sebaris sama nama) — nama panjang (cth. keterangan
             penyesuaian saldo) gak lagi ngedorong badge/jumlah keluar layar di mobile. */}
         <div className="mt-0.5 flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-[11px] text-ink-faint">
-          <span
-            className={cn(
-              "shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide",
-              isPaidTone ? "bg-paid/12 text-paid" : "bg-owe/12 text-owe",
-            )}
-          >
-            {label}
-          </span>
+          {icon ? (
+            <span
+              className={cn(
+                "grid shrink-0 place-items-center rounded-full p-0.5",
+                isPaidTone ? "bg-paid/12 text-paid" : "bg-owe/12 text-owe",
+              )}
+              aria-label={label}
+            >
+              <KIcon name={icon} className="size-3" />
+            </span>
+          ) : (
+            <span
+              className={cn(
+                "shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide",
+                isPaidTone ? "bg-paid/12 text-paid" : "bg-owe/12 text-owe",
+              )}
+            >
+              {label}
+            </span>
+          )}
           <span aria-hidden>·</span>
           <span>{fmtPaidAt(entry.createdAt)}</span>
           {entry.recordedBy && (

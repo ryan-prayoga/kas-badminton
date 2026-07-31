@@ -5,6 +5,8 @@ import racket from "@iconify-icons/mdi/tennis-racket";
 import back from "@iconify-icons/mdi/arrow-left";
 import shuttle from "@iconify-icons/game-icons/shuttlecock";
 import cash from "@iconify-icons/mdi/cash-multiple";
+import cashIn from "@iconify-icons/mdi/cash-plus";
+import cashOut from "@iconify-icons/mdi/cash-minus";
 import calendar from "@iconify-icons/mdi/calendar-blank-outline";
 import chevronDown from "@iconify-icons/mdi/chevron-down";
 import checkCircle from "@iconify-icons/mdi/check-circle";
@@ -48,6 +50,8 @@ export const ICONS = {
   racket, // "main" / game
   shuttle, // kok / brand
   cash, // uang
+  cashIn, // kas masuk
+  cashOut, // kas keluar
   calendar,
   chevronDown,
   checkCircle,
