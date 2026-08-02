@@ -300,10 +300,7 @@ export function StatsView({
     return [...keys].sort().reverse();
   }, [games]);
 
-  const [period, setPeriod] = useState(() => {
-    const cur = currentPeriodKey();
-    return periods.includes(cur) ? cur : "all";
-  });
+  const [period, setPeriod] = useState<string>("all");
   const [shareOpen, setShareOpen] = useState(false);
 
   const scoped = useMemo(
@@ -332,11 +329,21 @@ export function StatsView({
     0,
   );
 
-  // Samakan dengan Rekap: total & jumlah orang belum bayar selalu dari debtSummary
-  // (sudah dipotong cicilan), bukan dihitung ulang per periode.
-  const totalDebt = debts.reduce((s, d) => s + d.total, 0);
-  const debtPeople = debts.length;
-  const debtMap = useMemo(() => new Map(debts.map((d) => [d.name, d.total])), [debts]);
+  // "Semua waktu": pakai debtSummary asli (sudah dipotong cicilan/carry), sama seperti Rekap.
+  // Difilter per bulan: hitung ulang dari game bulan itu aja (carry lintas bulan diabaikan).
+  const debtMap = useMemo(() => {
+    if (period === "all") return new Map(debts.map((d) => [d.name, d.total]));
+    const map = new Map<string, number>();
+    for (const g of scoped) {
+      for (const p of g.players) {
+        if (p.paid || !p.name) continue;
+        map.set(p.name, (map.get(p.name) ?? 0) + g.cost.perPerson);
+      }
+    }
+    return map;
+  }, [period, debts, scoped]);
+  const totalDebt = [...debtMap.values()].reduce((s, v) => s + v, 0);
+  const debtPeople = debtMap.size;
 
   const players = useMemo(() => {
     const map = new Map<string, PlayerStat>();
