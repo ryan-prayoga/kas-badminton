@@ -42,6 +42,7 @@ import happy from "@iconify-icons/mdi/emoticon-happy-outline";
 import dotsHorizontal from "@iconify-icons/mdi/dots-horizontal";
 import backspace from "@iconify-icons/mdi/backspace-outline";
 import qrcode from "@iconify-icons/mdi/qrcode";
+import search from "@iconify-icons/mdi/magnify";
 import sun from "@iconify-icons/mdi/weather-sunny";
 import moon from "@iconify-icons/mdi/weather-night";
 import themeAuto from "@iconify-icons/mdi/theme-light-dark";
@@ -88,6 +89,7 @@ export const ICONS = {
   dotsHorizontal,
   backspace,
   qrcode,
+  search,
   sun,
   moon,
   themeAuto,

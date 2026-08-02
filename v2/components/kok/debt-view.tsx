@@ -447,6 +447,7 @@ export function DebtView({
   qrisEnabled?: boolean;
 }) {
   const [shareOpen, setShareOpen] = useState(false);
+  const [query, setQuery] = useState("");
   const total = debts.reduce((s, d) => s + d.total, 0);
   const shareTextPayload = useMemo(() => rekapShareText(debts, total), [debts, total]);
   const shareBlocks = useMemo(
@@ -454,6 +455,11 @@ export function DebtView({
     [debts, total, photoMap],
   );
   const shareCaption = useMemo(() => rekapShareCaption(debts, total), [debts, total]);
+  const filteredDebts = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return debts;
+    return debts.filter((d) => d.name.toLowerCase().includes(q));
+  }, [debts, query]);
 
   return (
     <section className="rounded-xl2 border border-line bg-surface p-4 shadow-card">
@@ -495,11 +501,42 @@ export function DebtView({
       {debts.length === 0 ? (
         <EmptyPanel icon="happy" text="Semua sudah bayar 🎉" />
       ) : (
-        <div className="flex flex-col gap-3">
-          {debts.map((d) => (
-            <DebtCard key={d.name} d={d} photoMap={photoMap} editable={editable} qrisEnabled={qrisEnabled} />
-          ))}
-        </div>
+        <>
+          <div className="relative mb-3">
+            <KIcon
+              name="search"
+              className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-ink-faint"
+            />
+            <input
+              type="text"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Cari nama..."
+              aria-label="Cari nama"
+              className="h-11 w-full rounded-xl border border-input bg-surface pl-9 pr-9 text-sm text-ink outline-none focus:border-court/50"
+            />
+            {query && (
+              <button
+                type="button"
+                onClick={() => setQuery("")}
+                aria-label="Hapus pencarian"
+                className="absolute right-2 top-1/2 grid size-7 -translate-y-1/2 place-items-center rounded-lg text-ink-faint transition active:scale-95"
+              >
+                <KIcon name="close" className="size-4" />
+              </button>
+            )}
+          </div>
+
+          {filteredDebts.length === 0 ? (
+            <EmptyPanel icon="happy" text={`Nggak ada nama cocok "${query}"`} />
+          ) : (
+            <div className="flex flex-col gap-3">
+              {filteredDebts.map((d) => (
+                <DebtCard key={d.name} d={d} photoMap={photoMap} editable={editable} qrisEnabled={qrisEnabled} />
+              ))}
+            </div>
+          )}
+        </>
       )}
     </section>
   );
