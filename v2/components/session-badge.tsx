@@ -3,7 +3,7 @@
 import { useEffect, useSyncExternalStore, useTransition } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { getNavMode, setNavMode, subscribeNavMode } from "@/lib/nav-mode";
+import { getNavMode, isAdminChrome, setNavMode, subscribeNavMode } from "@/lib/nav-mode";
 import {
   getSessionAlive,
   setSessionAlive,
@@ -29,11 +29,10 @@ export function SessionBadge({ role, name }: { role: "admin" | "operator" | null
 
   if (!effectiveRole) return null;
 
-  // Tombol "Admin · buka" di home publik, atau saat browse mode publik
-  // (setelah menu Halaman publik) di Rekap/Statistik.
-  const publicBrowse =
-    !pathname.startsWith("/admin") &&
-    (storedMode === "public" || pathname === "/");
+  // Tombol "Admin · buka" cuma pas chrome-nya lagi publik — yaitu setelah user
+  // milih "Halaman publik" dari menu Lainnya. Sinkron sama BottomNav biar gak
+  // ada state aneh: nav sudah admin tapi badge masih nawarin "buka".
+  const publicBrowse = !isAdminChrome(pathname, storedMode, true);
   const label = effectiveRole === "admin" ? "Admin" : (name ?? "Operator");
 
   const doLogout = () =>

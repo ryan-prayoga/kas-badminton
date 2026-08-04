@@ -28,6 +28,24 @@ export function setNavMode(mode: NavMode): void {
   window.dispatchEvent(new Event(EVENT));
 }
 
+/**
+ * Satu-satunya aturan "chrome-nya admin atau publik". Dipakai bareng BottomNav
+ * dan SessionBadge — dulu masing-masing punya salinan sendiri dan sempat beda.
+ *
+ * Masih login = chrome admin, titik. Kecuali user sendiri yang milih
+ * "Halaman publik" dari menu Lainnya (mode `public`). Rute `/admin*` selalu
+ * chrome admin, apa pun modenya.
+ *
+ * Dulu ada klausa tambahan `pathname !== "/"` — bikin app yang dibuka dari home
+ * screen (start_url `/`) nampil chrome publik walau masih login admin, terus
+ * lompat ke chrome admin begitu pindah halaman. Bingungin, jadi dibuang.
+ */
+export function isAdminChrome(pathname: string, mode: NavMode, hasRole: boolean): boolean {
+  if (!hasRole) return false;
+  if (pathname.startsWith("/admin")) return true;
+  return mode !== "public";
+}
+
 export function subscribeNavMode(onChange: () => void): () => void {
   if (typeof window === "undefined") return () => {};
   window.addEventListener(EVENT, onChange);

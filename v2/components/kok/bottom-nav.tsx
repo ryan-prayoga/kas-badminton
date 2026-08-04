@@ -4,7 +4,7 @@ import { useEffect, useSyncExternalStore } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
-import { getNavMode, setNavMode, subscribeNavMode } from "@/lib/nav-mode";
+import { getNavMode, isAdminChrome, setNavMode, subscribeNavMode } from "@/lib/nav-mode";
 import {
   getSessionAlive,
   subscribeSessionAlive,
@@ -28,7 +28,9 @@ function buildItems(adminChrome: boolean, role: Role): NavItem[] {
       href: adminChrome ? "/admin" : "/",
       label: "Riwayat",
       icon: "history",
-      match: (p) => (adminChrome ? p === "/admin" : p === "/"),
+      // Di chrome admin, `/` juga dihitung Riwayat: app dari home screen mendarat
+      // di situ, jadi tanpa ini gak ada tab yang nyala pas app baru dibuka.
+      match: (p) => (adminChrome ? p === "/admin" || p === "/" : p === "/"),
     },
     {
       href: "/belum-bayar",
@@ -113,14 +115,10 @@ export function BottomNav({
   // Lockscreen admin: sembunyikan nav biar mirip v1
   if (!effectiveRole && pathname.startsWith("/admin")) return null;
 
-  // Chrome admin hanya saat:
-  // - rute /admin*, atau
-  // - masih login + mode admin + BUKAN di home publik `/`
-  // Mode `public` (dari menu Lainnya) stay di chrome publik meski pindah
-  // Rekap/Statistik — Riwayat tetap `/`, tanpa FAB/Lainnya.
-  const adminChrome =
-    !!effectiveRole &&
-    (pathname.startsWith("/admin") || (storedMode !== "public" && pathname !== "/"));
+  // Masih login → chrome admin di semua halaman, termasuk `/`. Mode `public`
+  // (dari menu Lainnya) stay di chrome publik: Riwayat tetap `/`, tanpa
+  // FAB/Lainnya. Lihat isAdminChrome buat aturan lengkapnya.
+  const adminChrome = isAdminChrome(pathname, storedMode, !!effectiveRole);
   const items = buildItems(adminChrome, effectiveRole);
   const showFab = adminChrome && !!recordGame && !!effectiveRole;
 
