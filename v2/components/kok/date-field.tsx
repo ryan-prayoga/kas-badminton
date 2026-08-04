@@ -14,6 +14,33 @@ import { KIcon } from "@/components/kok/icons";
 
 const DOW = ["Sen", "Sel", "Rab", "Kam", "Jum", "Sab", "Min"];
 
+/** Perkiraan tinggi panel kalender (px) — cuma buat memilih arah buka. */
+const CAL_HEIGHT = 380;
+
+/**
+ * Batas yang benar-benar memotong kalender: sheet/dialog terdekat, atau elemen
+ * apa pun yang overflow-nya bukan `visible`. Kalau diukur ke viewport doang,
+ * kalender di dalam sheet bisa "muat" secara angka tapi tetap nembus keluar sheet.
+ */
+function clipBounds(el: HTMLElement | null): { top: number; bottom: number } {
+  const viewport = { top: 0, bottom: window.innerHeight };
+  let node = el?.parentElement ?? null;
+  while (node && node !== document.body) {
+    const style = getComputedStyle(node);
+    const clips =
+      style.overflowY !== "visible" ||
+      style.overflowX !== "visible" ||
+      node.dataset.slot === "sheet-content" ||
+      node.dataset.slot === "dialog-content";
+    if (clips) {
+      const r = node.getBoundingClientRect();
+      return { top: Math.max(viewport.top, r.top), bottom: Math.min(viewport.bottom, r.bottom) };
+    }
+    node = node.parentElement;
+  }
+  return viewport;
+}
+
 function startOfMonth(y: number, m: number): Date {
   return new Date(y, m, 1);
 }
@@ -69,8 +96,13 @@ export function DateField({
   const autoId = useId();
   const fieldId = id ?? autoId;
   const rootRef = useRef<HTMLDivElement>(null);
+  const popRef = useRef<HTMLDivElement>(null);
   const [open, setOpen] = useState(false);
   const [view, setView] = useState(() => viewFromValue(value));
+  // Arah buka kalender: default ke atas (field biasanya di bawah form), tapi
+  // kalau ruang di atas gak cukup — mis. field tanggal di bagian atas sheet —
+  // kalender jadi nembus keluar dan bagian atasnya kepotong. Pilih arah pas dibuka.
+  const [placeBelow, setPlaceBelow] = useState(false);
 
   useEffect(() => {
     if (!open) return;
@@ -86,6 +118,13 @@ export function DateField({
       document.removeEventListener("mousedown", onDoc);
       document.removeEventListener("keydown", onKey);
     };
+  }, [open]);
+
+  // Di dalam sheet yang bisa di-scroll, kalender bisa jatuh di luar area terlihat.
+  // Geser sedikit biar seluruh panelnya kelihatan tanpa user scroll manual.
+  useEffect(() => {
+    if (!open) return;
+    popRef.current?.scrollIntoView({ block: "nearest", behavior: "smooth" });
   }, [open]);
 
   const cells = useMemo(() => {
@@ -111,6 +150,15 @@ export function DateField({
       return;
     }
     setView(viewFromValue(value));
+    const rect = rootRef.current?.getBoundingClientRect();
+    if (rect) {
+      const bounds = clipBounds(rootRef.current);
+      const above = rect.top - bounds.top;
+      const below = bounds.bottom - rect.bottom;
+      // Tetap ke atas selama muat (kebiasaan lama di form catat main);
+      // pindah ke bawah cuma kalau atas sempit dan bawah lebih lega.
+      setPlaceBelow(above < CAL_HEIGHT && below > above);
+    }
     setOpen(true);
   };
 
@@ -163,9 +211,13 @@ export function DateField({
 
       {open ? (
         <div
+          ref={popRef}
           role="dialog"
           aria-label="Pilih tanggal"
-          className="absolute bottom-full left-0 right-0 z-50 mb-2 overflow-hidden rounded-2xl border border-line bg-surface p-3 shadow-pop animate-in fade-in-0 zoom-in-95"
+          className={cn(
+            "absolute left-0 right-0 z-50 overflow-hidden rounded-2xl border border-line bg-surface p-3 shadow-pop animate-in fade-in-0 zoom-in-95",
+            placeBelow ? "top-full mt-2" : "bottom-full mb-2",
+          )}
         >
           <div className="mb-2.5 flex gap-1.5">
             {[
