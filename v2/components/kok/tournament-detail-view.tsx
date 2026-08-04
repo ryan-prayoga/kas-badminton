@@ -10,7 +10,13 @@ import {
   koksTotal,
   matchTitle,
   suggestFee,
+  tournamentStatus,
 } from "@/lib/domain/tournament";
+import {
+  tournamentShareBlocks,
+  tournamentShareCaption,
+  tournamentShareText,
+} from "@/lib/tournament-share";
 import type { EnrichedTournament, KokType, TournamentKok } from "@/lib/domain/types";
 import {
   fmt,
@@ -19,6 +25,7 @@ import {
   fmtDateRange,
   fmtPaidAt,
   parseLocalDate,
+  toLocalIso,
 } from "@/lib/format";
 import { safeAction } from "@/lib/action-result";
 import { cn } from "@/lib/utils";
@@ -34,6 +41,9 @@ import { useConfirm } from "@/components/confirm-dialog";
 import { Avatar, type PhotoMap } from "@/components/kok/avatar";
 import { BracketView } from "@/components/kok/bracket-view";
 import { KIcon, type IconName } from "@/components/kok/icons";
+import { MatchDialog } from "@/components/kok/match-dialog";
+import { RoundRobinView } from "@/components/kok/round-robin-view";
+import { ShareChoiceDialog } from "@/components/kok/share-choice";
 import {
   defaultKokDate,
   KokDateField,
@@ -52,6 +62,20 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
+
+/** Tampilan status turnamen — dipakai di detail, daftar, dan riwayat. */
+export const STATUS_META: Record<
+  "akan-datang" | "berjalan" | "selesai",
+  { label: string; icon: IconName; className: string }
+> = {
+  "akan-datang": {
+    label: "Akan datang",
+    icon: "calendar",
+    className: "bg-court/10 text-court",
+  },
+  berjalan: { label: "Berjalan", icon: "clock", className: "bg-owe/12 text-owe" },
+  selesai: { label: "Selesai", icon: "trophy", className: "bg-paid/12 text-paid" },
+};
 
 function Section({
   icon,
@@ -281,8 +305,21 @@ export function TournamentDetailView({
   const confirm = useConfirm();
   const [pending, start] = useTransition();
   const [showKoks, setShowKoks] = useState(false);
+  const [openMatch, setOpenMatch] = useState<string | null>(null);
+  const [shareOpen, setShareOpen] = useState(false);
 
   const suggestion = suggestFee(t.cost.kokTotal, t.cost.participants);
+  const today = toLocalIso(new Date());
+  const status = tournamentStatus(t, today);
+
+  const share = useMemo(
+    () => ({
+      text: tournamentShareText(t, today),
+      blocks: tournamentShareBlocks(t, today),
+      caption: tournamentShareCaption(t, today),
+    }),
+    [t, today],
+  );
 
   const dayCount = useMemo(() => {
     const start = parseLocalDate(t.date);
@@ -362,16 +399,10 @@ export function TournamentDetailView({
       dates: [...new Set(koks.map((k) => k.date))].sort(),
     });
 
-    for (const round of t.bracket.rounds) {
-      for (const m of round.matches) {
-        const koks = byMatch.get(m.id);
-        if (!koks?.length) continue;
-        sections.push({
-          key: m.id,
-          title: matchTitle(m.round, m.index, t.size),
-          ...describe(koks),
-        });
-      }
+    for (const m of t.matches) {
+      const koks = byMatch.get(m.id);
+      if (!koks?.length) continue;
+      sections.push({ key: m.id, title: matchTitle(t, m), ...describe(koks) });
     }
 
     const loose = t.cost.looseKoks;
@@ -383,7 +414,8 @@ export function TournamentDetailView({
       });
     }
     return sections;
-  }, [t.koks, t.bracket, t.size, t.cost.looseKoks]);
+    // `t` dipakai utuh oleh matchTitle (butuh format + size).
+  }, [t]);
 
   /** Turnamen multi-hari: berapa kok habis tiap harinya. */
   const kokDays = useMemo(
@@ -416,39 +448,78 @@ export function TournamentDetailView({
               <span className="inline-flex items-center gap-1">
                 <KIcon name="shuttle" className="size-3.5" /> {t.cost.kokCount} kok
               </span>
+              <span className="inline-flex items-center gap-1">
+                <KIcon name={t.format === "knockout" ? "trophy" : "chart"} className="size-3.5" />
+                {t.format === "knockout" ? "Sistem gugur" : "Semua lawan semua"}
+              </span>
             </p>
           </div>
-          {t.bracket.champion ? (
-            <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-paid/12 px-2.5 py-1 text-[11px] font-bold text-paid">
-              <KIcon name="trophy" className="size-3.5" /> Selesai
-            </span>
-          ) : (
-            <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-court/10 px-2.5 py-1 text-[11px] font-bold text-court">
-              <KIcon name="clock" className="size-3.5" /> Berjalan
-            </span>
-          )}
+          <span
+            className={cn(
+              "inline-flex shrink-0 items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-bold",
+              STATUS_META[status].className,
+            )}
+          >
+            <KIcon name={STATUS_META[status].icon} className="size-3.5" />
+            {STATUS_META[status].label}
+          </span>
         </div>
         {t.notes ? <p className="mt-2 text-sm text-ink-soft">{t.notes}</p> : null}
+
+        <button
+          type="button"
+          onClick={() => setShareOpen(true)}
+          className="mt-3 inline-flex h-10 w-full items-center justify-center gap-1.5 rounded-xl border border-line bg-surface-2/60 text-sm font-semibold text-ink transition active:scale-[0.98]"
+        >
+          <KIcon name="share" className="size-4" /> Bagikan turnamen
+        </button>
+        <ShareChoiceDialog
+          open={shareOpen}
+          onOpenChange={setShareOpen}
+          title={`Bagikan · ${t.name}`}
+          description="Pilih format teks atau gambar"
+          text={share.text}
+          imageBlocks={share.blocks}
+          imageCaption={share.caption}
+          imageName={`turnamen-${t.name.toLowerCase().replace(/\s+/g, "-")}.png`}
+        />
       </section>
 
-      <Section icon="trophy" title="Bagan">
-        <BracketView
-          tournamentId={t.id}
-          bracket={t.bracket}
-          size={t.size}
-          editable={editable}
-          kokTypes={kokTypes}
-          defaultPrice={defaultPrice}
-          defaultFormat={t.scoreFormat}
-          startDate={t.date}
-          endDate={t.endDate}
-        />
+      <Section
+        icon={t.format === "knockout" ? "trophy" : "chart"}
+        title={t.format === "knockout" ? "Bagan" : "Klasemen & partai"}
+        badge={`${t.playedCount}/${t.totalCount}`}
+      >
+        {t.bracket ? (
+          <BracketView
+            bracket={t.bracket}
+            editable={editable}
+            onOpenMatch={(m) => setOpenMatch(m.id)}
+          />
+        ) : t.roundRobin ? (
+          <RoundRobinView
+            roundRobin={t.roundRobin}
+            editable={editable}
+            onOpenMatch={(m) => setOpenMatch(m.id)}
+          />
+        ) : null}
         <p className="mt-1 text-[11px] text-ink-faint">
           {editable
-            ? "Ketuk partai buat isi skor dan kok yang dipakai di partai itu. Geser ke samping buat babak berikutnya."
-            : "Login admin buat isi skor. Geser ke samping buat lihat babak berikutnya."}
+            ? t.format === "knockout"
+              ? "Ketuk partai buat isi skor dan kok yang dipakai di partai itu. Geser ke samping buat babak berikutnya."
+              : "Ketuk partai buat isi skor dan kok yang dipakai di partai itu."
+            : "Login admin buat isi skor."}
         </p>
       </Section>
+
+      <MatchDialog
+        tournament={t}
+        matchId={openMatch}
+        onClose={() => setOpenMatch(null)}
+        editable={editable}
+        kokTypes={kokTypes}
+        defaultPrice={defaultPrice}
+      />
 
       <Section
         icon="wallet"

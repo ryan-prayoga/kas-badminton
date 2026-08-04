@@ -45,6 +45,7 @@
   --color-paid: var(--paid);
   --color-owe: var(--owe);
   --color-danger: var(--danger);
+  --color-gold: var(--gold);
 
   --radius-lg: 0.75rem;
   --radius-xl: 1rem;
@@ -95,6 +96,7 @@
   --paid: #0f8a5b;
   --owe: #b96608;
   --danger: #dc2626;
+  --gold: #a3790f;
 
   --bg-glow: rgba(21, 96, 214, 0.08);
   --shimmer: rgba(255, 255, 255, 0.65);
@@ -140,6 +142,7 @@
   --paid: #2fbc85;
   --owe: #e3a04a;
   --danger: #f26b6b;
+  --gold: #d9b54a;
 
   --bg-glow: rgba(59, 130, 246, 0.16);
   --shimmer: rgba(255, 255, 255, 0.08);

@@ -2,17 +2,19 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
-import { pairLabel } from "@/lib/domain/tournament";
-import type { EnrichedTournament, KokType, PlayerRow } from "@/lib/domain/types";
-import { currentPeriodKey, fmt, fmtDateRange, periodKey } from "@/lib/format";
+import { pairLabel, tournamentStatus } from "@/lib/domain/tournament";
+import type { EnrichedTournament, PlayerRow } from "@/lib/domain/types";
+import { currentPeriodKey, fmt, fmtDateRange, periodKey, toLocalIso } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { CreateTournamentSheet } from "@/components/kok/create-tournament-sheet";
 import { EmptyPanel } from "@/components/kok/empty-panel";
 import { KIcon } from "@/components/kok/icons";
 import { PeriodFilter } from "@/components/kok/period-filter";
+import { STATUS_META } from "@/components/kok/tournament-detail-view";
 
-function TournamentCard({ t }: { t: EnrichedTournament }) {
-  const done = t.bracket.champion !== null;
+function TournamentCard({ t, today }: { t: EnrichedTournament; today: string }) {
+  const status = tournamentStatus(t, today);
+  const meta = STATUS_META[status];
   const feeLeft = t.cost.unpaidCount;
 
   return (
@@ -28,7 +30,8 @@ function TournamentCard({ t }: { t: EnrichedTournament }) {
               <KIcon name="calendar" className="size-3.5" /> {fmtDateRange(t.date, t.endDate)}
             </span>
             <span className="inline-flex items-center gap-1">
-              <KIcon name="users" className="size-3.5" /> {t.cost.participants}
+              <KIcon name={t.format === "knockout" ? "trophy" : "chart"} className="size-3.5" />
+              {t.size} pasang
             </span>
             <span className="inline-flex items-center gap-1">
               <KIcon name="shuttle" className="size-3.5" /> {t.cost.kokCount} kok
@@ -38,19 +41,23 @@ function TournamentCard({ t }: { t: EnrichedTournament }) {
         <span
           className={cn(
             "inline-flex shrink-0 items-center gap-1 whitespace-nowrap rounded-full px-2 py-0.5 text-[11px] font-bold",
-            done ? "bg-paid/12 text-paid" : "bg-court/10 text-court",
+            meta.className,
           )}
         >
-          <KIcon name={done ? "trophy" : "clock"} className="size-3" />
-          {done ? "Selesai" : "Berjalan"}
+          <KIcon name={meta.icon} className="size-3" />
+          {meta.label}
         </span>
       </div>
 
       <div className="mt-2.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px]">
-        {done ? (
+        {t.champion ? (
           <span className="inline-flex min-w-0 items-center gap-1 font-semibold text-paid">
             <KIcon name="trophy" className="size-3.5 shrink-0" />
-            <span className="truncate">{pairLabel(t.bracket.champion)}</span>
+            <span className="truncate">{pairLabel(t.champion)}</span>
+          </span>
+        ) : t.totalCount > 0 ? (
+          <span className="inline-flex items-center gap-1 font-semibold text-ink-soft">
+            <KIcon name="racket" className="size-3.5" /> {t.playedCount}/{t.totalCount} partai
           </span>
         ) : null}
         {t.fee > 0 ? (
@@ -75,16 +82,13 @@ function TournamentCard({ t }: { t: EnrichedTournament }) {
 export function TournamentListView({
   tournaments,
   editable,
-  kokTypes,
   players,
-  defaultPrice,
 }: {
   tournaments: EnrichedTournament[];
   editable: boolean;
-  kokTypes: KokType[];
   players: PlayerRow[];
-  defaultPrice: number;
 }) {
+  const today = toLocalIso(new Date());
   const periods = useMemo(() => {
     const keys = new Set<string>();
     for (const t of tournaments) {
@@ -119,11 +123,7 @@ export function TournamentListView({
 
       {editable ? (
         <div className="mb-3">
-          <CreateTournamentSheet
-            kokTypes={kokTypes}
-            players={players}
-            defaultPrice={defaultPrice}
-          />
+          <CreateTournamentSheet players={players} />
         </div>
       ) : null}
 
@@ -132,7 +132,7 @@ export function TournamentListView({
       ) : (
         <div className="flex flex-col gap-3">
           {filtered.map((t) => (
-            <TournamentCard key={t.id} t={t} />
+            <TournamentCard key={t.id} t={t} today={today} />
           ))}
         </div>
       )}

@@ -20,6 +20,7 @@ export default async function AdminPage() {
     >
       <HistoryView
         games={data.games}
+        tournaments={data.tournaments}
         photoMap={buildPhotoMap(data.players)}
         editable
         kokTypes={data.kokTypes}

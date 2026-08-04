@@ -1,10 +1,11 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { EnrichedGame } from "@/lib/domain/types";
-import { currentPeriodKey, fmt, fmtDateFull, periodKey } from "@/lib/format";
+import type { EnrichedGame, EnrichedTournament } from "@/lib/domain/types";
+import { currentPeriodKey, fmt, fmtDateFull, periodKey, toLocalIso } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { GameCard } from "@/components/kok/game-card";
+import { TournamentHistoryCard } from "@/components/kok/tournament-history-card";
 import { PeriodFilter } from "@/components/kok/period-filter";
 import { EmptyPanel } from "@/components/kok/empty-panel";
 import { KIcon } from "@/components/kok/icons";
@@ -13,25 +14,38 @@ import type { PhotoMap } from "@/components/kok/avatar";
 interface Group {
   date: string;
   games: EnrichedGame[];
+  tournaments: EnrichedTournament[];
   total: number;
   unpaidCount: number;
 }
 
-function groupByDate(games: EnrichedGame[]): Group[] {
+/** Game dan turnamen digabung per tanggal — turnamen pakai tanggal mulainya. */
+function groupByDate(games: EnrichedGame[], tournaments: EnrichedTournament[]): Group[] {
   const map = new Map<string, Group>();
-  const order: string[] = [];
+  const blank = (date: string): Group => ({
+    date,
+    games: [],
+    tournaments: [],
+    total: 0,
+    unpaidCount: 0,
+  });
+
   for (const g of games) {
-    let grp = map.get(g.date);
-    if (!grp) {
-      grp = { date: g.date, games: [], total: 0, unpaidCount: 0 };
-      map.set(g.date, grp);
-      order.push(g.date);
-    }
+    const grp = map.get(g.date) ?? blank(g.date);
     grp.games.push(g);
     grp.total += g.cost.total;
     grp.unpaidCount += g.summary.unpaidCount;
+    map.set(g.date, grp);
   }
-  return order.map((d) => map.get(d)!);
+  for (const t of tournaments) {
+    const grp = map.get(t.date) ?? blank(t.date);
+    grp.tournaments.push(t);
+    grp.total += t.cost.kokTotal;
+    grp.unpaidCount += t.cost.unpaidCount;
+    map.set(t.date, grp);
+  }
+
+  return [...map.values()].sort((a, b) => b.date.localeCompare(a.date));
 }
 
 /** deteksi game yg berubah lewat realtime → flash sekejap. */
@@ -59,6 +73,7 @@ function useFlash(games: EnrichedGame[]): Set<string> {
 
 export function HistoryView({
   games,
+  tournaments = [],
   photoMap,
   editable = false,
   kokTypes,
@@ -66,20 +81,26 @@ export function HistoryView({
   defaultPrice,
 }: {
   games: EnrichedGame[];
+  tournaments?: EnrichedTournament[];
   photoMap: PhotoMap;
   editable?: boolean;
   kokTypes?: import("@/lib/domain/types").KokType[];
   players?: import("@/lib/domain/types").PlayerRow[];
   defaultPrice?: number;
 }) {
+  const today = toLocalIso(new Date());
   const periods = useMemo(() => {
     const keys = new Set<string>();
     for (const g of games) {
       const k = periodKey(g.date);
       if (k) keys.add(k);
     }
+    for (const t of tournaments) {
+      const k = periodKey(t.date);
+      if (k) keys.add(k);
+    }
     return [...keys].sort().reverse();
-  }, [games]);
+  }, [games, tournaments]);
 
   const [period, setPeriod] = useState(() => {
     const cur = currentPeriodKey();
@@ -95,7 +116,9 @@ export function HistoryView({
   }, []);
 
   const filtered = period === "all" ? games : games.filter((g) => periodKey(g.date) === period);
-  const groups = groupByDate(filtered);
+  const filteredTournaments =
+    period === "all" ? tournaments : tournaments.filter((t) => periodKey(t.date) === period);
+  const groups = groupByDate(filtered, filteredTournaments);
   const isOpen = (date: string, i: number) => (date in open ? open[date] : i === 0);
 
   return (
@@ -110,6 +133,12 @@ export function HistoryView({
             <KIcon name="racket" className="size-3" />
             {filtered.length}
           </span>
+          {filteredTournaments.length > 0 && (
+            <span className="tabular inline-flex items-center gap-1 rounded-full bg-paid/12 px-2 py-0.5 text-[11px] font-bold text-paid">
+              <KIcon name="trophy" className="size-3" />
+              {filteredTournaments.length}
+            </span>
+          )}
         </div>
         <PeriodFilter value={period} periods={periods} onChange={setPeriod} />
       </div>
@@ -124,7 +153,10 @@ export function HistoryView({
               (s, g) => s + (liveUnpaid[g.id] ?? g.summary.unpaidCount),
               0,
             );
-            const allPaid = grpUnpaid === 0;
+            // Turnamen tidak punya toggle lunas per pemain — hitung dari iurannya.
+            const grpTotalUnpaid =
+              grpUnpaid + grp.tournaments.reduce((s, t) => s + t.cost.unpaidCount, 0);
+            const allPaid = grpTotalUnpaid === 0;
             const panelId = `grp-${grp.date}`;
             // Flash realtime tak kelihatan kalau grup terlipat — pulse headernya biar sinyalnya sampai.
             const groupFlashing = !opened && grp.games.some((g) => flash.has(g.id));
@@ -149,9 +181,17 @@ export function HistoryView({
                       <span className="truncate">{fmtDateFull(grp.date)}</span>
                     </div>
                     <div className="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-ink-soft">
-                      <span className="inline-flex items-center gap-1">
-                        <KIcon name="racket" className="size-3.5" /> {grp.games.length} main
-                      </span>
+                      {grp.games.length > 0 && (
+                        <span className="inline-flex items-center gap-1">
+                          <KIcon name="racket" className="size-3.5" /> {grp.games.length} main
+                        </span>
+                      )}
+                      {grp.tournaments.length > 0 && (
+                        <span className="inline-flex items-center gap-1 font-semibold text-paid">
+                          <KIcon name="trophy" className="size-3.5" /> {grp.tournaments.length}{" "}
+                          turnamen
+                        </span>
+                      )}
                       <span className="tabular inline-flex items-center gap-1 font-mono">
                         <KIcon name="cash" className="size-3.5" /> {fmt(grp.total)}
                       </span>
@@ -164,7 +204,7 @@ export function HistoryView({
                       </span>
                     ) : (
                       <span className="inline-flex items-center gap-1 whitespace-nowrap rounded-full bg-owe/12 px-2 py-0.5 text-[11px] font-bold text-owe">
-                        <KIcon name="alert" className="size-3" /> {grpUnpaid} belum
+                        <KIcon name="alert" className="size-3" /> {grpTotalUnpaid} belum
                       </span>
                     )}
                     <KIcon
@@ -180,6 +220,9 @@ export function HistoryView({
                   <div className="acc-inner">
                     {/* p-3 + gap: ruang border/shadow GameCard biar gak kepotong overflow parent */}
                     <div className="grid gap-3 border-t border-line p-3">
+                      {grp.tournaments.map((t) => (
+                        <TournamentHistoryCard key={t.id} tournament={t} today={today} />
+                      ))}
                       {grp.games.map((g) => (
                         <GameCard
                           key={g.id}

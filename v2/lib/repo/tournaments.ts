@@ -6,24 +6,26 @@ import { DomainError } from "@/lib/domain/errors";
 import { normalizeKokEntry, normalizeName } from "@/lib/domain/game";
 import { stockDeltas, stockDiffError } from "@/lib/domain/stock";
 import {
-  buildBracket,
   clampToTournament,
+  enrichTournament,
+  MAX_PAIRS,
+  matchIdSet,
   maxGames,
+  MIN_PAIRS,
+  normalizeFormat,
   normalizeMatchScore,
   normalizeScoreFormat,
   normalizeSize,
-  roundCount,
   syncFees,
-  TOURNAMENT_SIZES,
 } from "@/lib/domain/tournament";
 import type {
   Kok,
   MatchScore,
   ScoreFormat,
   StoredTournament,
+  TournamentFormat,
   TournamentKok,
   TournamentPair,
-  TournamentSize,
 } from "@/lib/domain/types";
 import { todayWIB, uid } from "@/lib/domain/util";
 import type { Prisma } from "@/lib/generated/prisma/client";
@@ -43,7 +45,7 @@ async function getTournamentTx(
 }
 
 /** Bentuk pasangan dari input UI → slot 0..size-1, id di-generate kalau kosong. */
-function buildPairs(raw: Array<{ a?: string; b?: string }> | undefined, size: TournamentSize) {
+function buildPairs(raw: Array<{ a?: string; b?: string }> | undefined, size: number) {
   const list = raw ?? [];
   return Array.from({ length: size }, (_, slot) => ({
     id: uid(),
@@ -53,18 +55,14 @@ function buildPairs(raw: Array<{ a?: string; b?: string }> | undefined, size: To
   }));
 }
 
-/** Validasi id partai terhadap ukuran bagan. Balik null kalau bukan partai yang sah. */
-function validMatchId(raw: string | null | undefined, size: TournamentSize): string | null {
+/** Validasi id partai terhadap format & ukuran turnamen. null = bukan partai (kok umum). */
+function validMatchId(raw: string | null | undefined, t: StoredTournament): string | null {
   if (!raw) return null;
-  const m = /^r(\d+)-(\d+)$/.exec(String(raw));
-  if (!m) throw new DomainError("Id pertandingan tidak valid");
-  const round = Number(m[1]);
-  const index = Number(m[2]);
-  if (round < 0 || round >= roundCount(size)) throw new DomainError("Babak tidak ada di bagan ini");
-  if (index < 0 || index >= size / 2 ** (round + 1)) {
-    throw new DomainError("Pertandingan tidak ada di babak ini");
+  const id = String(raw);
+  if (!matchIdSet(t.format, t.size).has(id)) {
+    throw new DomainError("Pertandingan tidak ada di turnamen ini");
   }
-  return `r${round}-${index}`;
+  return id;
 }
 
 /** Nama tidak boleh dobel di seluruh bagan — satu orang tidak bisa main di dua pasangan. */
@@ -86,15 +84,16 @@ export interface CreateTournamentInput {
   date?: string;
   /** Tanggal selesai kalau turnamen lebih dari sehari. */
   endDate?: string | null;
+  /** Jumlah pasangan yang ikut (2–32). */
   size: number;
+  /** Sistem pertandingan: knockout atau round robin. */
+  format?: TournamentFormat;
   fee?: number;
   /** Format skor bawaan buat semua partai turnamen ini. */
   scoreFormat?: ScoreFormat;
   pairs?: Array<{ a?: string; b?: string }>;
-  koks?: Array<Partial<Kok>>;
   notes?: string;
   recordedBy: string;
-  defaultPrice: number;
 }
 
 /** Tanggal selesai wajib >= tanggal mulai; sama persis dianggap sehari (null). */
@@ -108,34 +107,29 @@ function normalizeEndDate(start: string, end: string | null | undefined): string
 export async function createTournament(input: CreateTournamentInput): Promise<string> {
   const name = normalizeName(input.name).slice(0, 80);
   if (!name) throw new DomainError("Nama turnamen wajib diisi");
-  if (!TOURNAMENT_SIZES.includes(Number(input.size) as TournamentSize)) {
-    throw new DomainError(`Jumlah pasangan harus ${TOURNAMENT_SIZES.join(" / ")}`);
+  const requested = Math.round(Number(input.size));
+  if (!Number.isFinite(requested) || requested < MIN_PAIRS || requested > MAX_PAIRS) {
+    throw new DomainError(`Jumlah pasangan harus ${MIN_PAIRS}–${MAX_PAIRS}`);
   }
-  const size = normalizeSize(input.size);
+  const size = normalizeSize(requested);
+  const format = normalizeFormat(input.format);
   const pairs = buildPairs(input.pairs, size);
   assertNoDuplicateNames(pairs);
   if (pairs.every((p) => !p.a && !p.b)) throw new DomainError("Isi minimal satu pasangan");
+  // Round robin butuh minimal 2 pasangan terisi — kalau cuma satu, tidak ada lawan.
+  if (format === "round_robin" && pairs.filter((p) => p.a || p.b).length < 2) {
+    throw new DomainError("Semua lawan semua butuh minimal 2 pasangan terisi");
+  }
 
   const date = input.date || todayWIB();
   const endDate = normalizeEndDate(date, input.endDate);
 
   const id = uid();
   await prisma.$transaction(async (tx) => {
-    const types = await readKokTypesTx(tx);
-    // Kok saat bikin turnamen belum terikat partai — nanti diikat lewat dialog pertandingan.
-    const koks: TournamentKok[] = (input.koks ?? []).slice(0, 200).map((k) => ({
-      ...normalizeKokEntry(k, input.defaultPrice, types, uid),
-      matchId: null,
-      date,
-    }));
-    const stockErr = stockDiffError(types, [], koks);
-    if (stockErr) throw new DomainError(stockErr);
-
     await rememberPlayersTx(
       tx,
       pairs.flatMap((p) => [p.a, p.b]).filter(Boolean),
     );
-    await applyStockDeltasTx(tx, stockDeltas([], koks));
 
     const now = new Date();
     await tx.tournaments.create({
@@ -145,11 +139,13 @@ export async function createTournament(input: CreateTournamentInput): Promise<st
         date,
         end_date: endDate,
         size,
+        format,
         fee: Math.max(0, Math.round(Number(input.fee) || 0)),
         score_format: normalizeScoreFormat(input.scoreFormat),
         pairs: pairs as unknown as Json,
         results: {},
-        koks: koks as unknown as Json,
+        // Kok ditambah belakangan — per partai lewat bagan, atau kok umum di detail.
+        koks: [],
         fees: syncFees(pairs, []) as unknown as Json,
         notes: input.notes ? input.notes.trim() : "",
         recorded_by: input.recordedBy,
@@ -236,9 +232,8 @@ export async function setMatchScore(
 ): Promise<void> {
   await prisma.$transaction(async (tx) => {
     const t = await getTournamentTx(tx, id);
-    const key = validMatchId(match, t.size);
+    const key = validMatchId(match, t);
     if (!key) throw new DomainError("Id pertandingan tidak valid");
-    const [round, index] = key.slice(1).split("-").map(Number);
 
     const results = { ...t.results };
     if (score === null) {
@@ -267,19 +262,23 @@ export async function setMatchScore(
       else delete results[key];
     }
 
-    // Kalau pemenang match ini berubah, hasil babak setelahnya jadi tidak valid
-    // (lawannya beda orang) — buang biar bagan tidak menampilkan skor palsu.
-    // Koreksi skor yang pemenangnya tetap sama tidak mengganggu babak lanjutan.
-    const findMatch = (r: Record<string, MatchScore>) =>
-      buildBracket({ size: t.size, pairs: t.pairs, results: r }).rounds[round].matches[index];
-    const before = findMatch(t.results);
-    const after = findMatch(results);
-    const winnerId = (m: typeof before) =>
-      m.winner ? ((m.winner === "a" ? m.a.pair : m.b.pair)?.id ?? null) : null;
-    if (winnerId(before) !== winnerId(after)) {
-      for (const k of Object.keys(results)) {
-        const parsed = /^r(\d+)-/.exec(k);
-        if (parsed && Number(parsed[1]) > round) delete results[k];
+    // Knockout: kalau pemenang partai ini berubah, hasil babak setelahnya jadi
+    // tidak valid (lawannya beda orang) — buang biar bagan tidak menampilkan
+    // skor palsu. Koreksi skor yang pemenangnya tetap sama tidak mengganggu.
+    // Round robin tidak punya babak lanjutan, jadi tidak perlu dibersihkan.
+    const parsed = /^r(\d+)-(\d+)$/.exec(key);
+    if (t.format === "knockout" && parsed) {
+      const round = Number(parsed[1]);
+      const index = Number(parsed[2]);
+      const findMatch = (r: Record<string, MatchScore>) =>
+        enrichTournament({ ...t, results: r }).bracket!.rounds[round].matches[index];
+      const winnerId = (m: ReturnType<typeof findMatch>) =>
+        m.winner ? ((m.winner === "a" ? m.a.pair : m.b.pair)?.id ?? null) : null;
+      if (winnerId(findMatch(t.results)) !== winnerId(findMatch(results))) {
+        for (const k of Object.keys(results)) {
+          const later = /^r(\d+)-/.exec(k);
+          if (later && Number(later[1]) > round) delete results[k];
+        }
       }
     }
 
@@ -379,7 +378,7 @@ export async function addTournamentKoks(
   await prisma.$transaction(async (tx) => {
     const t = await getTournamentTx(tx, id);
     const types = await readKokTypesTx(tx);
-    const boundTo = validMatchId(matchId, t.size);
+    const boundTo = validMatchId(matchId, t);
     const usedAt = clampToTournament(date ?? todayWIB(), t.date, t.endDate);
     const added: TournamentKok[] = raw.slice(0, 200).map((k) => ({
       ...normalizeKokEntry(k, defaultPrice, types, uid),

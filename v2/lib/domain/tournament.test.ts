@@ -3,6 +3,7 @@ import { buildDebtSummary, planInstallment, planSettle } from "./debt";
 import { enrichGame, normalizeStoredGame } from "./game";
 import { fmtDateRange } from "../format";
 import {
+  bracketSize,
   buildBracket,
   enrichTournament,
   koksByDate,
@@ -14,18 +15,19 @@ import {
   pairLabel,
   participantNames,
   roundLabel,
+  roundRobinMatchCount,
   scoreLine,
   suggestFee,
   syncFees,
   tournamentCost,
   tournamentDays,
+  tournamentStatus,
 } from "./tournament";
 import type {
   MatchScore,
   StoredGame,
   StoredTournament,
   TournamentKok,
-  TournamentSize,
 } from "./types";
 
 let seq = 0;
@@ -47,7 +49,7 @@ function bo3(...games: [number, number][]): MatchScore {
 
 /** Bagan dengan pasangan "P1".."Pn" — slot kosong ditulis sebagai "". */
 function tour(partial: Partial<StoredTournament> & { names?: string[][] }): StoredTournament {
-  const size = (partial.size ?? 4) as TournamentSize;
+  const size = partial.size ?? 4;
   const names = partial.names ?? Array.from({ length: size }, (_, i) => [`A${i}`, `B${i}`]);
   return normalizeStoredTournament({
     id: "t1",
@@ -108,7 +110,9 @@ describe("normalizeStoredTournament", () => {
     expect(t.pairs[7]).toMatchObject({ slot: 7, a: "", b: "" });
   });
   it("ukuran ngawur jatuh ke 8", () => {
-    expect(normalizeStoredTournament({ size: 7 as TournamentSize }).size).toBe(8);
+    expect(normalizeStoredTournament({ size: 99 }).size).toBe(32);
+    expect(normalizeStoredTournament({ size: 0 }).size).toBe(2);
+    expect(normalizeStoredTournament({ size: 7 }).size).toBe(7);
   });
   it("skor 0-0 dianggap belum dimainkan", () => {
     const t = tour({ results: { "r0-0": sc(0, 0), "r0-1": sc(21, 15) } });
@@ -199,6 +203,114 @@ describe("buildBracket", () => {
   it("16 pasangan → 4 babak", () => {
     const b = buildBracket(tour({ size: 16 }));
     expect(b.rounds.map((r) => r.matches.length)).toEqual([8, 4, 2, 1]);
+  });
+});
+
+describe("jumlah pasangan fleksibel", () => {
+  it("bagan dipadatkan ke pangkat 2 terdekat, sisanya BYE", () => {
+    expect(bracketSize(14)).toBe(16);
+    expect(bracketSize(8)).toBe(8);
+    expect(bracketSize(5)).toBe(8);
+    expect(bracketSize(2)).toBe(2);
+  });
+
+  it("6 pasangan → bagan 8 slot, BYE disebar bukan menumpuk", () => {
+    const t = enrichTournament(tour({ size: 6 }));
+    expect(t.bracket!.rounds.map((r) => r.matches.length)).toEqual([4, 2, 1]);
+    const first = t.bracket!.rounds[0].matches;
+    // 2 partai nyata + 2 partai ber-BYE (bukan satu partai kosong-lawan-kosong).
+    expect(first.filter((m) => m.autoWin)).toHaveLength(2);
+    expect(first.filter((m) => m.a.bye && m.b.bye)).toHaveLength(0);
+    // Yang dihitung cuma partai yang benar-benar dimainkan: 2 di babak 1 + 2 + 1.
+    expect(t.totalCount).toBe(5);
+  });
+
+  it("jumlah partai round robin = n(n-1)/2", () => {
+    expect(roundRobinMatchCount(4)).toBe(6);
+    expect(roundRobinMatchCount(3)).toBe(3);
+  });
+});
+
+describe("round robin", () => {
+  const rr = (partial: Partial<StoredTournament> = {}) =>
+    enrichTournament(tour({ format: "round_robin", size: 3, ...partial }));
+
+  it("bikin partai semua lawan semua", () => {
+    const t = rr();
+    expect(t.bracket).toBeNull();
+    expect(t.matches.map((m) => m.id)).toEqual(["rr0-1", "rr0-2", "rr1-2"]);
+    expect(t.totalCount).toBe(3);
+  });
+
+  it("klasemen urut menang, lalu selisih poin", () => {
+    const t = rr({
+      results: {
+        "rr0-1": sc(21, 10), // A0 menang
+        "rr0-2": sc(21, 19), // A0 menang tipis
+        "rr1-2": sc(15, 21), // slot 2 menang
+      },
+    });
+    const s = t.roundRobin!.standings;
+    expect(s[0].pair.id).toBe("p0");
+    expect(s[0].won).toBe(2);
+    expect(s[1].pair.id).toBe("p2");
+    expect(t.champion?.id).toBe("p0");
+    expect(t.finished).toBe(true);
+  });
+
+  it("juara kosong selama masih ada partai belum main", () => {
+    const t = rr({ results: { "rr0-1": sc(21, 10) } });
+    expect(t.champion).toBeNull();
+    expect(t.playedCount).toBe(1);
+    expect(t.finished).toBe(false);
+  });
+
+  it("seri di puncak klasemen belum menghasilkan juara", () => {
+    // Tiga pasangan saling mengalahkan → semua 1 menang.
+    const t = rr({
+      results: { "rr0-1": sc(21, 10), "rr1-2": sc(21, 10), "rr0-2": sc(10, 21) },
+    });
+    expect(t.roundRobin!.standings.every((r) => r.won === 1)).toBe(true);
+    expect(t.champion).toBeNull();
+  });
+
+  it("slot kosong tidak masuk klasemen dan partainya tidak dihitung", () => {
+    const t = enrichTournament(
+      tour({
+        format: "round_robin",
+        size: 3,
+        names: [
+          ["A", "B"],
+          ["C", "D"],
+          ["", ""],
+        ],
+      }),
+    );
+    expect(t.roundRobin!.standings).toHaveLength(2);
+    expect(t.totalCount).toBe(1);
+  });
+
+  it("id partai di luar format dibuang saat normalisasi", () => {
+    // Skor bergaya knockout tidak berlaku di round robin.
+    const t = enrichTournament(
+      tour({ format: "round_robin", size: 3, results: { "r0-0": sc(21, 10) } }),
+    );
+    expect(Object.keys(t.results)).toEqual([]);
+  });
+});
+
+describe("tournamentStatus", () => {
+  const base = { endDate: null, finished: false };
+  it("tanggal mulai di depan = akan datang", () => {
+    expect(tournamentStatus({ ...base, date: "2026-09-01" }, "2026-08-05")).toBe("akan-datang");
+  });
+  it("sudah mulai tapi belum kelar = berjalan", () => {
+    expect(tournamentStatus({ ...base, date: "2026-08-05" }, "2026-08-05")).toBe("berjalan");
+  });
+  it("selesai menang atas tanggal", () => {
+    expect(tournamentStatus({ ...base, date: "2026-09-01", finished: true }, "2026-08-05")).toBe(
+      "selesai",
+    );
   });
 });
 
@@ -405,8 +517,12 @@ describe("kok per partai", () => {
   });
 
   it("matchTitle menomori partai hanya kalau babaknya lebih dari satu partai", () => {
-    expect(matchTitle(0, 1, 8)).toBe("Perempat Final · Partai 2");
-    expect(matchTitle(2, 0, 8)).toBe("Final");
+    const ko = { format: "knockout" as const, size: 8 };
+    expect(matchTitle(ko, { round: 0, index: 1 })).toBe("Perempat Final · Partai 2");
+    expect(matchTitle(ko, { round: 2, index: 0 })).toBe("Final");
+    expect(matchTitle({ format: "round_robin" as const, size: 4 }, { round: 0, index: 2 })).toBe(
+      "Partai 3",
+    );
   });
 });
 

@@ -70,8 +70,10 @@ model tournaments {
   date        String
   /// Tanggal selesai kalau turnamen lebih dari sehari; null = sehari saja.
   end_date    String?
-  /// Jumlah slot pasangan di babak pertama: 4, 8, atau 16.
+  /// Jumlah pasangan yang ikut (2–32). Knockout memadatkan sisanya jadi BYE.
   size        Int      @default(8)
+  /// "knockout" (sistem gugur) atau "round_robin" (semua lawan semua).
+  format      String   @default("knockout")
   /// Iuran patungan per orang (rupiah).
   fee          Int     @default(0)
   /// Format skor bawaan: "bo3" (rally 21, 3 game) atau "single" (1 game sampai 30).

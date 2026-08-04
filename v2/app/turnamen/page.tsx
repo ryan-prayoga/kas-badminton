@@ -18,9 +18,7 @@ export default async function TurnamenPage() {
       <TournamentListView
         tournaments={data.tournaments}
         editable={canEdit}
-        kokTypes={data.kokTypes}
         players={data.players}
-        defaultPrice={data.settings.defaultPricePerPerson}
       />
     </AppFrame>
   );

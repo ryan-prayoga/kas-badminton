@@ -17,6 +17,7 @@ export default async function RiwayatPage() {
     >
       <HistoryView
         games={data.games}
+        tournaments={data.tournaments}
         photoMap={buildPhotoMap(data.players)}
         editable={isAdmin}
         kokTypes={data.kokTypes}

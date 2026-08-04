@@ -3,7 +3,7 @@
 import { mutate, type ActionResult } from "@/lib/action-util";
 import { recordedByFor, requireStaff } from "@/lib/auth";
 import { DomainError } from "@/lib/domain/errors";
-import type { Kok, MatchScore, ScoreFormat } from "@/lib/domain/types";
+import type { Kok, MatchScore, ScoreFormat, TournamentFormat } from "@/lib/domain/types";
 import {
   addTournamentKoks,
   createTournament,
@@ -20,11 +20,11 @@ export interface CreateTournamentBody {
   name: string;
   date?: string;
   endDate?: string | null;
+  format?: TournamentFormat;
   size: number;
   fee?: number;
   scoreFormat?: ScoreFormat;
   pairs?: Array<{ a?: string; b?: string }>;
-  koks?: Array<Partial<Kok>>;
   notes?: string;
 }
 
@@ -33,19 +33,17 @@ export async function createTournamentAction(
 ): Promise<ActionResult<string>> {
   return mutate(async () => {
     const sess = await requireStaff();
-    const snap = await loadSnapshot();
     return createTournament({
       name: body.name,
       date: body.date,
       endDate: body.endDate ?? null,
+      format: body.format,
       size: Number(body.size),
       fee: Number(body.fee) || 0,
       scoreFormat: body.scoreFormat,
       pairs: body.pairs,
-      koks: body.koks,
       notes: body.notes,
       recordedBy: recordedByFor(sess),
-      defaultPrice: snap.settings.defaultPricePerPerson,
     });
   });
 }

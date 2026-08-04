@@ -146,8 +146,12 @@ export interface MatchScore {
   games: GameScore[];
 }
 
-/** Jumlah slot pasangan yang didukung di babak pertama. */
-export type TournamentSize = 4 | 8 | 16;
+/**
+ * Sistem pertandingan.
+ * - `knockout`    — sistem gugur; kalah sekali, habis.
+ * - `round_robin` — semua lawan semua, juara dari klasemen.
+ */
+export type TournamentFormat = "knockout" | "round_robin";
 
 /**
  * Kok turnamen. Sama seperti kok game (harga di-snapshot), plus `matchId`:
@@ -167,7 +171,9 @@ export interface StoredTournament {
   date: string;
   /** Tanggal selesai; null kalau turnamen cuma sehari. */
   endDate: string | null;
-  size: TournamentSize;
+  format: TournamentFormat;
+  /** Jumlah pasangan yang ikut (2–32). */
+  size: number;
   /** Iuran patungan per orang (rupiah). */
   fee: number;
   /** Format skor bawaan untuk partai baru; tiap partai boleh beda. */
@@ -223,6 +229,31 @@ export interface Bracket {
   champion: TournamentPair | null;
 }
 
+/** Satu baris klasemen round robin. */
+export interface StandingRow {
+  pair: TournamentPair;
+  played: number;
+  won: number;
+  lost: number;
+  /** Game (set) yang dimenangkan / kebobolan. */
+  gamesFor: number;
+  gamesAgainst: number;
+  /** Total poin skor dibuat / kemasukan. */
+  pointsFor: number;
+  pointsAgainst: number;
+  /** pointsFor − pointsAgainst. */
+  diff: number;
+}
+
+export interface RoundRobin {
+  matches: BracketMatch[];
+  standings: StandingRow[];
+  /** Peringkat 1 kalau semua partai sudah main dan tidak seri di puncak. */
+  champion: TournamentPair | null;
+  playedCount: number;
+  totalCount: number;
+}
+
 export interface TournamentCost {
   kokCount: number;
   /** Total rupiah kok yang dipakai (harga per kok = pricePerPerson × 4, sama seperti game). */
@@ -239,7 +270,17 @@ export interface TournamentCost {
 }
 
 export interface EnrichedTournament extends StoredTournament {
-  bracket: Bracket;
+  /** Terisi kalau format knockout. */
+  bracket: Bracket | null;
+  /** Terisi kalau format round robin. */
+  roundRobin: RoundRobin | null;
+  /** Semua partai, apa pun formatnya — dipakai buat kok per partai & ringkasan. */
+  matches: BracketMatch[];
+  champion: TournamentPair | null;
+  /** Partai yang sudah ada hasilnya / total partai yang bisa dimainkan. */
+  playedCount: number;
+  totalCount: number;
+  finished: boolean;
   cost: TournamentCost;
 }
 
