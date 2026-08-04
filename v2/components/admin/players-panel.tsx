@@ -10,7 +10,7 @@ import { Avatar } from "@/components/kok/avatar";
 import { KIcon } from "@/components/kok/icons";
 import { Card } from "@/components/ui/card";
 import { compressPhoto, ImageCompressError } from "@/lib/image-compress";
-import { safeAction } from "@/lib/action-result";
+import { safeAction, UPLOAD_TIMEOUT_MS } from "@/lib/action-result";
 
 function PlayerRowItem({ player }: { player: PlayerRow }) {
   const confirm = useConfirm();
@@ -47,7 +47,11 @@ function PlayerRowItem({ player }: { player: PlayerRow }) {
       if (fileRef.current) fileRef.current.value = "";
     }
     start(async () => {
-      const res = await safeAction(() => updatePlayerAction(player.name, { photo: dataUrl }));
+      // payload foto jauh lebih gede dari aksi lain → kasih napas lebih panjang
+      const res = await safeAction(
+        () => updatePlayerAction(player.name, { photo: dataUrl }),
+        UPLOAD_TIMEOUT_MS,
+      );
       if (res.ok) toast.success("Foto diperbarui");
       else toast.error(res.error);
     });

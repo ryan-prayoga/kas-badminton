@@ -13,7 +13,7 @@
  * kesimpan/kesajikan basi.
  */
 
-const VERSION = "v1";
+const VERSION = "v2";
 const ASSET_CACHE = `kok-assets-${VERSION}`;
 const SHELL_CACHE = `kok-shell-${VERSION}`;
 const OFFLINE_URL = "/offline";
@@ -21,12 +21,45 @@ const KEEP = new Set([ASSET_CACHE, SHELL_CACHE]);
 
 const ASSET_RE = /\.(?:js|css|woff2?|ttf|otf|png|jpe?g|gif|svg|webp|avif|ico)$/i;
 
+/* Soket yang mati diam-diam pas iOS mbekukan app bikin fetch berikutnya NGGANTUNG
+   sampai TCP timeout, bukan langsung gagal. Untuk navigasi itu fatal: `respondWith`
+   nahan halaman, jadi user cuma lihat layar kosong tanpa tombol apa pun. Semua
+   fetch di sini dikasih batas waktu biar selalu jatuh ke fallback yang bisa
+   dipencet, bukan diam selamanya. */
+const NAV_TIMEOUT_MS = 10_000;
+const ASSET_TIMEOUT_MS = 15_000;
+
+/** Buat request biasa (aset): abort beneran, soket busuknya sekalian dibuang. */
+function fetchWithTimeout(request, ms) {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), ms);
+  return fetch(request, { signal: ctrl.signal }).finally(() => clearTimeout(timer));
+}
+
+/**
+ * Buat request navigasi. Sengaja TANPA AbortController: ngasih `init` ke `fetch`
+ * bikin Request-nya dibangun ulang, dan spec nurunin mode "navigate" jadi
+ * "same-origin". Di sini kita cuma berhenti nunggu — request-nya dibiarkan
+ * selesai sendiri di latar (pola yang sama dipakai Workbox).
+ */
+function raceTimeout(promise, ms) {
+  // reject telat (setelah timeout menang) jangan jadi unhandled rejection
+  promise.catch(() => {});
+  let timer;
+  const limit = new Promise((_, reject) => {
+    timer = setTimeout(() => reject(new Error("timeout")), ms);
+  });
+  return Promise.race([promise, limit]).finally(() => clearTimeout(timer));
+}
+
 self.addEventListener("install", (event) => {
   event.waitUntil(
     (async () => {
       const cache = await caches.open(SHELL_CACHE);
       // `reload` biar gak keambil dari HTTP cache yang mungkin sudah basi
-      await cache.add(new Request(OFFLINE_URL, { cache: "reload" }));
+      const req = new Request(OFFLINE_URL, { cache: "reload" });
+      const res = await fetchWithTimeout(req, ASSET_TIMEOUT_MS);
+      if (res.ok) await cache.put(OFFLINE_URL, res);
       await self.skipWaiting();
     })().catch(() => self.skipWaiting()),
   );
@@ -64,7 +97,7 @@ async function cacheFirst(request) {
   const cache = await caches.open(ASSET_CACHE);
   const hit = await cache.match(request);
   if (hit) return hit;
-  const res = await fetch(request);
+  const res = await fetchWithTimeout(request, ASSET_TIMEOUT_MS);
   if (res.ok && res.type === "basic") cache.put(request, res.clone());
   return res;
 }
@@ -72,26 +105,34 @@ async function cacheFirst(request) {
 async function staleWhileRevalidate(request) {
   const cache = await caches.open(ASSET_CACHE);
   const hit = await cache.match(request);
-  const network = fetch(request)
+  const network = fetchWithTimeout(request, ASSET_TIMEOUT_MS)
     .then((res) => {
       if (res.ok && res.type === "basic") cache.put(request, res.clone());
       return res;
     })
-    .catch(() => hit);
+    // gak ada di cache DAN network gagal → tetap harus balikin Response;
+    // `undefined` bikin respondWith lempar TypeError
+    .catch(() => hit ?? new Response("", { status: 503 }));
   return hit || network;
+}
+
+async function offlineFallback() {
+  const cache = await caches.open(SHELL_CACHE);
+  const fallback = await cache.match(OFFLINE_URL);
+  if (fallback) return fallback;
+  return new Response("Offline", {
+    status: 503,
+    headers: { "Content-Type": "text/plain; charset=utf-8" },
+  });
 }
 
 async function navigate(request) {
   try {
-    return await fetch(request);
+    return await raceTimeout(fetch(request), NAV_TIMEOUT_MS);
   } catch {
-    const cache = await caches.open(SHELL_CACHE);
-    const fallback = await cache.match(OFFLINE_URL);
-    if (fallback) return fallback;
-    return new Response("Offline", {
-      status: 503,
-      headers: { "Content-Type": "text/plain; charset=utf-8" },
-    });
+    // termasuk kasus kelamaan nunggu — halaman offline punya tombol "Coba lagi",
+    // jauh lebih berguna daripada layar kosong yang diam terus
+    return offlineFallback();
   }
 }
 

@@ -8,6 +8,7 @@ import { RealtimeRefresher } from "@/components/realtime-refresher";
 import { SessionGuard } from "@/components/session-guard";
 import { ScrollContainer } from "@/components/scroll-container";
 import { BottomNav } from "@/components/kok/bottom-nav";
+import { ConnectionWatchdog } from "@/components/pwa/connection-watchdog";
 import { ServiceWorkerRegister } from "@/components/pwa/service-worker";
 import { ThemeColorSync } from "@/components/pwa/theme-color-sync";
 import { ViewportGuard } from "@/components/pwa/viewport-guard";
@@ -86,6 +87,7 @@ export default async function RootLayout({ children }: Readonly<{ children: Reac
             <RealtimeRefresher />
             <ThemeColorSync />
             <ViewportGuard />
+            <ConnectionWatchdog />
             <ServiceWorkerRegister />
           </ConfirmProvider>
         </ThemeProvider>
