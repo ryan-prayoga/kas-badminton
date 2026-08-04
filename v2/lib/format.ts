@@ -59,6 +59,22 @@ export function fmtDateLong(iso: string): string {
   return `${Number(m[3])} ${MONTHS_FULL[Number(m[2]) - 1]} ${m[1]}`;
 }
 
+/**
+ * Rentang tanggal ringkas: "4 – 6 Agu 2026", "30 Jul – 2 Agu 2026",
+ * "28 Des 2026 – 3 Jan 2027". Tanpa `end` (atau sama) → satu tanggal saja.
+ */
+export function fmtDateRange(start: string, end?: string | null): string {
+  if (!end || end === start) return fmtDate(start);
+  const a = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(start || ""));
+  const b = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(end || ""));
+  if (!a || !b) return fmtDate(start);
+  const [, ya, ma, da] = a;
+  const [, yb, mb] = b;
+  if (ya !== yb) return `${fmtDate(start)} – ${fmtDate(end)}`;
+  if (ma !== mb) return `${Number(da)} ${MONTHS[Number(ma) - 1]} – ${fmtDate(end)}`;
+  return `${Number(da)} – ${fmtDate(end)}`;
+}
+
 /** "Kamis, 24 Juli 2026". */
 export function fmtDateFull(iso: string): string {
   const d = parseLocalDate(iso);

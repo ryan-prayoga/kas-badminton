@@ -1,7 +1,13 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import type { DebtEntry, EnrichedGame, ExpenseRow, KokType } from "@/lib/domain/types";
+import type {
+  DebtEntry,
+  EnrichedGame,
+  EnrichedTournament,
+  ExpenseRow,
+  KokType,
+} from "@/lib/domain/types";
 import { currentPeriodKey, fmt, fmtDate, periodKey, periodLabel, toLocalIso } from "@/lib/format";
 import { APP_URL, type ShareCardBlock, type ShareMetric } from "@/lib/share";
 import { cn } from "@/lib/utils";
@@ -46,6 +52,8 @@ interface PlayerStat {
   kok: number;
   keluar: number;
   nunggak: number;
+  /** Berapa turnamen yang diikuti di periode ini. */
+  turnamen: number;
 }
 
 /** Teks share WhatsApp-friendly (*bold*, rapi, mudah dibaca). */
@@ -53,6 +61,8 @@ function buildStatsShareText({
   periodName,
   totalGames,
   totalKok,
+  tournamentKok,
+  totalTournaments,
   paid,
   unpaid,
   expense,
@@ -64,6 +74,8 @@ function buildStatsShareText({
   periodName: string;
   totalGames: number;
   totalKok: number;
+  tournamentKok: number;
+  totalTournaments: number;
   paid: number;
   unpaid: number;
   expense: number;
@@ -83,10 +95,14 @@ function buildStatsShareText({
     "",
     "*Ringkasan*",
     `🏸 Total main: ${totalGames} game`,
-    `🪶 Kok terpakai: ${totalKok}`,
+    `🪶 Kok terpakai: ${totalKok}${tournamentKok ? ` (${tournamentKok} dari turnamen)` : ""}`,
     `💚 Masuk (lunas): ${fmt(paid)}`,
     `💸 Belum bayar: ${fmt(unpaid)}${orangNunggak ? ` (${orangNunggak} orang)` : " — semua lunas ✅"}`,
   ];
+
+  if (totalTournaments > 0) {
+    lines.push(`🏆 Turnamen: ${totalTournaments}`);
+  }
 
   if (showKas) {
     lines.push(`🛒 Beli / keluar: ${fmt(expense)}`);
@@ -152,6 +168,8 @@ function buildStatsShareBlocks({
   periodName,
   totalGames,
   totalKok,
+  tournamentKok,
+  totalTournaments,
   paid,
   unpaid,
   expense,
@@ -165,6 +183,8 @@ function buildStatsShareBlocks({
   periodName: string;
   totalGames: number;
   totalKok: number;
+  tournamentKok: number;
+  totalTournaments: number;
   paid: number;
   unpaid: number;
   expense: number;
@@ -219,9 +239,18 @@ function buildStatsShareBlocks({
       value: String(totalKok),
       tone: "court",
       icon: "shuttle",
-      sub: "total kok",
+      sub: tournamentKok ? `${tournamentKok} dari turnamen` : "total kok",
     },
   );
+  if (totalTournaments > 0) {
+    metricItems.push({
+      label: "Turnamen",
+      value: String(totalTournaments),
+      tone: "court",
+      icon: "trophy",
+      sub: "bagan tercatat",
+    });
+  }
   if (stockLeft !== undefined) {
     metricItems.push({
       label: "Stok sisa",
@@ -281,6 +310,7 @@ export function StatsView({
   photoMap,
   kas,
   expenses,
+  tournaments = [],
 }: {
   games: EnrichedGame[];
   debts: DebtEntry[];
@@ -288,6 +318,7 @@ export function StatsView({
   photoMap: PhotoMap;
   kas?: { paid: number; expense: number; net: number };
   expenses?: ExpenseRow[];
+  tournaments?: EnrichedTournament[];
 }) {
   const periods = useMemo(() => {
     const keys = new Set<string>();
@@ -297,8 +328,12 @@ export function StatsView({
       const k = periodKey(g.date);
       if (k) keys.add(k);
     }
+    for (const t of tournaments) {
+      const k = periodKey(t.date);
+      if (k) keys.add(k);
+    }
     return [...keys].sort().reverse();
-  }, [games]);
+  }, [games, tournaments]);
 
   const [period, setPeriod] = useState<string>("all");
   const [shareOpen, setShareOpen] = useState(false);
@@ -308,8 +343,19 @@ export function StatsView({
     [games, period],
   );
 
-  const totalKok = scoped.reduce((s, g) => s + g.cost.kokCount, 0);
-  const paidIn = scoped.reduce((s, g) => s + g.summary.paidTotal, 0);
+  const scopedTournaments = useMemo(
+    () =>
+      period === "all" ? tournaments : tournaments.filter((t) => periodKey(t.date) === period),
+    [tournaments, period],
+  );
+
+  const gameKok = scoped.reduce((s, g) => s + g.cost.kokCount, 0);
+  // Kok turnamen dicatat sama seperti kok game: potong stok, ikut total terpakai.
+  const tournamentKok = scopedTournaments.reduce((s, t) => s + t.cost.kokCount, 0);
+  const totalKok = gameKok + tournamentKok;
+  const paidIn =
+    scoped.reduce((s, g) => s + g.summary.paidTotal, 0) +
+    scopedTournaments.reduce((s, t) => s + t.cost.feePaid, 0);
 
   const expenseIn = useMemo(() => {
     if (!kas) return 0;
@@ -340,25 +386,55 @@ export function StatsView({
         map.set(p.name, (map.get(p.name) ?? 0) + g.cost.perPerson);
       }
     }
+    for (const t of scopedTournaments) {
+      if (t.fee <= 0) continue;
+      for (const f of t.fees) {
+        if (f.paid || !f.name) continue;
+        map.set(f.name, (map.get(f.name) ?? 0) + t.fee);
+      }
+    }
     return map;
-  }, [period, debts, scoped]);
+  }, [period, debts, scoped, scopedTournaments]);
   const totalDebt = [...debtMap.values()].reduce((s, v) => s + v, 0);
   const debtPeople = debtMap.size;
 
   const players = useMemo(() => {
     const map = new Map<string, PlayerStat>();
+    const bucket = (name: string) => {
+      const s = map.get(name) ?? {
+        name,
+        main: 0,
+        kok: 0,
+        keluar: 0,
+        nunggak: 0,
+        turnamen: 0,
+      };
+      map.set(name, s);
+      return s;
+    };
+
     for (const g of scoped) {
       const kokCount = Number(g.cost.kokCount) || 0;
       for (const p of g.players) {
         if (!p.name) continue;
-        const s = map.get(p.name) ?? { name: p.name, main: 0, kok: 0, keluar: 0, nunggak: 0 };
+        const s = bucket(p.name);
         s.main += 1;
         // Total kok di game yang diikuti pemain ini (sengaja ≠ total kok unik global).
         s.kok += kokCount;
         s.keluar += g.cost.perPerson;
-        map.set(p.name, s);
       }
     }
+
+    // Kok turnamen itu pool bersama — tidak dibagi ke pemain, tapi iurannya masuk "keluar".
+    for (const t of scopedTournaments) {
+      for (const f of t.fees) {
+        if (!f.name) continue;
+        const s = bucket(f.name);
+        s.turnamen += 1;
+        s.keluar += t.fee;
+      }
+    }
+
     for (const s of map.values()) {
       // Sisa tagihan asli (sudah dipotong cicilan), sama seperti Rekap — bukan per periode.
       s.nunggak = debtMap.get(s.name) ?? 0;
@@ -366,7 +442,7 @@ export function StatsView({
     return [...map.values()].sort(
       (a, b) => b.nunggak - a.nunggak || b.main - a.main || a.name.localeCompare(b.name, "id"),
     );
-  }, [scoped, debtMap]);
+  }, [scoped, scopedTournaments, debtMap]);
 
   const periodName = period === "all" ? "Semua waktu" : periodLabel(period);
 
@@ -375,6 +451,8 @@ export function StatsView({
       periodName,
       totalGames: scoped.length,
       totalKok,
+      tournamentKok,
+      totalTournaments: scopedTournaments.length,
       paid: paidIn,
       unpaid: totalDebt,
       expense: expenseIn,
@@ -398,6 +476,8 @@ export function StatsView({
     periodName,
     scoped.length,
     totalKok,
+    tournamentKok,
+    scopedTournaments.length,
     paidIn,
     totalDebt,
     expenseIn,
@@ -484,8 +564,17 @@ export function StatsView({
           iconClass="text-court"
           label="Kok terpakai"
           value={String(totalKok)}
-          sub="total kok"
+          sub={tournamentKok ? `${gameKok} main · ${tournamentKok} turnamen` : "total kok"}
         />
+        {scopedTournaments.length > 0 && (
+          <StatCard
+            icon="trophy"
+            iconClass="text-court"
+            label="Turnamen"
+            value={String(scopedTournaments.length)}
+            sub="bagan tercatat"
+          />
+        )}
         <StatCard
           icon="package"
           iconClass={stockLeft > 0 ? "text-paid" : "text-danger"}
@@ -541,6 +630,11 @@ export function StatsView({
                     <span className="inline-flex items-center gap-1">
                       <KIcon name="shuttle" className="size-3" /> {s.kok} kok
                     </span>
+                    {s.turnamen > 0 && (
+                      <span className="inline-flex items-center gap-1">
+                        <KIcon name="trophy" className="size-3" /> {s.turnamen} turnamen
+                      </span>
+                    )}
                     <span className="tabular inline-flex items-center gap-1 font-mono">
                       <KIcon name="cash" className="size-3" /> {fmt(s.keluar)}
                     </span>

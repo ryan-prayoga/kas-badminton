@@ -49,12 +49,22 @@ export function DateField({
   id,
   className,
   disabled,
+  allowFuture = false,
+  min,
+  max,
 }: {
   value: string;
   onChange: (next: string) => void;
   id?: string;
   className?: string;
   disabled?: boolean;
+  /** Game dicatat setelah dimainkan, jadi default tolak tanggal depan. Turnamen
+   *  bisa berlangsung beberapa hari ke depan — set true buat tanggal selesai. */
+  allowFuture?: boolean;
+  /** Tanggal paling awal yang boleh dipilih (YYYY-MM-DD). */
+  min?: string;
+  /** Tanggal paling akhir yang boleh dipilih (YYYY-MM-DD). */
+  max?: string;
 }) {
   const autoId = useId();
   const fieldId = id ?? autoId;
@@ -104,8 +114,11 @@ export function DateField({
     setOpen(true);
   };
 
+  const isDisabledDate = (iso: string) =>
+    (!allowFuture && iso > today) || (!!min && iso < min) || (!!max && iso > max);
+
   const pick = (iso: string) => {
-    if (iso > today) return; // game dicatat setelah dimainkan — tanggal masa depan hampir pasti salah
+    if (isDisabledDate(iso)) return;
     onChange(iso);
     setOpen(false);
   };
@@ -216,13 +229,12 @@ export function DateField({
               if (!cell) return <div key={`e-${i}`} className="h-9" />;
               const isSel = cell.iso === value;
               const isToday = cell.iso === today;
-              const isFuture = cell.iso > today;
               return (
                 <button
                   key={cell.iso}
                   type="button"
                   onClick={() => pick(cell.iso)}
-                  disabled={isFuture}
+                  disabled={isDisabledDate(cell.iso)}
                   className={cn(
                     "grid h-9 place-items-center rounded-xl text-sm font-semibold transition disabled:cursor-not-allowed disabled:opacity-30 disabled:hover:bg-transparent",
                     isSel

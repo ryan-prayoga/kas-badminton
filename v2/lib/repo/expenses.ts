@@ -45,6 +45,7 @@ export async function listBalanceAdjustments(limit = 200): Promise<PaymentHistor
     type: r.amount < 0 ? "saldo_masuk" : "saldo_keluar",
     recordedBy: null,
     gameId: null,
+    tournamentId: null,
     createdAt: r.created_at.toISOString(),
   }));
 }

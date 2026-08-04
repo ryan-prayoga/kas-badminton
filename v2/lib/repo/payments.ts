@@ -13,6 +13,7 @@ function rowToPayment(r: PaymentRow): PaymentHistoryEntry {
     type: r.type === "cicil" ? "cicil" : "lunas",
     recordedBy: r.recorded_by,
     gameId: r.game_id,
+    tournamentId: r.tournament_id,
     createdAt: r.created_at.toISOString(),
   };
 }
@@ -26,6 +27,7 @@ export async function recordPaymentTx(
     type: PaymentType;
     recordedBy?: string;
     gameId?: string;
+    tournamentId?: string;
     /** Stempel waktu yang sama dengan `paidAt` pemain — biar jam di rekap & history identik. */
     at?: Date;
   },
@@ -38,6 +40,7 @@ export async function recordPaymentTx(
       type: input.type,
       recorded_by: input.recordedBy || null,
       game_id: input.gameId || null,
+      tournament_id: input.tournamentId || null,
       created_at: input.at ?? new Date(),
     },
   });

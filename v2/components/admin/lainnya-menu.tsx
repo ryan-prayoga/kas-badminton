@@ -27,7 +27,7 @@ import {
 type PanelKey = "kok" | "saldo" | "pemain" | "delegasi" | "setelan" | "tampilan" | null;
 
 const MENU: {
-  key: PanelKey | "public" | "lock" | "history";
+  key: PanelKey | "public" | "lock" | "history" | "turnamen";
   label: string;
   icon: IconName;
   adminOnly?: boolean;
@@ -76,6 +76,7 @@ const MENU: {
     icon: "themeAuto",
     desc: "Mode terang, gelap, atau ikut setelan sistem.",
   },
+  { key: "turnamen", label: "Turnamen", icon: "trophy", href: "/turnamen" },
   { key: "history", label: "Riwayat transaksi", icon: "history", href: "/riwayat-bayar" },
   { key: "public", label: "Halaman publik", icon: "back", href: "/" },
   { key: "lock", label: "Kunci", icon: "lock", danger: true },

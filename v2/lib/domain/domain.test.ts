@@ -192,7 +192,7 @@ describe("planInstallment (greedy oldest-first)", () => {
   ];
   it("bayar cukup 1 game terlama dulu, sisa jadi carry", () => {
     const plan = planInstallment(games, {}, "A", 4000);
-    expect(plan.touched).toEqual([{ gameId: "old", index: 0 }]);
+    expect(plan.touched).toEqual([{ kind: "game", id: "old", index: 0 }]);
     expect(plan.carryAfter).toBe(1000);
     expect(plan.paymentAmount).toBe(4000);
     expect(plan.clearsDebt).toBe(false);
@@ -200,8 +200,8 @@ describe("planInstallment (greedy oldest-first)", () => {
   it("carry lama ikut jadi kredit", () => {
     const plan = planInstallment(games, { A: 2000 }, "A", 4000); // 6000 → lunasi 2 game
     expect(plan.touched).toEqual([
-      { gameId: "old", index: 0 },
-      { gameId: "new", index: 0 },
+      { kind: "game", id: "old", index: 0 },
+      { kind: "game", id: "new", index: 0 },
     ]);
     expect(plan.carryAfter).toBeNull();
     // cicilan yang menutup semua tagihan → dicatat lunas
@@ -274,6 +274,7 @@ describe("summarize", () => {
       settings: { defaultPricePerPerson: 3000, merchantQris: "QRISPAYLOAD" },
       players: [{ name: "A", photo: null }],
       games: [game({ id: "g1", koks: [kok(3000)] })],
+      tournaments: [],
       kokTypes: [],
       carry: {},
       totalExpense: 5000,

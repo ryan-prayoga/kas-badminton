@@ -38,15 +38,26 @@ function buildItems(adminChrome: boolean, role: Role): NavItem[] {
       icon: "wallet",
       match: (p) => p.startsWith("/belum-bayar"),
     },
-    {
-      href: "/statistik",
-      label: "Statistik",
-      icon: "chart",
-      match: (p) => p.startsWith("/statistik"),
-    },
   ];
 
-  // Riwayat transaksi: nav sendiri di chrome publik; admin akses lewat menu Lainnya.
+  // Chrome admin sudah padat (FAB + Lainnya) — turnamen & riwayat transaksi
+  // di sana lewat menu Lainnya, bukan tab sendiri.
+  if (!adminChrome) {
+    items.push({
+      href: "/turnamen",
+      label: "Turnamen",
+      icon: "trophy",
+      match: (p) => p.startsWith("/turnamen"),
+    });
+  }
+
+  items.push({
+    href: "/statistik",
+    label: "Statistik",
+    icon: "chart",
+    match: (p) => p.startsWith("/statistik"),
+  });
+
   if (!adminChrome) {
     items.push({
       href: "/riwayat-bayar",

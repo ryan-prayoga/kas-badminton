@@ -20,6 +20,10 @@ interface DateGroup {
   total: number;
   count: number;
   koks: number;
+  /** Berapa item yang datang dari main biasa. */
+  games: number;
+  /** Nama turnamen yang iurannya belum dibayar di tanggal ini. */
+  tournaments: string[];
 }
 
 function groupItems(items: DebtItem[]): DateGroup[] {
@@ -28,15 +32,35 @@ function groupItems(items: DebtItem[]): DateGroup[] {
   for (const it of items) {
     let g = map.get(it.date);
     if (!g) {
-      g = { date: it.date, total: 0, count: 0, koks: 0 };
+      g = { date: it.date, total: 0, count: 0, koks: 0, games: 0, tournaments: [] };
       map.set(it.date, g);
       order.push(it.date);
     }
     g.total += Number(it.amount) || 0;
     g.count += 1;
     g.koks += Number(it.kokCount) || 0;
+    if (it.kind === "turnamen") g.tournaments.push(it.label || "Turnamen");
+    else g.games += 1;
   }
   return order.map((d) => map.get(d)!);
+}
+
+/** "3 main", "1 turnamen", atau "2 main · 1 turnamen". */
+function itemsLabel(games: number, tournaments: number): string {
+  const parts: string[] = [];
+  if (games > 0) parts.push(`${games} main`);
+  if (tournaments > 0) parts.push(`${tournaments} turnamen`);
+  return parts.join(" · ") || "0 main";
+}
+
+function countKinds(items: DebtItem[]): { games: number; tournaments: number } {
+  let games = 0;
+  let tournaments = 0;
+  for (const it of items) {
+    if (it.kind === "turnamen") tournaments += 1;
+    else games += 1;
+  }
+  return { games, tournaments };
 }
 
 function todayLabel(): string {
@@ -45,24 +69,26 @@ function todayLabel(): string {
 
 function debtShareText(d: DebtEntry): string {
   const grouped = groupItems(d.items);
+  const kinds = countKinds(d.items);
   const totalKoks = d.items.reduce((s, it) => s + (Number(it.kokCount) || 0), 0);
   const lines = [
     "🏸 *Kok Badminton · Tagihan Kok*",
     `Halo *${d.name}*, ini rekap kok kamu ya 👇`,
     "",
     `💸 *Sisa tagihan: ${fmt(d.total)}*`,
-    `🏸 ${d.items.length} main · ${totalKoks} kok belum lunas`,
+    `🏸 ${itemsLabel(kinds.games, kinds.tournaments)} · ${totalKoks} kok belum lunas`,
   ];
   if (d.carry > 0) {
     lines.push(`✅ Sudah dicicil ${fmt(d.carry)} dari ${fmt(d.owedGross)}`);
   }
-  lines.push("", "📅 *Rincian main*");
+  lines.push("", "📅 *Rincian tagihan*");
   for (const g of grouped) {
     const rel = relativeDay(g.date);
     lines.push(
       `• *${fmtDate(g.date)}*${rel ? ` · ${rel}` : ""}`,
-      `  ${g.count} main · ${g.koks} kok · ${fmt(g.total)}`,
+      `  ${itemsLabel(g.games, g.tournaments.length)} · ${g.koks} kok · ${fmt(g.total)}`,
     );
+    if (g.tournaments.length) lines.push(`  🏆 ${g.tournaments.join(", ")}`);
   }
   lines.push(
     "",
@@ -81,6 +107,7 @@ function debtShareCaption(d: DebtEntry): string {
 
 function debtShareBlocks(d: DebtEntry, photo?: string): ShareCardBlock[] {
   const grouped = groupItems(d.items);
+  const kinds = countKinds(d.items);
   const totalKoks = d.items.reduce((s, it) => s + (Number(it.kokCount) || 0), 0);
   const blocks: ShareCardBlock[] = [
     { kind: "header", title: "Tagihan", subtitle: "Belum lunas", badge: todayLabel() },
@@ -91,7 +118,7 @@ function debtShareBlocks(d: DebtEntry, photo?: string): ShareCardBlock[] {
       photo,
       tone: "owe",
       chips: [
-        { icon: "racket", text: `${d.items.length} main` },
+        { icon: "racket", text: itemsLabel(kinds.games, kinds.tournaments) },
         { icon: "shuttle", text: `${totalKoks} kok` },
       ],
     },
@@ -104,7 +131,7 @@ function debtShareBlocks(d: DebtEntry, photo?: string): ShareCardBlock[] {
       hint:
         d.carry > 0
           ? `Sudah dicicil ${fmt(d.carry)} dari ${fmt(d.owedGross)}`
-          : `${d.items.length} main · ${totalKoks} kok belum lunas`,
+          : `${itemsLabel(kinds.games, kinds.tournaments)} · ${totalKoks} kok belum lunas`,
     },
   ];
   if (d.carry > 0) {
@@ -116,7 +143,7 @@ function debtShareBlocks(d: DebtEntry, photo?: string): ShareCardBlock[] {
       icon: "cash",
     });
   }
-  blocks.push({ kind: "section", title: "Rincian main", icon: "calendar" });
+  blocks.push({ kind: "section", title: "Rincian tagihan", icon: "calendar" });
   grouped.forEach((g, i) => {
     const rel = relativeDay(g.date);
     blocks.push({
@@ -124,7 +151,7 @@ function debtShareBlocks(d: DebtEntry, photo?: string): ShareCardBlock[] {
       rank: i + 1,
       name: fmtDateFull(g.date),
       chips: [
-        { icon: "racket", text: `${g.count} main` },
+        { icon: "racket", text: itemsLabel(g.games, g.tournaments.length) },
         { icon: "shuttle", text: `${g.koks} kok` },
       ],
       tag: rel || undefined,
@@ -158,9 +185,10 @@ function rekapShareText(debts: DebtEntry[], total: number): string {
   ];
   debts.forEach((d, i) => {
     const koks = d.items.reduce((s, it) => s + (Number(it.kokCount) || 0), 0);
+    const kinds = countKinds(d.items);
     lines.push(
       `${i + 1}. *${d.name}* — ${fmt(d.total)}`,
-      `   ${d.items.length} main · ${koks} kok`,
+      `   ${itemsLabel(kinds.games, kinds.tournaments)} · ${koks} kok`,
     );
   });
   lines.push(
@@ -213,13 +241,14 @@ function rekapShareBlocks(
   } else {
     debts.forEach((d, i) => {
       const koks = d.items.reduce((s, it) => s + (Number(it.kokCount) || 0), 0);
+      const kinds = countKinds(d.items);
       blocks.push({
         kind: "person",
         rank: i + 1,
         name: d.name,
         photo: photoMap[d.name],
         chips: [
-          { icon: "racket", text: `${d.items.length} main` },
+          { icon: "racket", text: itemsLabel(kinds.games, kinds.tournaments) },
           { icon: "shuttle", text: `${koks} kok` },
         ],
         right: fmt(d.total),
@@ -251,6 +280,7 @@ function DebtCard({
   const [amount, setAmount] = useState("");
   const panelId = useId();
   const grouped = groupItems(d.items);
+  const kinds = countKinds(d.items);
   const totalKoks = d.items.reduce((s, it) => s + (Number(it.kokCount) || 0), 0);
   const photo = photoMap[d.name];
   const shareTextPayload = useMemo(() => debtShareText(d), [d]);
@@ -260,7 +290,7 @@ function DebtCard({
   const settle = async () => {
     const ok = await confirm({
       title: "Lunasin semua?",
-      message: `Lunasin SEMUA tagihan ${d.name} (${fmt(d.total)})? Semua game-nya ditandai bayar.`,
+      message: `Lunasin SEMUA tagihan ${d.name} (${fmt(d.total)})? Semua main${kinds.tournaments ? " & iuran turnamen" : ""}-nya ditandai bayar.`,
       confirmLabel: "Ya, lunasin",
       destructive: false,
     });
@@ -303,8 +333,13 @@ function DebtCard({
             </div>
             <div className="inline-flex items-center gap-2.5 text-xs text-ink-soft">
               <span className="inline-flex items-center gap-1">
-                <KIcon name="racket" className="size-3.5" /> {d.items.length} main
+                <KIcon name="racket" className="size-3.5" /> {kinds.games} main
               </span>
+              {kinds.tournaments > 0 && (
+                <span className="inline-flex items-center gap-1">
+                  <KIcon name="trophy" className="size-3.5" /> {kinds.tournaments} turnamen
+                </span>
+              )}
               <span className="inline-flex items-center gap-1">
                 <KIcon name="shuttle" className="size-3" /> {totalKoks} kok
               </span>
@@ -342,13 +377,23 @@ function DebtCard({
                       </span>
                       <span className="tabular shrink-0 font-mono text-sm font-bold text-owe">{fmt(g.total)}</span>
                     </div>
-                    <div className="mt-1 flex items-center gap-3 text-[11px] text-ink-faint">
-                      <span className="flex items-center gap-1">
-                        <KIcon name="racket" className="size-3.5" /> {g.count} main
-                      </span>
-                      <span className="flex items-center gap-1">
-                        <KIcon name="shuttle" className="size-3" /> {g.koks} kok
-                      </span>
+                    <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-ink-faint">
+                      {g.games > 0 && (
+                        <span className="flex items-center gap-1">
+                          <KIcon name="racket" className="size-3.5" /> {g.games} main
+                        </span>
+                      )}
+                      {g.tournaments.map((t, i) => (
+                        <span key={`${t}-${i}`} className="flex min-w-0 items-center gap-1">
+                          <KIcon name="trophy" className="size-3.5 shrink-0" />
+                          <span className="truncate">{t}</span>
+                        </span>
+                      ))}
+                      {g.koks > 0 && (
+                        <span className="flex items-center gap-1">
+                          <KIcon name="shuttle" className="size-3" /> {g.koks} kok
+                        </span>
+                      )}
                       {rel && (
                         <span className="rounded-full bg-court/10 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-court">
                           {rel}

@@ -50,14 +50,44 @@ model operators {
 }
 
 model payments {
+  id            String   @id
+  name          String
+  amount        Int
+  /// "lunas" (tandai langsung / lunasin semua) atau "cicil" (bayar sebagian).
+  type          String   @default("lunas")
+  recorded_by   String?
+  game_id       String?
+  /// Terisi kalau pembayaran ini menutup iuran patungan turnamen.
+  tournament_id String?
+  created_at    DateTime @default(now()) @db.Timestamptz(6)
+}
+
+/// Bagan turnamen single elimination. Sama seperti games: JSON snapshot, harga kok immutable.
+model tournaments {
   id          String   @id
   name        String
-  amount      Int
-  /// "lunas" (tandai langsung / lunasin semua) atau "cicil" (bayar sebagian).
-  type        String   @default("lunas")
-  recorded_by String?
-  game_id     String?
+  /// Tanggal mulai (YYYY-MM-DD).
+  date        String
+  /// Tanggal selesai kalau turnamen lebih dari sehari; null = sehari saja.
+  end_date    String?
+  /// Jumlah slot pasangan di babak pertama: 4, 8, atau 16.
+  size        Int      @default(8)
+  /// Iuran patungan per orang (rupiah).
+  fee          Int     @default(0)
+  /// Format skor bawaan: "bo3" (rally 21, 3 game) atau "single" (1 game sampai 30).
+  score_format String  @default("single")
+  /// TournamentPair[] — pasangan per slot. Nama kosong = slot BYE.
+  pairs       Json     @default("[]")
+  /// Record<matchId, {format, games[]}> — skor tiap pertandingan.
+  results     Json     @default("{}")
+  /// TournamentKok[] — memotong stok seperti game. `matchId` mengikat kok ke satu partai (null = kok umum).
+  koks        Json     @default("[]")
+  /// TournamentFee[] — status patungan per peserta.
+  fees        Json     @default("[]")
+  notes       String?
   created_at  DateTime @default(now()) @db.Timestamptz(6)
+  updated_at  DateTime @default(now()) @db.Timestamptz(6)
+  recorded_by String?
 }
 
 model player_carry {

@@ -2,17 +2,19 @@
 
 import { prisma } from "@/lib/db";
 import type { CarryMap, DbSnapshot } from "@/lib/domain/types";
-import { rowToGame, rowToKokType } from "./mappers";
+import { rowToGame, rowToKokType, rowToTournament } from "./mappers";
 
 export async function loadSnapshot(): Promise<DbSnapshot> {
-  const [settingsRow, playerRows, gameRows, typeRows, carryRows, expenseRows] = await Promise.all([
-    prisma.settings.findUnique({ where: { id: 1 } }),
-    prisma.players.findMany({ orderBy: { name: "asc" } }),
-    prisma.games.findMany(),
-    prisma.kok_types.findMany(),
-    prisma.player_carry.findMany(),
-    prisma.expenses.findMany({ select: { amount: true, created_at: true } }),
-  ]);
+  const [settingsRow, playerRows, gameRows, tournamentRows, typeRows, carryRows, expenseRows] =
+    await Promise.all([
+      prisma.settings.findUnique({ where: { id: 1 } }),
+      prisma.players.findMany({ orderBy: { name: "asc" } }),
+      prisma.games.findMany(),
+      prisma.tournaments.findMany(),
+      prisma.kok_types.findMany(),
+      prisma.player_carry.findMany(),
+      prisma.expenses.findMany({ select: { amount: true, created_at: true } }),
+    ]);
 
   const carry: CarryMap = {};
   for (const r of carryRows) {
@@ -38,6 +40,7 @@ export async function loadSnapshot(): Promise<DbSnapshot> {
     },
     players: playerRows.map((r) => ({ name: r.name, photo: r.photo || null })),
     games: gameRows.map(rowToGame),
+    tournaments: tournamentRows.map(rowToTournament),
     kokTypes,
     carry,
     totalExpense,
