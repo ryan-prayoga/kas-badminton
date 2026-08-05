@@ -4,23 +4,15 @@ import { useMemo, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import {
-  koksByDate,
-  koksByMatch,
-  koksTotal,
-  matchTitle,
-  suggestFee,
-  tournamentStatus,
-} from "@/lib/domain/tournament";
+import { suggestFee, tournamentStatus } from "@/lib/domain/tournament";
 import {
   tournamentShareBlocks,
   tournamentShareCaption,
   tournamentShareText,
 } from "@/lib/tournament-share";
-import type { EnrichedTournament, KokType, TournamentKok } from "@/lib/domain/types";
+import type { EnrichedTournament, KokType } from "@/lib/domain/types";
 import {
   fmt,
-  fmtDate,
   fmtDateFull,
   fmtDateRange,
   fmtPaidAt,
@@ -31,10 +23,8 @@ import {
 import { safeAction } from "@/lib/action-result";
 import { cn } from "@/lib/utils";
 import {
-  addTournamentKoksAction,
   deleteTournamentAction,
   markAllFeesPaidAction,
-  removeTournamentKokAction,
   setFeePaidAction,
   updateTournamentAction,
 } from "@/server/actions/tournaments";
@@ -45,15 +35,6 @@ import { KIcon, type IconName } from "@/components/kok/icons";
 import { MatchDialog } from "@/components/kok/match-dialog";
 import { RoundRobinView } from "@/components/kok/round-robin-view";
 import { ShareChoiceDialog } from "@/components/kok/share-choice";
-import {
-  defaultKokDate,
-  KokDateField,
-  KokLinesEditor,
-  kokLinesToKoks,
-  newKokLine,
-  totalKokFromLines,
-  type KokLine,
-} from "@/components/kok/kok-lines";
 import { Input } from "@/components/ui/input";
 import {
   Dialog,
@@ -109,96 +90,6 @@ function Section({
       </div>
       {children}
     </section>
-  );
-}
-
-function KokDialog({
-  tournamentId,
-  kokTypes,
-  defaultPrice,
-  startDate,
-  endDate,
-}: {
-  tournamentId: string;
-  kokTypes: KokType[];
-  defaultPrice: number;
-  startDate: string;
-  endDate: string | null;
-}) {
-  const [open, setOpen] = useState(false);
-  const [pending, start] = useTransition();
-  const active = useMemo(() => kokTypes.filter((t) => t.active), [kokTypes]);
-  const [lines, setLines] = useState<KokLine[]>(() => [newKokLine(active, defaultPrice)]);
-  const [date, setDate] = useState(() => defaultKokDate(startDate, endDate));
-
-  const total = totalKokFromLines(lines);
-
-  const submit = () => {
-    const koks = kokLinesToKoks(lines, active, defaultPrice);
-    if (koks.length === 0) {
-      toast.error("Minimal 1 kok");
-      return;
-    }
-    start(async () => {
-      const res = await safeAction(() => addTournamentKoksAction(tournamentId, koks, null, date));
-      if (res.ok) {
-        toast.success(`${koks.length} kok ditambah`);
-        setOpen(false);
-      } else {
-        toast.error(res.error);
-      }
-    });
-  };
-
-  return (
-    <Dialog
-      open={open}
-      onOpenChange={(v) => {
-        setOpen(v);
-        if (v) {
-          setLines([newKokLine(active, defaultPrice)]);
-          setDate(defaultKokDate(startDate, endDate));
-        }
-      }}
-    >
-      <DialogTrigger
-        render={
-          <button
-            type="button"
-            className="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-semibold text-court transition hover:bg-court/10"
-          >
-            <KIcon name="plus" className="size-3.5" /> Tambah kok
-          </button>
-        }
-      />
-      <DialogContent className="max-w-sm">
-        <DialogHeader>
-          <DialogTitle className="font-display">Tambah kok turnamen</DialogTitle>
-          <DialogDescription>Stok kepotong otomatis, sama seperti catat main.</DialogDescription>
-        </DialogHeader>
-        <KokDateField
-          value={date}
-          onChange={setDate}
-          startDate={startDate}
-          endDate={endDate}
-          id="kok-umum-date"
-        />
-        <KokLinesEditor
-          lines={lines}
-          setLines={setLines}
-          kokTypes={kokTypes}
-          defaultPrice={defaultPrice}
-        />
-        <button
-          type="button"
-          onClick={submit}
-          disabled={pending || total === 0}
-          className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-court text-sm font-bold text-white shadow-court transition active:scale-[0.98] disabled:opacity-60"
-        >
-          <KIcon name="plus" className="size-4" /> Tambah {total} kok
-        </button>
-      </DialogContent>
-    </Dialog>
   );
 }
 
@@ -305,7 +196,6 @@ export function TournamentDetailView({
   const router = useRouter();
   const confirm = useConfirm();
   const [pending, start] = useTransition();
-  const [showKoks, setShowKoks] = useState(false);
   const [openMatch, setOpenMatch] = useState<string | null>(null);
   const [shareOpen, setShareOpen] = useState(false);
 
@@ -351,14 +241,6 @@ export function TournamentDetailView({
     });
   };
 
-  const removeKok = (kokId: string) => {
-    start(async () => {
-      const res = await safeAction(() => removeTournamentKokAction(t.id, kokId));
-      if (res.ok) toast.success("Kok dihapus, stok dikembalikan");
-      else toast.error(res.error);
-    });
-  };
-
   const remove = async () => {
     const ok = await confirm({
       title: "Hapus turnamen?",
@@ -377,52 +259,6 @@ export function TournamentDetailView({
       }
     });
   };
-
-  /**
-   * Rincian kok dikelompokkan per partai (tiap partai boleh beda jenis & harga),
-   * plus satu baris "kok umum" untuk yang belum diikat ke partai mana pun.
-   */
-  const kokSections = useMemo(() => {
-    const byMatch = koksByMatch(t.koks);
-    const sections: {
-      key: string;
-      title: string;
-      count: number;
-      total: number;
-      types: string[];
-      dates: string[];
-    }[] = [];
-
-    const describe = (koks: TournamentKok[]) => ({
-      count: koks.length,
-      total: koksTotal(koks),
-      types: [...new Set(koks.map((k) => k.typeName || "Tanpa jenis"))],
-      dates: [...new Set(koks.map((k) => k.date))].sort(),
-    });
-
-    for (const m of t.matches) {
-      const koks = byMatch.get(m.id);
-      if (!koks?.length) continue;
-      sections.push({ key: m.id, title: matchTitle(t, m), ...describe(koks) });
-    }
-
-    const loose = t.cost.looseKoks;
-    if (loose.length) {
-      sections.push({
-        key: "umum",
-        title: "Kok umum (belum diikat partai)",
-        ...describe(loose),
-      });
-    }
-    return sections;
-    // `t` dipakai utuh oleh matchTitle (butuh format + size).
-  }, [t]);
-
-  /** Turnamen multi-hari: berapa kok habis tiap harinya. */
-  const kokDays = useMemo(
-    () => (t.endDate ? koksByDate(t.koks) : []),
-    [t.koks, t.endDate],
-  );
 
   return (
     <div className="flex flex-col gap-4">
@@ -614,112 +450,6 @@ export function TournamentDetailView({
           >
             <KIcon name="checkAll" className="size-4" /> Lunasin semua
           </button>
-        ) : null}
-      </Section>
-
-      <Section
-        icon="shuttle"
-        title="Penggunaan kok"
-        badge={`${t.cost.kokCount} kok`}
-        action={
-          editable ? (
-            <KokDialog
-              tournamentId={t.id}
-              kokTypes={kokTypes}
-              defaultPrice={defaultPrice}
-              startDate={t.date}
-              endDate={t.endDate}
-            />
-          ) : undefined
-        }
-      >
-        <div className="flex items-center justify-between gap-2 rounded-xl border border-line bg-surface-2/60 p-3">
-          <div>
-            <p className="text-[10px] font-bold uppercase tracking-wide text-ink-faint">
-              Nilai kok terpakai
-            </p>
-            <p className="tabular font-display mt-0.5 text-lg font-extrabold text-ink">
-              {fmt(t.cost.kokTotal)}
-            </p>
-          </div>
-          {t.koks.length > 0 ? (
-            <button
-              type="button"
-              onClick={() => setShowKoks((v) => !v)}
-              aria-expanded={showKoks}
-              className="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-semibold text-court transition hover:bg-court/10"
-            >
-              Rincian
-              <KIcon
-                name="chevronDown"
-                className={cn("size-4 transition-transform", showKoks && "rotate-180")}
-              />
-            </button>
-          ) : null}
-        </div>
-
-        {t.koks.length === 0 ? (
-          <p className="mt-2 text-[11px] text-ink-faint">
-            Belum ada kok dicatat. Kok yang ditambah di sini ikut kehitung di Statistik &quot;Kok
-            terpakai&quot; dan memotong stok.
-          </p>
-        ) : showKoks ? (
-          <ul className="mt-2 divide-y divide-line overflow-hidden rounded-xl border border-line">
-            {kokSections.map((s) => (
-              <li key={s.key} className="flex items-center gap-2 bg-surface px-3 py-2.5">
-                <span
-                  className={cn(
-                    "grid size-8 shrink-0 place-items-center rounded-lg",
-                    s.key === "umum" ? "bg-surface-2 text-ink-faint" : "bg-court/10 text-court",
-                  )}
-                >
-                  <KIcon name={s.key === "umum" ? "shuttle" : "racket"} className="size-4" />
-                </span>
-                <span className="min-w-0 flex-1">
-                  <span className="block truncate text-sm font-semibold text-ink">{s.title}</span>
-                  <span className="block truncate text-[11px] text-ink-faint">
-                    {s.count} kok · {s.types.join(", ")}
-                    {t.endDate ? ` · ${s.dates.map((d) => fmtDate(d)).join(", ")}` : ""}
-                  </span>
-                </span>
-                <span className="tabular shrink-0 font-mono text-sm font-bold text-ink-soft">
-                  {fmt(s.total)}
-                </span>
-                {/* Kok partai dihapus dari dialog partainya; di sini cuma kok umum. */}
-                {editable && s.key === "umum" ? (
-                  <button
-                    type="button"
-                    onClick={() => removeKok(t.cost.looseKoks[t.cost.looseKoks.length - 1].id)}
-                    disabled={pending}
-                    aria-label="Hapus satu kok umum"
-                    className="grid size-9 shrink-0 place-items-center rounded-lg text-ink-faint transition hover:bg-danger/10 hover:text-danger disabled:opacity-40"
-                  >
-                    <KIcon name="minus" className="size-4" />
-                  </button>
-                ) : null}
-              </li>
-            ))}
-          </ul>
-        ) : null}
-        {kokDays.length > 1 ? (
-          <div className="mt-2 flex flex-wrap gap-1.5">
-            {kokDays.map((d) => (
-              <span
-                key={d.date}
-                className="inline-flex items-center gap-1 rounded-full bg-surface-2 px-2 py-1 text-[11px] font-semibold text-ink-soft"
-              >
-                <KIcon name="calendar" className="size-3 text-ink-faint" />
-                {fmtDate(d.date)} · {d.koks.length} kok
-              </span>
-            ))}
-          </div>
-        ) : null}
-
-        {showKoks && t.koks.length > 0 ? (
-          <p className="mt-2 text-[11px] text-ink-faint">
-            Tambah/hapus kok per partai lewat bagan di atas. Kok umum diatur dari tombol
-            &quot;Tambah kok&quot;.
-          </p>
         ) : null}
       </Section>
 
