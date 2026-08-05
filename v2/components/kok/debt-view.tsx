@@ -331,16 +331,16 @@ function DebtCard({
             <div className="font-display truncate font-bold text-ink" title={d.name}>
               {d.name}
             </div>
-            <div className="inline-flex items-center gap-2.5 text-xs text-ink-soft">
-              <span className="inline-flex items-center gap-1">
+            <div className="flex flex-wrap items-center gap-x-2.5 gap-y-0.5 text-xs text-ink-soft">
+              <span className="inline-flex items-center gap-1 whitespace-nowrap">
                 <KIcon name="racket" className="size-3.5" /> {kinds.games} main
               </span>
               {kinds.tournaments > 0 && (
-                <span className="inline-flex items-center gap-1">
+                <span className="inline-flex items-center gap-1 whitespace-nowrap">
                   <KIcon name="trophy" className="size-3.5" /> {kinds.tournaments} turnamen
                 </span>
               )}
-              <span className="inline-flex items-center gap-1">
+              <span className="inline-flex items-center gap-1 whitespace-nowrap">
                 <KIcon name="shuttle" className="size-3" /> {totalKoks} kok
               </span>
             </div>
@@ -379,7 +379,7 @@ function DebtCard({
                     </div>
                     <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-ink-faint">
                       {g.games > 0 && (
-                        <span className="flex items-center gap-1">
+                        <span className="flex items-center gap-1 whitespace-nowrap">
                           <KIcon name="racket" className="size-3.5" /> {g.games} main
                         </span>
                       )}
@@ -390,7 +390,7 @@ function DebtCard({
                         </span>
                       ))}
                       {g.koks > 0 && (
-                        <span className="flex items-center gap-1">
+                        <span className="flex items-center gap-1 whitespace-nowrap">
                           <KIcon name="shuttle" className="size-3" /> {g.koks} kok
                         </span>
                       )}
