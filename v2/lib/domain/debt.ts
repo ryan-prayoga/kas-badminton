@@ -57,8 +57,9 @@ export function buildDebtSummary(
         date: t.date,
         name: f.name,
         amount: t.fee,
-        // Kok turnamen itu pool bersama, bukan per orang — jangan dibebankan ke item ini.
-        kokCount: 0,
+        // Kok turnamen itu pool bersama, bukan per orang — jadi ini cuma info jumlah kok
+        // yang sudah kepakai di turnamen ini, bukan basis pembagian nominal `amount`.
+        kokCount: t.cost.kokCount,
         kind: "turnamen",
         label: t.name,
       });
@@ -147,7 +148,14 @@ function slot(r: UnpaidRef): TouchedSlot {
   return { kind: r.kind, id: r.id, index: r.index };
 }
 
-/** Bayar sebagian: greedy lunasin tagihan terlama dulu; sisa kredit jadi carry. */
+/**
+ * Bayar sebagian: greedy lunasin tagihan yang nominalnya paling pas (best-fit)
+ * dulu, bukan yang paling lama. Jadi cicilan 10.000 buat orang yang punya
+ * utang kok 3.000 + 2.500 + iuran patungan 10.000 bakal nutup patungan itu
+ * pas (diff 0), bukan malah kepecah nyicil kok 5.500 lalu nyisa ganjil di
+ * patungan. Tiap langkah pilih ref ber-amount ≤ credit dengan selisih paling
+ * kecil; kalau seri, yang paling lama menang (byOldest) biar deterministik.
+ */
 export function planInstallment(
   games: StoredGame[],
   carry: CarryMap,
@@ -156,15 +164,30 @@ export function planInstallment(
   tournaments: StoredTournament[] = [],
 ): SettlePlan {
   let credit = Math.max(0, Number(carry[name]) || 0) + amount;
-  const refs = unpaidRefs(games, name, tournaments).sort(byOldest);
+  const refs = unpaidRefs(games, name, tournaments);
+  const remaining = [...refs];
   const touched: TouchedSlot[] = [];
-  for (const r of refs) {
-    if (credit >= r.amount) {
-      touched.push(slot(r));
-      credit -= r.amount;
-    } else {
-      break;
+  while (true) {
+    let bestIdx = -1;
+    for (let i = 0; i < remaining.length; i++) {
+      const r = remaining[i];
+      if (r.amount > credit) continue;
+      if (bestIdx === -1) {
+        bestIdx = i;
+        continue;
+      }
+      const best = remaining[bestIdx];
+      const diff = credit - r.amount;
+      const bestDiff = credit - best.amount;
+      if (diff < bestDiff || (diff === bestDiff && byOldest(r, best) < 0)) {
+        bestIdx = i;
+      }
     }
+    if (bestIdx === -1) break;
+    const r = remaining[bestIdx];
+    touched.push(slot(r));
+    credit -= r.amount;
+    remaining.splice(bestIdx, 1);
   }
   return {
     touched,

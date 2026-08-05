@@ -570,6 +570,42 @@ describe("hutang campuran game + turnamen", () => {
     expect(plan.clearsDebt).toBe(false);
   });
 
+  it("cicilan pas nutup tagihan yang nominalnya pas (best-fit), bukan yang tertua", () => {
+    // Kok 3000 (tertua) + kok 2500 + patungan 10000. Cicil 10000 harus pas
+    // nutup patungan (diff 0), bukan malah nyicil kok dulu (5500) lalu nyisa
+    // ganjil di patungan.
+    const kokGames = [
+      enrichGame(game({ id: "kok1", date: "2026-01-01", koks: [kok(3000)] })),
+      enrichGame(game({ id: "kok2", date: "2026-01-15", koks: [kok(2500)] })),
+    ];
+    const bigTournament = [
+      enrichTournament(
+        tour({
+          id: "t-besar",
+          date: "2026-02-01",
+          size: 4,
+          fee: 10000,
+          names: [
+            ["A", "X"],
+            ["", ""],
+            ["", ""],
+            ["", ""],
+          ],
+        }),
+      ),
+    ];
+    const plan = planInstallment(
+      kokGames.map((g) => g as StoredGame),
+      {},
+      "A",
+      10000,
+      bigTournament,
+    );
+    expect(plan.touched).toEqual([{ kind: "turnamen", id: "t-besar", index: 0 }]);
+    expect(plan.carryAfter).toBeNull();
+    expect(plan.clearsDebt).toBe(false); // kok 3000 & 2500 masih nunggak
+  });
+
   it("lunasin semua ikut menandai iuran turnamen", () => {
     const plan = planSettle(
       games.map((g) => g as StoredGame),
