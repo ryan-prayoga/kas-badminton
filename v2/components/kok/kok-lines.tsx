@@ -203,8 +203,8 @@ export function KokLinesEditor({
                   </SelectItem>
                   {optionsFor(line.typeId).map((t) => (
                     <SelectItem key={t.id} value={t.id} className="rounded-lg px-3 py-2.5">
-                      <span className="flex w-full min-w-0 items-center justify-between gap-3">
-                        <span className="truncate">{t.name}</span>
+                      <span className="flex w-full min-w-0 items-center justify-between gap-3 overflow-hidden">
+                        <span className="min-w-0 truncate">{t.name}</span>
                         <span className="shrink-0 font-mono text-xs text-muted-foreground">
                           {formatRupiah(t.pricePerPerson)} · stok {t.stock}
                         </span>
