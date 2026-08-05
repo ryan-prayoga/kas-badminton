@@ -211,7 +211,7 @@ export function BracketView({
             <p className="mb-2 text-center text-[10px] font-extrabold uppercase tracking-[0.16em] text-ink-faint">
               {round.label}
             </p>
-            <div className="flex flex-1 flex-col justify-around">
+            <div className="flex flex-1 flex-col justify-around gap-3">
               {chunkPairs(round.matches).map((group) => (
                 <MatchPair
                   key={group[0].id}
