@@ -96,6 +96,7 @@ export function MatchDialog({
   const t = tournament;
   const [format, setFormat] = useState<ScoreFormat>(t.scoreFormat);
   const [games, setGames] = useState<{ a: string; b: string }[]>(emptyGames);
+  const [playedDate, setPlayedDate] = useState(() => defaultKokDate(t.date, t.endDate));
   const [addingKok, setAddingKok] = useState(false);
   const [lines, setLines] = useState<KokLine[]>([]);
   const [kokDate, setKokDate] = useState(() => defaultKokDate(t.date, t.endDate));
@@ -123,6 +124,7 @@ export function MatchDialog({
       next[i] = { a: String(g.a), b: String(g.b) };
     });
     setGames(next);
+    setPlayedDate(m?.score?.playedAt || defaultKokDate(t.date, t.endDate));
     setAddingKok(false);
     setLines([newKokLine(active, defaultPrice)]);
     setKokDate(defaultKokDate(t.date, t.endDate));
@@ -150,7 +152,7 @@ export function MatchDialog({
         toast.error("Skor game tidak boleh seri");
         return;
       }
-      score = { format, games: filled };
+      score = { format, games: filled, playedAt: playedDate };
     }
 
     start(async () => {
@@ -193,7 +195,7 @@ export function MatchDialog({
 
   return (
     <Dialog open={match !== null} onOpenChange={(o) => !o && onClose()}>
-      <DialogContent className="flex max-h-[88dvh] max-w-sm flex-col overflow-hidden">
+      <DialogContent className="flex max-h-[94dvh] max-w-sm flex-col overflow-hidden">
         <DialogHeader className="shrink-0">
           <DialogTitle className="font-display">
             {match ? matchTitle(t, match) : "Pertandingan"}
@@ -207,6 +209,17 @@ export function MatchDialog({
           <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto">
             <div className="space-y-2">
               <p className="text-xs font-bold uppercase tracking-wide text-ink-faint">Skor</p>
+
+              {editable ? (
+                <KokDateField
+                  value={playedDate}
+                  onChange={setPlayedDate}
+                  startDate={t.date}
+                  endDate={t.endDate}
+                  id={`match-date-${match.id}`}
+                  label="Tanggal partai"
+                />
+              ) : null}
 
               {editable ? (
                 <div className="flex gap-1.5">

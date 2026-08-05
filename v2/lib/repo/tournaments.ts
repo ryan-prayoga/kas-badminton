@@ -257,9 +257,14 @@ export async function setMatchScore(
         if (a === b && a > 0) throw new DomainError("Skor game tidak boleh seri");
       }
       // normalizeMatchScore membuang game 0-0; kalau habis semua berarti belum dimainkan.
-      const normalized = normalizeMatchScore({ format, games: raw });
-      if (normalized) results[key] = normalized;
-      else delete results[key];
+      const normalized = normalizeMatchScore({ format, games: raw, playedAt: score.playedAt });
+      if (normalized) {
+        // Tak dikirim (atau di luar rentang) → jatuh ke tanggal hari ini, dijepit ke rentang turnamen.
+        normalized.playedAt = clampToTournament(normalized.playedAt ?? todayWIB(), t.date, t.endDate);
+        results[key] = normalized;
+      } else {
+        delete results[key];
+      }
     }
 
     // Knockout: kalau pemenang partai ini berubah, hasil babak setelahnya jadi

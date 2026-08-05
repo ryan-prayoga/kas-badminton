@@ -1,29 +1,48 @@
 "use client";
 
 // Kartu turnamen di halaman Riwayat. Sengaja beda dari GameCard: border emas +
-// ribbon "Turnamen", tapi isi partai penentunya niru gaya GameCard — kotak
+// ribbon "Turnamen", tapi tiap partai yang sudah main niru gaya GameCard — kotak
 // lapangan dengan status lunas per pemain (dari iuran turnamen), plus baris
 // skor per game ditumpuk (niru SideRow bagan) biar kelihatan mana yang menang.
 
 import Link from "next/link";
-import { matchTitle, pairLabel, tournamentStatus } from "@/lib/domain/tournament";
+import {
+  finalPlayedMatchId,
+  matchTitle,
+  pairLabel,
+  tournamentStatus,
+} from "@/lib/domain/tournament";
 import type { BracketMatch, EnrichedTournament } from "@/lib/domain/types";
-import { fmt, fmtDateRange } from "@/lib/format";
+import { fmt } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { KIcon } from "@/components/kok/icons";
 import { STATUS_META } from "@/components/kok/tournament-detail-view";
-
-/** Partai paling menentukan yang sudah punya skor — final kalau ada, kalau tidak yang terakhir. */
-function highlightMatch(t: EnrichedTournament): BracketMatch | null {
-  const played = t.matches.filter((m) => m.score);
-  if (played.length === 0) return null;
-  return played[played.length - 1];
-}
 
 /** Status lunas satu peserta dari iuran turnamen — patungan dicatat per orang, bukan per partai. */
 function feePaid(t: EnrichedTournament, name: string): boolean {
   const n = name.trim().toLowerCase();
   return t.fees.find((f) => f.name.trim().toLowerCase() === n)?.paid ?? false;
+}
+
+/** "2 kok · Rp6.000/org · Yonex Aerosensa 50" — harga per orang, sama kayak
+ * kokSummaryLabel di GameCard (bukan total partai). Jenisnya cuma disebut kalau
+ * seragam, kalau campur beberapa jenis tulis jumlahnya aja biar gak kepanjangan. */
+function kokSummary(m: BracketMatch): string {
+  const names: string[] = [];
+  const seen = new Set<string>();
+  let perPerson = 0;
+  for (const k of m.koks) {
+    perPerson += Number(k.pricePerPerson) || 0;
+    const n = k.typeName ? String(k.typeName).trim() : "";
+    if (n && !seen.has(n)) {
+      seen.add(n);
+      names.push(n);
+    }
+  }
+  const base = `${m.koks.length} kok · ${fmt(perPerson)}/org`;
+  if (!names.length) return base;
+  if (names.length === 1) return `${base} · ${names[0]}`;
+  return `${base} · ${names.length} jenis`;
 }
 
 /** Baris skor ditumpuk 2 — niru SideRow bagan: pemenang ditonjolkan, kalah pudar. Tiap kolom = 1 game. */
@@ -116,88 +135,88 @@ function MatchCourt({ t, match }: { t: EnrichedTournament; match: BracketMatch }
 
 export function TournamentHistoryCard({
   tournament,
+  matches,
   today,
 }: {
   tournament: EnrichedTournament;
+  /** Partai turnamen ini yang tampil di grup tanggal ini saja (sudah difilter di history-view). */
+  matches: BracketMatch[];
   today: string;
 }) {
   const t = tournament;
   const status = tournamentStatus(t, today);
   const meta = STATUS_META[status];
-  const highlight = highlightMatch(t);
+  // Partai penentu (final/terakhir) turnamen secara keseluruhan — bukan cuma di grup tanggal
+  // ini — biar juara & status lunas cuma nempel sekali walau partainya kepisah tanggal.
+  const finalId = finalPlayedMatchId(t);
 
+  // Satu partai = satu card, biar konsisten dengan riwayat game biasa (tak ditumpuk).
   return (
-    <Link
-      href={`/turnamen/${t.id}`}
-      className="animate-rise block overflow-hidden rounded-xl2 border border-gold/40 shadow-card transition active:scale-[0.99]"
-    >
-      {/* Pita atas jadi penanda visual "ini turnamen, bukan main biasa" */}
-      <div className="flex items-center gap-1.5 bg-gold/12 px-3 py-1.5 text-[10px] font-extrabold uppercase tracking-[0.14em] text-gold">
-        <KIcon name="trophy" className="size-3.5" />
-        Turnamen
-        <span className="ml-auto inline-flex items-center gap-1 normal-case tracking-normal">
-          <KIcon name={meta.icon} className="size-3" />
-          {meta.label}
-        </span>
-      </div>
-
-      <div className="bg-surface p-3.5">
-        <p className="font-display truncate text-[0.95rem] font-bold text-ink">{t.name}</p>
-        <p className="mt-0.5 flex flex-wrap items-center gap-x-2.5 gap-y-0.5 text-[11px] text-ink-soft">
-          <span className="inline-flex items-center gap-1">
-            <KIcon name="calendar" className="size-3" /> {fmtDateRange(t.date, t.endDate)}
-          </span>
-          <span className="inline-flex items-center gap-1">
-            <KIcon name={t.format === "knockout" ? "trophy" : "chart"} className="size-3" />
-            {t.format === "knockout" ? "Gugur" : "Round robin"} · {t.size} pasang
-          </span>
-          <span className="inline-flex items-center gap-1">
-            <KIcon name="racket" className="size-3" /> {t.playedCount}/{t.totalCount} partai
-          </span>
-        </p>
-
-        {t.champion ? (
-          <div className="mt-2.5 flex items-center gap-2 rounded-xl border border-paid/30 bg-paid/8 px-2.5 py-2">
-            <KIcon name="trophy" className="size-4 shrink-0 text-paid" />
-            <span className="min-w-0 flex-1">
-              <span className="block text-[10px] font-bold uppercase tracking-wide text-ink-faint">
-                Juara
+    <>
+      {matches.map((m) => {
+        const isLast = m.id === finalId;
+        return (
+          <Link
+            key={m.id}
+            href={`/turnamen/${t.id}`}
+            className="animate-rise block overflow-hidden rounded-xl2 border border-gold/40 shadow-card transition active:scale-[0.99]"
+          >
+            {/* Pita atas jadi penanda visual "ini turnamen, bukan main biasa" */}
+            <div className="flex items-center gap-1.5 bg-gold/12 px-3 py-1.5 text-[10px] font-extrabold uppercase tracking-[0.14em] text-gold">
+              <KIcon name="trophy" className="size-3.5" />
+              Turnamen
+              <span className="ml-auto inline-flex items-center gap-1 normal-case tracking-normal">
+                <KIcon name={meta.icon} className="size-3" />
+                {meta.label}
               </span>
-              <span className="block truncate text-sm font-extrabold text-ink">
-                {pairLabel(t.champion)}
-              </span>
-            </span>
-          </div>
-        ) : null}
+            </div>
 
-        {highlight ? (
-          <>
-            <p className="mt-2.5 px-0.5 text-[10px] font-bold uppercase tracking-wide text-ink-faint">
-              {matchTitle(t, highlight)}
-            </p>
-            <ScoreRows match={highlight} />
-            <MatchCourt t={t} match={highlight} />
-          </>
-        ) : null}
+            <div className="bg-surface p-3.5">
+              <p className="font-display truncate text-[0.95rem] font-bold text-ink">{t.name}</p>
+              <p className="mt-0.5 px-0.5 text-[10px] font-bold uppercase tracking-wide text-ink-faint">
+                {matchTitle(t, m)}
+              </p>
 
-        <div className="mt-2.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px]">
-          <span className="inline-flex items-center gap-1 text-ink-soft">
-            <KIcon name="shuttle" className="size-3.5" /> {t.cost.kokCount} kok
-            {t.cost.kokCount ? ` · ${fmt(t.cost.kokTotal)}` : ""}
-          </span>
-          {t.fee > 0 ? (
-            t.cost.unpaidCount > 0 ? (
-              <span className="inline-flex items-center gap-1 font-semibold text-owe">
-                <KIcon name="alert" className="size-3.5" /> {t.cost.unpaidCount} belum patungan
-              </span>
-            ) : (
-              <span className="inline-flex items-center gap-1 font-semibold text-paid">
-                <KIcon name="checkCircle" className="size-3.5" /> Patungan lunas
-              </span>
-            )
-          ) : null}
-        </div>
-      </div>
-    </Link>
+              {isLast && t.champion ? (
+                <div className="mt-2.5 flex items-center gap-2 rounded-xl border border-paid/30 bg-paid/8 px-2.5 py-2">
+                  <KIcon name="trophy" className="size-4 shrink-0 text-paid" />
+                  <span className="min-w-0 flex-1">
+                    <span className="block text-[10px] font-bold uppercase tracking-wide text-ink-faint">
+                      Juara
+                    </span>
+                    <span className="block truncate text-sm font-extrabold text-ink">
+                      {pairLabel(t.champion)}
+                    </span>
+                  </span>
+                </div>
+              ) : null}
+
+              <ScoreRows match={m} />
+              <MatchCourt t={t} match={m} />
+
+              <div className="mt-2.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px]">
+                {m.koks.length > 0 ? (
+                  <span className="inline-flex items-center gap-1 text-ink-soft">
+                    <KIcon name="shuttle" className="size-3.5" /> {kokSummary(m)}
+                  </span>
+                ) : null}
+                {isLast && t.fee > 0 ? (
+                  t.cost.unpaidCount > 0 ? (
+                    <span className="inline-flex items-center gap-1 font-semibold text-owe">
+                      <KIcon name="alert" className="size-3.5" /> {t.cost.unpaidCount} belum
+                      patungan
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center gap-1 font-semibold text-paid">
+                      <KIcon name="checkCircle" className="size-3.5" /> Patungan lunas
+                    </span>
+                  )
+                ) : null}
+              </div>
+            </div>
+          </Link>
+        );
+      })}
+    </>
   );
 }

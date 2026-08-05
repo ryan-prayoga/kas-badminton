@@ -144,6 +144,8 @@ export interface GameScore {
 export interface MatchScore {
   format: ScoreFormat;
   games: GameScore[];
+  /** Tanggal partai ini dimainkan (YYYY-MM-DD) — penting di turnamen multi-hari. Skor lama tanpa ini jatuh ke tanggal mulai turnamen. */
+  playedAt?: string;
 }
 
 /**

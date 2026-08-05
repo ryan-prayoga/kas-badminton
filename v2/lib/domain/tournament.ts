@@ -128,6 +128,8 @@ export function normalizeScoreFormat(value: unknown): ScoreFormat {
   return value === "bo3" ? "bo3" : "single";
 }
 
+const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+
 /** Jumlah game maksimal per format. */
 export function maxGames(format: ScoreFormat): number {
   return format === "bo3" ? 3 : 1;
@@ -149,10 +151,11 @@ function normalizeGame(raw: unknown): GameScore | null {
 export function normalizeMatchScore(raw: unknown): MatchScore | null {
   if (!raw || typeof raw !== "object") return null;
   const obj = raw as Partial<MatchScore> & Partial<GameScore>;
+  const playedAt = ISO_DATE_RE.test(String(obj.playedAt ?? "")) ? String(obj.playedAt) : undefined;
 
   if (!Array.isArray(obj.games)) {
     const legacy = normalizeGame(obj);
-    return legacy ? { format: "single", games: [legacy] } : null;
+    return legacy ? { format: "single", games: [legacy], ...(playedAt ? { playedAt } : {}) } : null;
   }
 
   const format = normalizeScoreFormat(obj.format);
@@ -160,7 +163,7 @@ export function normalizeMatchScore(raw: unknown): MatchScore | null {
     .map(normalizeGame)
     .filter((g): g is GameScore => g !== null)
     .slice(0, maxGames(format));
-  return games.length ? { format, games } : null;
+  return games.length ? { format, games, ...(playedAt ? { playedAt } : {}) } : null;
 }
 
 function normalizeResults(raw: unknown, validIds: Set<string>): Record<string, MatchScore> {
@@ -194,8 +197,6 @@ export function scoreLine(score: MatchScore | null): string {
   if (!score?.games.length) return "";
   return score.games.map((g) => `${g.a}-${g.b}`).join(" · ");
 }
-
-const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
 /** Id partai knockout: babak + urutan di babak itu. */
 export function matchId(round: number, index: number): string {
@@ -634,6 +635,26 @@ export function enrichTournament(t: Partial<StoredTournament>): EnrichedTourname
     finished: bracket.champion !== null,
     cost,
   };
+}
+
+/** Semua partai yang sudah punya skor, urut sama seperti t.matches (round lalu index). */
+export function playedMatches(t: Pick<EnrichedTournament, "matches">): BracketMatch[] {
+  return t.matches.filter((m) => m.score);
+}
+
+/** Tanggal partai ini benar-benar dimainkan — skor lama tanpa `playedAt` jatuh ke tanggal mulai turnamen. */
+export function matchPlayedDate(t: Pick<StoredTournament, "date">, m: BracketMatch): string {
+  return m.score?.playedAt || t.date;
+}
+
+/**
+ * Id partai "penentu" terakhir — final kalau sudah dimainkan, kalau belum ya
+ * partai berskor paling akhir. Dipakai buat nempelin info juara/status lunas
+ * ke satu partai saja biar tak berulang di tiap kartu riwayat.
+ */
+export function finalPlayedMatchId(t: Pick<EnrichedTournament, "matches">): string | null {
+  const played = playedMatches(t);
+  return played.length ? played[played.length - 1].id : null;
 }
 
 /** Status turnamen relatif hari ini — turnamen boleh dijadwalkan ke depan. */

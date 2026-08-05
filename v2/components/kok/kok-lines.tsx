@@ -100,17 +100,19 @@ export function KokDateField({
   startDate,
   endDate,
   id,
+  label = "Dipakai tanggal",
 }: {
   value: string;
   onChange: (next: string) => void;
   startDate: string;
   endDate: string | null;
   id?: string;
+  label?: string;
 }) {
   if (!endDate || endDate <= startDate) return null;
   return (
     <div className="space-y-1.5">
-      <Label htmlFor={id}>Dipakai tanggal</Label>
+      <Label htmlFor={id}>{label}</Label>
       <DateField
         id={id}
         value={value}

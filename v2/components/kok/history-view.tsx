@@ -1,7 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { EnrichedGame, EnrichedTournament } from "@/lib/domain/types";
+import { finalPlayedMatchId, matchPlayedDate, playedMatches } from "@/lib/domain/tournament";
+import type { BracketMatch, EnrichedGame, EnrichedTournament } from "@/lib/domain/types";
 import { currentPeriodKey, fmt, fmtDateFull, periodKey, toLocalIso } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { GameCard } from "@/components/kok/game-card";
@@ -11,21 +12,41 @@ import { EmptyPanel } from "@/components/kok/empty-panel";
 import { KIcon } from "@/components/kok/icons";
 import type { PhotoMap } from "@/components/kok/avatar";
 
+/** Satu turnamen di satu tanggal — cuma partai yang beneran dimainkan tanggal itu. */
+interface TournamentDateEntry {
+  tournament: EnrichedTournament;
+  matches: BracketMatch[];
+  /** Iuran belum lunas punya tournament ini — cuma diisi di grup tanggal partai penentunya. */
+  unpaidCount: number;
+}
+
 interface Group {
   date: string;
   games: EnrichedGame[];
-  tournaments: EnrichedTournament[];
+  tournamentEntries: TournamentDateEntry[];
   total: number;
   unpaidCount: number;
 }
 
-/** Game dan turnamen digabung per tanggal — turnamen pakai tanggal mulainya. */
-function groupByDate(games: EnrichedGame[], tournaments: EnrichedTournament[]): Group[] {
+/**
+ * Game dan partai turnamen digabung per tanggal partai itu beneran dimainkan
+ * (`match.score.playedAt`, jatuh ke tanggal mulai turnamen kalau kosong) — bukan
+ * cuma tanggal mulai turnamen. Satu turnamen bisa kepisah ke beberapa grup
+ * tanggal kalau partainya memang dicatat di hari yang berbeda-beda.
+ *
+ * `period` (kunci "YYYY-MM" atau "all") difilter di sini juga, per-partai —
+ * bukan per-turnamen — soalnya partai yang sama bisa jatuh ke bulan berbeda.
+ */
+function groupByDate(
+  games: EnrichedGame[],
+  tournaments: EnrichedTournament[],
+  period: string,
+): Group[] {
   const map = new Map<string, Group>();
   const blank = (date: string): Group => ({
     date,
     games: [],
-    tournaments: [],
+    tournamentEntries: [],
     total: 0,
     unpaidCount: 0,
   });
@@ -37,12 +58,28 @@ function groupByDate(games: EnrichedGame[], tournaments: EnrichedTournament[]): 
     grp.unpaidCount += g.summary.unpaidCount;
     map.set(g.date, grp);
   }
+
   for (const t of tournaments) {
-    const grp = map.get(t.date) ?? blank(t.date);
-    grp.tournaments.push(t);
-    grp.total += t.cost.kokTotal;
-    grp.unpaidCount += t.cost.unpaidCount;
-    map.set(t.date, grp);
+    const finalId = finalPlayedMatchId(t);
+    const byDate = new Map<string, BracketMatch[]>();
+    for (const m of playedMatches(t)) {
+      const date = matchPlayedDate(t, m);
+      if (period !== "all" && periodKey(date) !== period) continue;
+      const arr = byDate.get(date) ?? [];
+      arr.push(m);
+      byDate.set(date, arr);
+    }
+    for (const [date, matches] of byDate) {
+      const grp = map.get(date) ?? blank(date);
+      // Iuran patungan dicatat per peserta turnamen, bukan per partai — cuma
+      // dihitung sekali, di tanggal partai penentunya, biar tidak dobel kehitung
+      // kalau partainya kepisah ke beberapa tanggal.
+      const unpaidCount = matches.some((m) => m.id === finalId) ? t.cost.unpaidCount : 0;
+      grp.tournamentEntries.push({ tournament: t, matches, unpaidCount });
+      grp.total += matches.reduce((s, m) => s + m.kokTotal, 0);
+      grp.unpaidCount += unpaidCount;
+      map.set(date, grp);
+    }
   }
 
   return [...map.values()].sort((a, b) => b.date.localeCompare(a.date));
@@ -96,8 +133,10 @@ export function HistoryView({
       if (k) keys.add(k);
     }
     for (const t of tournaments) {
-      const k = periodKey(t.date);
-      if (k) keys.add(k);
+      for (const m of playedMatches(t)) {
+        const k = periodKey(matchPlayedDate(t, m));
+        if (k) keys.add(k);
+      }
     }
     return [...keys].sort().reverse();
   }, [games, tournaments]);
@@ -116,9 +155,9 @@ export function HistoryView({
   }, []);
 
   const filtered = period === "all" ? games : games.filter((g) => periodKey(g.date) === period);
-  const filteredTournaments =
-    period === "all" ? tournaments : tournaments.filter((t) => periodKey(t.date) === period);
-  const groups = groupByDate(filtered, filteredTournaments);
+  const groups = groupByDate(filtered, tournaments, period);
+  const tournamentCount = new Set(groups.flatMap((g) => g.tournamentEntries.map((e) => e.tournament.id)))
+    .size;
   const isOpen = (date: string, i: number) => (date in open ? open[date] : i === 0);
 
   return (
@@ -133,10 +172,10 @@ export function HistoryView({
             <KIcon name="racket" className="size-3" />
             {filtered.length}
           </span>
-          {filteredTournaments.length > 0 && (
+          {tournamentCount > 0 && (
             <span className="tabular inline-flex items-center gap-1 rounded-full bg-paid/12 px-2 py-0.5 text-[11px] font-bold text-paid">
               <KIcon name="trophy" className="size-3" />
-              {filteredTournaments.length}
+              {tournamentCount}
             </span>
           )}
         </div>
@@ -155,7 +194,7 @@ export function HistoryView({
             );
             // Turnamen tidak punya toggle lunas per pemain — hitung dari iurannya.
             const grpTotalUnpaid =
-              grpUnpaid + grp.tournaments.reduce((s, t) => s + t.cost.unpaidCount, 0);
+              grpUnpaid + grp.tournamentEntries.reduce((s, e) => s + e.unpaidCount, 0);
             const allPaid = grpTotalUnpaid === 0;
             const panelId = `grp-${grp.date}`;
             // Flash realtime tak kelihatan kalau grup terlipat — pulse headernya biar sinyalnya sampai.
@@ -186,9 +225,9 @@ export function HistoryView({
                           <KIcon name="racket" className="size-3.5" /> {grp.games.length} main
                         </span>
                       )}
-                      {grp.tournaments.length > 0 && (
+                      {grp.tournamentEntries.length > 0 && (
                         <span className="inline-flex items-center gap-1 font-semibold text-paid">
-                          <KIcon name="trophy" className="size-3.5" /> {grp.tournaments.length}{" "}
+                          <KIcon name="trophy" className="size-3.5" /> {grp.tournamentEntries.length}{" "}
                           turnamen
                         </span>
                       )}
@@ -220,8 +259,13 @@ export function HistoryView({
                   <div className="acc-inner">
                     {/* p-3 + gap: ruang border/shadow GameCard biar gak kepotong overflow parent */}
                     <div className="grid gap-3 border-t border-line p-3">
-                      {grp.tournaments.map((t) => (
-                        <TournamentHistoryCard key={t.id} tournament={t} today={today} />
+                      {grp.tournamentEntries.map((e) => (
+                        <TournamentHistoryCard
+                          key={e.tournament.id}
+                          tournament={e.tournament}
+                          matches={e.matches}
+                          today={today}
+                        />
                       ))}
                       {grp.games.map((g) => (
                         <GameCard

@@ -31,6 +31,7 @@ export default async function TurnamenDetailPage({
         editable={canEdit}
         kokTypes={data.kokTypes}
         defaultPrice={data.settings.defaultPricePerPerson}
+        players={data.players}
       />
     </AppFrame>
   );
