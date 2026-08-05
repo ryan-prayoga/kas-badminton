@@ -200,18 +200,6 @@ export function TournamentHistoryCard({
                     <KIcon name="shuttle" className="size-3.5" /> {kokSummary(m)}
                   </span>
                 ) : null}
-                {isLast && t.fee > 0 ? (
-                  t.cost.unpaidCount > 0 ? (
-                    <span className="inline-flex items-center gap-1 font-semibold text-owe">
-                      <KIcon name="alert" className="size-3.5" /> {t.cost.unpaidCount} belum
-                      patungan
-                    </span>
-                  ) : (
-                    <span className="inline-flex items-center gap-1 font-semibold text-paid">
-                      <KIcon name="checkCircle" className="size-3.5" /> Patungan lunas
-                    </span>
-                  )
-                ) : null}
               </div>
             </div>
           </Link>
