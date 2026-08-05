@@ -10,7 +10,7 @@ import {
   tournamentShareCaption,
   tournamentShareText,
 } from "@/lib/tournament-share";
-import type { EnrichedTournament, KokType } from "@/lib/domain/types";
+import type { EnrichedTournament, KokType, PlayerRow } from "@/lib/domain/types";
 import {
   fmt,
   fmtDateFull,
@@ -31,6 +31,7 @@ import {
 import { useConfirm } from "@/components/confirm-dialog";
 import { Avatar, type PhotoMap } from "@/components/kok/avatar";
 import { BracketView } from "@/components/kok/bracket-view";
+import { EditPairsSheet } from "@/components/kok/edit-pairs-sheet";
 import { KIcon, type IconName } from "@/components/kok/icons";
 import { MatchDialog } from "@/components/kok/match-dialog";
 import { RoundRobinView } from "@/components/kok/round-robin-view";
@@ -185,12 +186,14 @@ export function TournamentDetailView({
   editable,
   kokTypes,
   defaultPrice,
+  players,
 }: {
   tournament: EnrichedTournament;
   photoMap: PhotoMap;
   editable: boolean;
   kokTypes: KokType[];
   defaultPrice: number;
+  players: PlayerRow[];
 }) {
   const t = tournament;
   const router = useRouter();
@@ -326,6 +329,7 @@ export function TournamentDetailView({
         icon={t.format === "knockout" ? "trophy" : "chart"}
         title={t.format === "knockout" ? "Bagan" : "Klasemen & partai"}
         badge={`${t.playedCount}/${t.totalCount}`}
+        action={editable ? <EditPairsSheet tournament={t} players={players} /> : undefined}
       >
         {t.bracket ? (
           <BracketView
