@@ -3,7 +3,7 @@
 import { useId, useMemo, useState, useTransition } from "react";
 import { toast } from "sonner";
 import type { DebtEntry, DebtItem } from "@/lib/domain/types";
-import { fmt, fmtDate, fmtDateFull, relativeDay, toLocalIso } from "@/lib/format";
+import { fmt, fmtDate, fmtDateFull, formatThousands, relativeDay, toLocalIso } from "@/lib/format";
 import { APP_URL, type ShareCardBlock } from "@/lib/share";
 import { cn } from "@/lib/utils";
 import { payInstallmentAction, settleAllAction } from "@/server/actions/players";
@@ -440,7 +440,7 @@ function DebtCard({
                         inputMode="numeric"
                         autoFocus
                         aria-label="Nominal cicilan"
-                        value={amount}
+                        value={formatThousands(amount)}
                         onChange={(e) => setAmount(e.target.value.replace(/[^\d]/g, ""))}
                         onKeyDown={(e) => {
                           if (e.key === "Enter" && !pending) {
@@ -448,7 +448,7 @@ function DebtCard({
                             pay();
                           }
                         }}
-                        placeholder={`maks ${d.total}`}
+                        placeholder={`maks ${formatThousands(String(d.total))}`}
                         className="h-11 w-28 rounded-xl border border-input bg-surface px-3 text-sm text-ink outline-none focus:border-court/50"
                       />
                       <button

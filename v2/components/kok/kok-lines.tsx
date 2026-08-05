@@ -5,7 +5,7 @@
 
 import { clampToTournament } from "@/lib/domain/tournament";
 import type { Kok, KokType } from "@/lib/domain/types";
-import { formatRupiah, toLocalIso } from "@/lib/format";
+import { formatRupiah, formatThousands, toLocalIso } from "@/lib/format";
 import { DateField } from "@/components/kok/date-field";
 import { KIcon } from "@/components/kok/icons";
 import { Input } from "@/components/ui/input";
@@ -263,8 +263,8 @@ export function KokLinesEditor({
                 </span>
                 <Input
                   inputMode="numeric"
-                  placeholder={String(selected?.pricePerPerson ?? defaultPrice)}
-                  value={line.price}
+                  placeholder={formatThousands(String(selected?.pricePerPerson ?? defaultPrice))}
+                  value={formatThousands(line.price)}
                   onChange={(e) => setLine(line.key, { price: e.target.value.replace(/[^\d]/g, "") })}
                   className="h-10 rounded-xl pl-9"
                   aria-label="Harga per orang"

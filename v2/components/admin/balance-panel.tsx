@@ -4,7 +4,7 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
-import { formatRupiah } from "@/lib/format";
+import { formatRupiah, formatThousands } from "@/lib/format";
 import { safeAction } from "@/lib/action-result";
 import { adjustBalanceAction } from "@/server/actions/expenses";
 import { Button } from "@/components/ui/button";
@@ -79,9 +79,9 @@ export function BalancePanel() {
           <Label htmlFor="bal-amount">Jumlah</Label>
           <Input
             id="bal-amount"
-            placeholder="cth. 100000"
+            placeholder="cth. 100.000"
             inputMode="numeric"
-            value={amount}
+            value={formatThousands(amount)}
             onChange={(e) => setAmount(e.target.value.replace(/[^\d]/g, ""))}
             className="rounded-xl"
           />

@@ -4,7 +4,7 @@ import { useState } from "react";
 import QRCode from "qrcode";
 import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
-import { formatRupiah } from "@/lib/format";
+import { formatRupiah, formatThousands } from "@/lib/format";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -94,13 +94,13 @@ export function QrisDialog({
             <Input
               id="qris-amount"
               inputMode="numeric"
-              value={amount}
+              value={formatThousands(amount)}
               onChange={(e) => {
                 setAmount(e.target.value.replace(/[^\d]/g, ""));
                 // QR yang sudah dibuat jadi basi begitu nominal diubah — buang biar wajib generate ulang.
                 setQr(null);
               }}
-              placeholder="cth. 12000"
+              placeholder="cth. 12.000"
             />
           </div>
 

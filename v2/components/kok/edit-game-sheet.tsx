@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import type { EnrichedGame, KokType, PlayerRow } from "@/lib/domain/types";
-import { fmt } from "@/lib/format";
+import { fmt, formatThousands } from "@/lib/format";
 import { updateGameAction } from "@/server/actions/games";
 import { buildPhotoMap } from "@/components/kok/avatar";
 import { DateField } from "@/components/kok/date-field";
@@ -189,9 +189,11 @@ export function EditGameSheet({
                   <input
                     inputMode="numeric"
                     aria-label="Harga per orang"
-                    value={k.price}
+                    value={formatThousands(k.price)}
                     onChange={(e) => setKok(i, { price: e.target.value.replace(/[^\d]/g, "") })}
-                    placeholder={String(kokTypes.find((x) => x.id === k.typeId)?.pricePerPerson ?? defaultPrice)}
+                    placeholder={formatThousands(
+                      String(kokTypes.find((x) => x.id === k.typeId)?.pricePerPerson ?? defaultPrice),
+                    )}
                     className="h-10 w-24 rounded-xl border border-input bg-surface px-3 text-sm text-ink outline-none focus:border-court/50"
                   />
                   <button

@@ -13,6 +13,7 @@ import {
 } from "@/lib/domain/tournament";
 import type { PlayerRow, ScoreFormat, TournamentFormat } from "@/lib/domain/types";
 import { safeAction } from "@/lib/action-result";
+import { formatThousands } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { createTournamentAction } from "@/server/actions/tournaments";
 import { buildPhotoMap } from "@/components/kok/avatar";
@@ -407,7 +408,7 @@ export function CreateTournamentSheet({
               <Input
                 id="t-fee"
                 inputMode="numeric"
-                value={fee}
+                value={formatThousands(fee)}
                 onChange={(e) => setFee(e.target.value.replace(/[^\d]/g, ""))}
                 placeholder="0"
                 className="h-11 rounded-xl pl-9"

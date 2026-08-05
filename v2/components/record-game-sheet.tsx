@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { Loader2, Plus } from "lucide-react";
 import { toast } from "sonner";
 import type { KokType, PlayerRow } from "@/lib/domain/types";
-import { formatRupiah } from "@/lib/format";
+import { formatRupiah, formatThousands } from "@/lib/format";
 import { createGameAction } from "@/server/actions/games";
 import { buildPhotoMap } from "@/components/kok/avatar";
 import { DateField } from "@/components/kok/date-field";
@@ -360,8 +360,8 @@ export function RecordGameSheet({
                         </span>
                         <Input
                           inputMode="numeric"
-                          placeholder={String(selected?.pricePerPerson ?? defaultPrice)}
-                          value={line.price}
+                          placeholder={formatThousands(String(selected?.pricePerPerson ?? defaultPrice))}
+                          value={formatThousands(line.price)}
                           onChange={(e) =>
                             setLine(line.key, {
                               price: e.target.value.replace(/[^\d]/g, ""),

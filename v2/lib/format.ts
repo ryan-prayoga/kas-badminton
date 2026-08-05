@@ -160,3 +160,10 @@ export function periodLabel(key: string): string {
 
 /** alias back-compat (komponen admin lama pakai nama ini). */
 export const formatRupiah = fmt;
+
+/** "130000" -> "130.000" — buat tampilan live di input harga (id-ID thousand separator). */
+export function formatThousands(digits: string): string {
+  const clean = String(digits || "").replace(/[^\d]/g, "");
+  if (!clean) return "";
+  return new Intl.NumberFormat("id-ID").format(Number(clean));
+}

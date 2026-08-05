@@ -24,6 +24,7 @@ import {
   fmtDateFull,
   fmtDateRange,
   fmtPaidAt,
+  formatThousands,
   parseLocalDate,
   toLocalIso,
 } from "@/lib/format";
@@ -259,7 +260,7 @@ function FeeDialog({
           </span>
           <Input
             inputMode="numeric"
-            value={value}
+            value={formatThousands(value)}
             onChange={(e) => setValue(e.target.value.replace(/[^\d]/g, ""))}
             className="h-11 rounded-xl pl-9"
             aria-label="Iuran per orang"

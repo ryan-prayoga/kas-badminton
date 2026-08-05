@@ -3,7 +3,7 @@
 import { useState, useTransition } from "react";
 import { toast } from "sonner";
 import type { EnrichedGame, KokType } from "@/lib/domain/types";
-import { formatRupiah } from "@/lib/format";
+import { formatRupiah, formatThousands } from "@/lib/format";
 import { updateGameAction } from "@/server/actions/games";
 import { KIcon } from "@/components/kok/icons";
 import { Input } from "@/components/ui/input";
@@ -268,8 +268,8 @@ export function AddKokDialog({
                       </span>
                       <Input
                         inputMode="numeric"
-                        placeholder={String(selected?.pricePerPerson ?? defaultPrice)}
-                        value={line.price}
+                        placeholder={formatThousands(String(selected?.pricePerPerson ?? defaultPrice))}
+                        value={formatThousands(line.price)}
                         onChange={(e) =>
                           setLine(line.key, { price: e.target.value.replace(/[^\d]/g, "") })
                         }

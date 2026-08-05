@@ -6,7 +6,7 @@ import { Loader2, Package, Pencil, ShoppingCart, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import type { KokType } from "@/lib/domain/types";
 import { expenseFromInitialStock, slopsFromStock } from "@/lib/domain/stock";
-import { formatRupiah } from "@/lib/format";
+import { formatRupiah, formatThousands } from "@/lib/format";
 import {
   adjustStockAction,
   buyStockAction,
@@ -99,7 +99,7 @@ function BuyDialog({ type }: { type: KokType }) {
             <Input
               id="pps"
               inputMode="numeric"
-              value={price}
+              value={formatThousands(price)}
               onChange={(e) => setPrice(e.target.value.replace(/[^\d]/g, ""))}
             />
           </div>
@@ -186,7 +186,7 @@ function EditDialog({ type }: { type: KokType }) {
               <Input
                 id={`p-${type.id}`}
                 inputMode="numeric"
-                value={price}
+                value={formatThousands(price)}
                 onChange={(e) => setPrice(e.target.value.replace(/[^\d]/g, ""))}
               />
             </div>
@@ -195,7 +195,7 @@ function EditDialog({ type }: { type: KokType }) {
               <Input
                 id={`s-${type.id}`}
                 inputMode="numeric"
-                value={slop}
+                value={formatThousands(slop)}
                 onChange={(e) => setSlop(e.target.value.replace(/[^\d]/g, ""))}
               />
             </div>
@@ -364,9 +364,9 @@ export function KokTypesPanel({ kokTypes }: { kokTypes: KokType[] }) {
             <Label htmlFor="kt-price">Harga / orang</Label>
             <Input
               id="kt-price"
-              placeholder="3000"
+              placeholder="3.000"
               inputMode="numeric"
-              value={price}
+              value={formatThousands(price)}
               onChange={(e) => setPrice(e.target.value.replace(/[^\d]/g, ""))}
               className="rounded-xl"
             />
@@ -375,9 +375,9 @@ export function KokTypesPanel({ kokTypes }: { kokTypes: KokType[] }) {
             <Label htmlFor="kt-slop">Harga / slop (beli)</Label>
             <Input
               id="kt-slop"
-              placeholder="130000"
+              placeholder="130.000"
               inputMode="numeric"
-              value={slop}
+              value={formatThousands(slop)}
               onChange={(e) => setSlop(e.target.value.replace(/[^\d]/g, ""))}
               className="rounded-xl"
             />
