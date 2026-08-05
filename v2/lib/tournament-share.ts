@@ -4,7 +4,12 @@
 import { matchTitle, pairLabel, scoreLine, tournamentStatus } from "@/lib/domain/tournament";
 import type { BracketMatch, EnrichedTournament } from "@/lib/domain/types";
 import { fmt, fmtDateRange, fmtDateFull } from "@/lib/format";
-import { APP_URL, type ShareCardBlock, type ShareMetric } from "@/lib/share";
+import {
+  APP_URL,
+  type ShareBracketSide,
+  type ShareCardBlock,
+  type ShareMetric,
+} from "@/lib/share";
 
 type Status = ReturnType<typeof tournamentStatus>;
 
@@ -118,6 +123,86 @@ export function tournamentShareCaption(t: EnrichedTournament, today: string): st
   ].join("\n");
 }
 
+/** Sisi partai buat bagan gambar — teks + skor per game, sudah siap tempel. */
+function bracketSide(m: BracketMatch, which: "a" | "b"): ShareBracketSide {
+  const side = which === "a" ? m.a : m.b;
+  const label = pairLabel(side.pair);
+  return {
+    text: side.bye ? "BYE" : label || "Menunggu",
+    muted: side.bye || !label,
+    scores: m.score?.games.map((g) => (which === "a" ? g.a : g.b)) ?? [],
+    winner: m.winner === which,
+  };
+}
+
+/** Bagan gugur utuh — kolom per babak, sama bentuknya dengan halaman turnamen. */
+function bracketBlock(t: EnrichedTournament): Extract<ShareCardBlock, { kind: "bracket" }> {
+  return {
+    kind: "bracket",
+    rounds: (t.bracket?.rounds ?? []).map((r) => ({
+      label: r.label,
+      matches: r.matches.map((m) => ({
+        a: bracketSide(m, "a"),
+        b: bracketSide(m, "b"),
+        autoWin: m.autoWin,
+        decided: m.winner !== null,
+      })),
+    })),
+    champion: t.champion ? pairLabel(t.champion) : null,
+  };
+}
+
+/** Satu baris partai buat kartu gambar — cover 3 kondisi: BYE, sudah main, belum main. */
+function matchRow(
+  t: EnrichedTournament,
+  m: BracketMatch,
+  i: number,
+): Extract<ShareCardBlock, { kind: "person" }> {
+  const a = sideName(m.a);
+  const b = sideName(m.b);
+  const title = matchTitle(t, m);
+
+  if (m.autoWin) {
+    const lolos = m.winner === "a" ? a : b;
+    return {
+      kind: "person",
+      rank: i + 1,
+      name: lolos,
+      detail: title,
+      chips: [{ icon: "racket", text: "lolos otomatis (BYE)" }],
+      right: "BYE",
+      rightTone: "paid",
+      initial: lolos.slice(0, 1),
+    };
+  }
+
+  if (m.score) {
+    const winner = m.winner === "a" ? a : m.winner === "b" ? b : "—";
+    const loser = m.winner === "a" ? b : a;
+    return {
+      kind: "person",
+      rank: i + 1,
+      name: winner,
+      detail: title,
+      chips: [{ icon: "racket", text: `lawan ${loser}` }],
+      right: scoreLine(m.score),
+      rightTone: "paid",
+      initial: winner.slice(0, 1),
+    };
+  }
+
+  // Belum main — pasangannya sudah ketahuan (atau nunggu babak sebelumnya).
+  return {
+    kind: "person",
+    rank: i + 1,
+    name: `${a} vs ${b}`,
+    detail: title,
+    right: "Belum main",
+    rightTone: "muted",
+    initial: a.slice(0, 1),
+  };
+}
+
 export function tournamentShareBlocks(
   t: EnrichedTournament,
   today: string,
@@ -196,24 +281,20 @@ export function tournamentShareBlocks(
     });
   }
 
-  const played = t.matches.filter((m) => m.score || m.autoWin);
-  if (played.length) {
+  // Sama seperti versi teks: partai yang salah satu sisinya sudah ketahuan
+  // (atau BYE) layak ditampilkan, walau belum main — biar bagan di kartu
+  // gambar selengkap bagan di teks/halaman turnamen, bukan cuma yang sudah
+  // ada skornya.
+  const isShown = (m: BracketMatch) => Boolean(m.a.pair || m.b.pair || m.autoWin);
+  const shown = t.matches.filter(isShown);
+
+  if (t.bracket && shown.length) {
+    // Gugur digambar sebagai bagan beneran; daftar baris tidak dipakai karena
+    // bagan sudah memuat lawan, skor, dan alur ke babak berikutnya sekaligus.
+    blocks.push(bracketBlock(t));
+  } else if (shown.length) {
     blocks.push({ kind: "section", title: "Hasil partai", icon: "racket" });
-    played.forEach((m, i) => {
-      const a = sideName(m.a);
-      const b = sideName(m.b);
-      const winner = m.winner === "a" ? a : m.winner === "b" ? b : "—";
-      blocks.push({
-        kind: "person",
-        rank: i + 1,
-        name: winner,
-        detail: matchTitle(t, m),
-        chips: [{ icon: "racket", text: `lawan ${m.winner === "a" ? b : a}` }],
-        right: m.autoWin ? "BYE" : scoreLine(m.score),
-        rightTone: "paid",
-        initial: winner.slice(0, 1),
-      });
-    });
+    shown.forEach((m, i) => blocks.push(matchRow(t, m, i)));
   } else {
     blocks.push({ kind: "section", title: "Peserta", icon: "users" });
     const filled = t.pairs.filter((p) => pairLabel(p));

@@ -32,8 +32,27 @@ export type ShareMetric = {
   icon?: ShareIconName;
 };
 
+/** Satu sisi partai di bagan — sudah jadi teks siap tempel, bukan data mentah. */
+export type ShareBracketSide = {
+  text: string;
+  /** "BYE" / "Menunggu" — dicetak miring & redup, sama seperti bagan web. */
+  muted: boolean;
+  scores: number[];
+  winner: boolean;
+};
+
+export type ShareBracketMatch = {
+  a: ShareBracketSide;
+  b: ShareBracketSide;
+  autoWin: boolean;
+  decided: boolean;
+};
+
+export type ShareBracketRound = { label: string; matches: ShareBracketMatch[] };
+
 export type ShareCardBlock =
   | { kind: "header"; title: string; subtitle?: string; badge?: string }
+  | { kind: "bracket"; rounds: ShareBracketRound[]; champion: string | null }
   | {
       kind: "hero";
       name: string;
@@ -473,11 +492,258 @@ function avatarNode(opts: {
   return box;
 }
 
+// ── Bagan gugur ──
+// Beda dari web: posisi tiap kotak dihitung eksplisit dalam px, bukan
+// `flex justify-around` + garis ber-persen. html-to-image merasterisasi lewat
+// foreignObject, dan di sana tinggi persen sering meleset — sedangkan bagan
+// cuma kebaca kalau garis penghubungnya jatuh pas di tengah kotak.
+
+const BR_COL_W = 188; // sama seperti kolom babak di web
+const BR_COL_GAP = 28;
+const BR_STUB = BR_COL_GAP / 2;
+const BR_BOX_H = 64; // 2 baris × 31px, border-box
+const BR_ROW_H = 31;
+const BR_GAP_V = 12;
+const BR_HEAD_H = 20; // baris label babak di atas kolom
+const BR_CHAMP_H = 46;
+
+/** Lebar total bagan = kolom babak + satu kolom juara. */
+function bracketWidth(roundCount: number): number {
+  return (roundCount + 1) * BR_COL_W + roundCount * BR_COL_GAP;
+}
+
+/**
+ * Titik tengah vertikal tiap partai. Babak pertama dibagi rata; partai di
+ * babak berikutnya duduk pas di tengah dua partai yang mengisinya — itu yang
+ * bikin garisnya nyambung tanpa perlu ukur ulang.
+ */
+function bracketLayout(rounds: ShareBracketRound[]): { centers: number[][]; height: number } {
+  const first = rounds[0]?.matches.length ?? 1;
+  const centers: number[][] = [
+    Array.from({ length: first }, (_, i) => i * (BR_BOX_H + BR_GAP_V) + BR_BOX_H / 2),
+  ];
+  for (let r = 1; r < rounds.length; r++) {
+    const prev = centers[r - 1];
+    centers.push(
+      rounds[r].matches.map((_, i) => {
+        const a = prev[i * 2] ?? 0;
+        return (a + (prev[i * 2 + 1] ?? a)) / 2;
+      }),
+    );
+  }
+  return { centers, height: first * BR_BOX_H + (first - 1) * BR_GAP_V };
+}
+
+function bracketLine(style: Partial<CSSStyleDeclaration>): HTMLElement {
+  return el("div", { position: "absolute", background: C.lineStrong, ...style });
+}
+
+function bracketSideNode(s: ShareBracketSide, decided: boolean, first: boolean): HTMLElement {
+  const row = el("div", {
+    display: "flex",
+    alignItems: "center",
+    gap: "6px",
+    padding: "0 8px",
+    height: `${BR_ROW_H}px`,
+    boxSizing: "border-box",
+    borderTop: first ? "none" : `1px solid ${C.line}`,
+    background: s.winner ? C.paidSoft : "transparent",
+    opacity: decided && !s.winner ? "0.55" : "1",
+  });
+
+  row.appendChild(
+    el("span", {
+      width: "2px",
+      height: "16px",
+      borderRadius: "999px",
+      flexShrink: "0",
+      background: s.winner ? C.paid : C.lineStrong,
+    }),
+  );
+
+  const name = el("span", {
+    minWidth: "0",
+    flex: "1",
+    fontSize: "12px",
+    lineHeight: "1.2",
+    whiteSpace: "nowrap",
+    overflow: "hidden",
+    textOverflow: "ellipsis",
+    fontStyle: s.muted ? "italic" : "normal",
+    color: s.muted ? C.inkFaint : s.winner ? C.ink : C.inkSoft,
+    fontWeight: s.muted ? "400" : s.winner ? "800" : "600",
+  });
+  name.textContent = s.text;
+  row.appendChild(name);
+
+  if (s.scores.length) {
+    const box = el("div", { display: "flex", gap: "4px", flexShrink: "0" });
+    for (const n of s.scores) {
+      const v = el("span", {
+        fontFamily: FONT_MONO,
+        fontSize: "12px",
+        width: "16px",
+        textAlign: "right",
+        lineHeight: "1.2",
+        fontVariantNumeric: "tabular-nums",
+        color: s.winner ? C.paid : C.inkFaint,
+        fontWeight: s.winner ? "700" : "400",
+      });
+      v.textContent = String(n);
+      box.appendChild(v);
+    }
+    row.appendChild(box);
+  }
+  return row;
+}
+
+function bracketMatchNode(m: ShareBracketMatch): HTMLElement {
+  const box = el("div", {
+    boxSizing: "border-box",
+    width: `${BR_COL_W}px`,
+    height: `${BR_BOX_H}px`,
+    borderRadius: "12px",
+    border: m.autoWin ? `1px dashed ${C.lineStrong}` : `1px solid ${C.line}`,
+    background: C.surface,
+    overflow: "hidden",
+  });
+  box.append(bracketSideNode(m.a, m.decided, true), bracketSideNode(m.b, m.decided, false));
+  return box;
+}
+
+function bracketNode(b: Extract<ShareCardBlock, { kind: "bracket" }>): HTMLElement {
+  const { centers, height } = bracketLayout(b.rounds);
+  const last = b.rounds.length - 1;
+  const width = bracketWidth(b.rounds.length);
+  const colX = (r: number) => r * (BR_COL_W + BR_COL_GAP);
+
+  const wrap = el("div", {
+    position: "relative",
+    width: `${width}px`,
+    height: `${height + BR_HEAD_H}px`,
+    margin: "0 auto",
+  });
+
+  // Label babak + kolom juara.
+  [...b.rounds.map((r) => r.label), "Juara"].forEach((label, i) => {
+    const h = el("div", {
+      position: "absolute",
+      left: `${colX(i)}px`,
+      top: "0",
+      width: `${BR_COL_W}px`,
+      textAlign: "center",
+      fontSize: "10px",
+      fontWeight: "800",
+      letterSpacing: "0.16em",
+      textTransform: "uppercase",
+      color: C.inkFaint,
+      lineHeight: "1.4",
+    });
+    h.textContent = label;
+    wrap.appendChild(h);
+  });
+
+  // Garis dulu, biar kotak menimpanya kalau ada yang mepet.
+  for (let r = 0; r <= last; r++) {
+    const right = colX(r) + BR_COL_W;
+    const cur = centers[r];
+    // Sasaran babak ini: partai babak berikutnya, atau kotak juara di ujung.
+    const nextCenters = r < last ? centers[r + 1] : [centers[last][0]];
+
+    cur.forEach((y) => {
+      wrap.appendChild(
+        bracketLine({ left: `${right}px`, top: `${BR_HEAD_H + y}px`, width: `${BR_STUB}px`, height: "1px" }),
+      );
+    });
+
+    for (let j = 0; j < nextCenters.length; j++) {
+      const top = cur[j * 2];
+      const bottom = cur[j * 2 + 1];
+      const x = right + BR_STUB;
+      const target = BR_HEAD_H + nextCenters[j];
+      if (bottom !== undefined) {
+        wrap.appendChild(
+          bracketLine({
+            left: `${x}px`,
+            top: `${BR_HEAD_H + top}px`,
+            width: "1px",
+            height: `${bottom - top}px`,
+          }),
+        );
+      }
+      wrap.appendChild(
+        bracketLine({ left: `${x}px`, top: `${target}px`, width: `${BR_STUB}px`, height: "1px" }),
+      );
+    }
+  }
+
+  // Kotak partai.
+  b.rounds.forEach((round, r) => {
+    round.matches.forEach((m, i) => {
+      const box = bracketMatchNode(m);
+      Object.assign(box.style, {
+        position: "absolute",
+        left: `${colX(r)}px`,
+        top: `${BR_HEAD_H + centers[r][i] - BR_BOX_H / 2}px`,
+      });
+      wrap.appendChild(box);
+    });
+  });
+
+  // Kotak juara — sejajar final.
+  const champ = el("div", {
+    position: "absolute",
+    boxSizing: "border-box",
+    left: `${colX(b.rounds.length)}px`,
+    top: `${BR_HEAD_H + centers[last][0] - BR_CHAMP_H / 2}px`,
+    width: `${BR_COL_W}px`,
+    height: `${BR_CHAMP_H}px`,
+    display: "flex",
+    alignItems: "center",
+    gap: "8px",
+    padding: "0 10px",
+    borderRadius: "12px",
+    border: b.champion ? `1px solid ${C.paidBorder}` : `1px dashed ${C.lineStrong}`,
+    background: b.champion ? C.paidSoft : C.surface2,
+  });
+  const champIcon = el("span", {
+    display: "inline-flex",
+    flexShrink: "0",
+    color: b.champion ? C.paid : C.inkFaint,
+  });
+  champIcon.innerHTML = iconSvg("trophy", 20);
+  const champText = el("span", {
+    minWidth: "0",
+    flex: "1",
+    fontSize: "13px",
+    lineHeight: "1.25",
+    whiteSpace: "nowrap",
+    overflow: "hidden",
+    textOverflow: "ellipsis",
+    fontStyle: b.champion ? "normal" : "italic",
+    fontWeight: b.champion ? "800" : "400",
+    color: b.champion ? C.ink : C.inkFaint,
+  });
+  champText.textContent = b.champion || "Belum ada";
+  champ.append(champIcon, champText);
+  wrap.appendChild(champ);
+
+  return wrap;
+}
+
 function buildShareDom(blocks: ShareCardBlock[]): HTMLElement {
   const header = blocks.find((b) => b.kind === "header") as
     Extract<ShareCardBlock, { kind: "header" }> | undefined;
   const body = blocks.filter((b) => b.kind !== "header");
   const hasFooter = body.some((b) => b.kind === "footer");
+
+  // Kartu ikut melebar kalau ada bagan — bagan gugur butuh ruang mendatar,
+  // dan kartu landscape masih enak dibaca di chat. 32px padding root + 32px
+  // padding kartu bagan.
+  const bracket = body.find((b) => b.kind === "bracket");
+  const cardW = bracket ? Math.max(600, bracketWidth(bracket.rounds.length) + 64) : 600;
+  // Metrik ikut melebar: 2 kolom di kartu sempit, sampai 4 di kartu lebar.
+  const metricCols = Math.max(2, Math.min(4, Math.floor(cardW / 240)));
 
   // Root: max-w-[600px] px-4, sama seperti AppFrame.
   // Jangan set position/offset di sini — style root ikut ter-serialize ke
@@ -485,7 +751,7 @@ function buildShareDom(blocks: ShareCardBlock[]): HTMLElement {
   // ngedorong isinya keluar kanvas (PNG blank). Offset dipasang di wrapper.
   const root = el("div", {
     position: "static",
-    width: "600px",
+    width: `${cardW}px`,
     boxSizing: "border-box",
     padding: "18px 16px 14px",
     fontFamily: FONT_SANS,
@@ -694,11 +960,20 @@ function buildShareDom(blocks: ShareCardBlock[]): HTMLElement {
       continue;
     }
 
+    if (b.kind === "bracket") {
+      // Bagan bawa kartunya sendiri (judul + border), bukan isi `section`
+      // biasa — isinya bukan daftar baris, jadi tak perlu ikut `section.list`.
+      const list = openSection("Bagan", "trophy");
+      list.appendChild(bracketNode(b));
+      closeSection();
+      continue;
+    }
+
     if (b.kind === "metrics") {
       closeSection();
       const grid = el("div", {
         display: "grid",
-        gridTemplateColumns: "1fr 1fr",
+        gridTemplateColumns: `repeat(${metricCols}, 1fr)`,
         gap: "12px",
       });
 
@@ -1036,7 +1311,9 @@ export async function renderShareCard(blocks: ShareCardBlock[]): Promise<Blob> {
   // Wrapper off-screen: card sendiri tetap `position: static` biar hasil
   // snapshot-nya gak kegeser (lihat catatan di buildShareDom).
   const host = document.createElement("div");
-  host.style.cssText = "position:fixed;left:-10000px;top:0;width:600px;pointer-events:none";
+  // Lebar host ikut kartu — kartu berbagan lebih lebar dari 600px, dan host
+  // yang lebih sempit bakal memaksa isinya membungkus sebelum di-snapshot.
+  host.style.cssText = `position:fixed;left:-10000px;top:0;width:${card.style.width || "600px"};pointer-events:none`;
   host.appendChild(card);
   document.body.appendChild(host);
 
