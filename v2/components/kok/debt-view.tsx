@@ -1,6 +1,7 @@
 "use client";
 
 import { useId, useMemo, useState, useTransition } from "react";
+import Link from "next/link";
 import { toast } from "sonner";
 import type { DebtEntry, DebtItem } from "@/lib/domain/types";
 import {
@@ -400,12 +401,14 @@ function DebtCard({
                 return (
                   <div key={g.date} className="bg-surface px-3 py-2 odd:bg-surface-2">
                     <div className="flex items-center justify-between gap-2">
-                      <span className="flex min-w-0 items-center gap-1.5 text-xs font-semibold text-ink-soft">
+                      <Link
+                        href={`/?date=${g.date}`}
+                        className="flex min-w-0 items-center gap-1.5 text-xs font-semibold text-ink-soft underline decoration-dotted underline-offset-2 active:opacity-70"
+                        title={`Lihat ${fmtDateFull(g.date)} di Riwayat`}
+                      >
                         <KIcon name="calendar" className="size-3.5 shrink-0 text-ink-faint" />
-                        <span className="truncate" title={fmtDateFull(g.date)}>
-                          {fmtDateFull(g.date)}
-                        </span>
-                      </span>
+                        <span className="truncate">{fmtDateFull(g.date)}</span>
+                      </Link>
                       <span className="tabular shrink-0 font-mono text-sm font-bold text-owe">{fmt(g.total)}</span>
                     </div>
                     <div className="mt-1 flex flex-col gap-1">

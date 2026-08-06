@@ -149,6 +149,22 @@ export function HistoryView({
   const [open, setOpen] = useState<Record<string, boolean>>({});
   const flash = useFlash(games);
 
+  // Datang dari link "?date=..." (mis. klik tanggal di Rekap) → pindah ke bulan
+  // yang benar, buka grupnya, lalu scroll ke situ begitu grupnya kerender.
+  const [pendingScrollDate, setPendingScrollDate] = useState<string | null>(null);
+  useEffect(() => {
+    const dateParam = new URLSearchParams(window.location.search).get("date");
+    if (!dateParam) return;
+    const k = periodKey(dateParam);
+    // Baca URL sekali pas mount buat sinkron ke param eksternal — bukan derive dari state React.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setPeriod(periods.includes(k) ? k : "all");
+    setOpen((s) => (s[dateParam] ? s : { ...s, [dateParam]: true }));
+    setPendingScrollDate(dateParam);
+    // Cuma sekali pas mount — baca URL awal, bukan tiap `periods` berubah.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // Kartu lapor jumlah "belum bayar" optimistiknya → badge grup ikut live, tak basi selama round-trip.
   const [liveUnpaid, setLiveUnpaid] = useState<Record<string, number>>({});
   const handlePaidChange = useCallback((gameId: string, unpaid: number) => {
@@ -161,6 +177,17 @@ export function HistoryView({
   const tournamentCount = new Set(groups.flatMap((g) => g.tournamentEntries.map((e) => e.tournament.id)))
     .size;
   const isOpen = (date: string, i: number) => (date in open ? open[date] : i === 0);
+
+  // Baru scroll begitu grup tanggalnya beneran ada di DOM (nunggu `period` kesorot dulu).
+  useEffect(() => {
+    if (!pendingScrollDate) return;
+    const el = document.getElementById(`hist-${pendingScrollDate}`);
+    if (!el) return;
+    el.scrollIntoView({ behavior: "smooth", block: "start" });
+    // Reset penanda "sudah discroll" — efek DOM (scroll) yang jadi tujuan, bukan derive state.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setPendingScrollDate(null);
+  }, [pendingScrollDate, groups]);
 
   return (
     <section className="rounded-xl2 border border-line bg-surface p-4 shadow-card">
@@ -204,6 +231,7 @@ export function HistoryView({
             return (
               <div
                 key={grp.date}
+                id={`hist-${grp.date}`}
                 className={cn(
                   "animate-rise overflow-hidden rounded-xl2 border border-line bg-surface-2/60",
                   groupFlashing && "flash-update",
