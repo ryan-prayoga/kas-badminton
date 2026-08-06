@@ -428,7 +428,7 @@ function DebtCard({
       <div className="acc-panel" data-open={open} id={panelId}>
         <div className="acc-inner">
           <div className="px-3.5 pb-3.5">
-            <div className="grid gap-px overflow-hidden rounded-xl border border-owe/15 bg-surface">
+            <div className="flex flex-col gap-px overflow-hidden rounded-xl border border-owe/15 bg-surface">
               {grouped.map((g) => {
                 const rel = relativeDay(g.date);
                 return (
