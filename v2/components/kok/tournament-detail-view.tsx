@@ -180,6 +180,73 @@ function FeeDialog({
   );
 }
 
+function NameDialog({ tournamentId, name }: { tournamentId: string; name: string }) {
+  const [open, setOpen] = useState(false);
+  const [value, setValue] = useState(name);
+  const [pending, start] = useTransition();
+
+  const submit = () => {
+    const trimmed = value.trim();
+    if (!trimmed) {
+      toast.error("Nama turnamen wajib diisi");
+      return;
+    }
+    start(async () => {
+      const res = await safeAction(() => updateTournamentAction(tournamentId, { name: trimmed }));
+      if (res.ok) {
+        toast.success("Nama turnamen diperbarui");
+        setOpen(false);
+      } else {
+        toast.error(res.error);
+      }
+    });
+  };
+
+  return (
+    <Dialog
+      open={open}
+      onOpenChange={(v) => {
+        setOpen(v);
+        if (v) setValue(name);
+      }}
+    >
+      <DialogTrigger
+        render={
+          <button
+            type="button"
+            aria-label="Ubah nama turnamen"
+            className="mt-0.5 inline-flex size-7 shrink-0 items-center justify-center rounded-lg text-ink-faint transition hover:bg-court/10 hover:text-court"
+          >
+            <KIcon name="pencil" className="size-3.5" />
+          </button>
+        }
+      />
+      <DialogContent className="max-w-sm">
+        <DialogHeader>
+          <DialogTitle className="font-display">Nama turnamen</DialogTitle>
+          <DialogDescription>Nama ini muncul di daftar, riwayat, dan saat dibagikan.</DialogDescription>
+        </DialogHeader>
+        <Input
+          value={value}
+          onChange={(e) => setValue(e.target.value)}
+          maxLength={80}
+          className="h-11 rounded-xl"
+          aria-label="Nama turnamen"
+          autoFocus
+        />
+        <button
+          type="button"
+          onClick={submit}
+          disabled={pending}
+          className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-court text-sm font-bold text-white shadow-court transition active:scale-[0.98] disabled:opacity-60"
+        >
+          <KIcon name="save" className="size-4" /> Simpan
+        </button>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 export function TournamentDetailView({
   tournament,
   photoMap,
@@ -274,9 +341,12 @@ export function TournamentDetailView({
             >
               <KIcon name="back" className="size-3.5" /> Semua turnamen
             </Link>
-            <h1 className="font-display truncate text-xl font-extrabold tracking-tight text-ink">
-              {t.name}
-            </h1>
+            <div className="flex items-start gap-1">
+              <h1 className="font-display truncate text-xl font-extrabold tracking-tight text-ink">
+                {t.name}
+              </h1>
+              {editable ? <NameDialog tournamentId={t.id} name={t.name} /> : null}
+            </div>
             <p className="mt-0.5 flex flex-wrap items-center gap-x-2.5 gap-y-0.5 text-xs text-ink-soft">
               <span className="inline-flex items-center gap-1">
                 <KIcon name="calendar" className="size-3.5" />
