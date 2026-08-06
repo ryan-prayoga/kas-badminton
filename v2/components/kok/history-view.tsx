@@ -174,8 +174,10 @@ export function HistoryView({
   const filtered = period === "all" ? games : games.filter((g) => periodKey(g.date) === period);
   const groups = groupByDate(filtered, tournaments, period);
   const matchNumbers = gameMatchNumbers(filtered);
-  const tournamentCount = new Set(groups.flatMap((g) => g.tournamentEntries.map((e) => e.tournament.id)))
-    .size;
+  const tournamentCount = groups.reduce(
+    (s, g) => s + g.tournamentEntries.reduce((s2, e) => s2 + e.matches.length, 0),
+    0,
+  );
   const isOpen = (date: string, i: number) => (date in open ? open[date] : i === 0);
 
   // Baru scroll begitu grup tanggalnya beneran ada di DOM (nunggu `period` kesorot dulu).
