@@ -95,6 +95,36 @@ function itemLabel(it: DebtItem): string {
   return it.label || "Kok partai";
 }
 
+/** Kunci unik satu item — buat cocokin item mana yang lagi ditempeli badge "dicicil". */
+function itemKey(it: DebtItem): string {
+  return `${it.kind}:${it.gameId}`;
+}
+
+/**
+ * Titipan cicilan (carry) itu saldo ngambang di data — gak nempel ke item
+ * manapun, nanti otomatis kepake pas cicilan berikutnya (best-fit, lihat
+ * planInstallment). Biar keliatan di UI, tempelin ke item yang PALING PAS
+ * bakal ditutup titipan ini: kalau ada item yang muat (amount <= carry),
+ * pilih sisanya paling kecil; kalau belum ada yang muat, tunjuk item
+ * termurah — itu target berikutnya.
+ */
+function carryTargetKey(items: DebtItem[], carry: number): string | null {
+  if (carry <= 0 || !items.length) return null;
+  const affordable = items.filter((it) => it.amount <= carry);
+  const pool = affordable.length ? affordable : items;
+  let best = pool[0];
+  for (const it of pool.slice(1)) {
+    if (affordable.length) {
+      const diff = carry - it.amount;
+      const bestDiff = carry - best.amount;
+      if (diff < bestDiff || (diff === bestDiff && it.date < best.date)) best = it;
+    } else if (it.amount < best.amount || (it.amount === best.amount && it.date < best.date)) {
+      best = it;
+    }
+  }
+  return itemKey(best);
+}
+
 function todayLabel(): string {
   return fmtDateFull(toLocalIso(new Date()));
 }
@@ -314,6 +344,7 @@ function DebtCard({
   const grouped = groupItems(d.items);
   const kinds = countKinds(d.items);
   const totalKoks = d.items.reduce((s, it) => s + (Number(it.kokCount) || 0), 0);
+  const carryTarget = carryTargetKey(d.items, d.carry);
   const photo = photoMap[d.name];
   const shareTextPayload = useMemo(() => debtShareText(d), [d]);
   const shareBlocks = useMemo(() => debtShareBlocks(d, photo), [d, photo]);
@@ -376,11 +407,6 @@ function DebtCard({
                 <KIcon name="shuttle" className="size-3" /> {totalKoks} kok
               </span>
             </div>
-            {d.carry > 0 && (
-              <div className="mt-0.5 text-[11px] font-medium text-paid">
-                dicicil {fmt(d.carry)} / {fmt(d.owedGross)}
-              </div>
-            )}
           </div>
         </div>
         <div className="flex shrink-0 items-center gap-2">
@@ -413,26 +439,32 @@ function DebtCard({
                     </div>
                     <div className="mt-1 flex flex-col gap-1">
                       {g.items.map((it, i) => (
-                        <div
-                          key={`${it.gameId}-${i}`}
-                          className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 text-[11px] text-ink-faint"
-                        >
-                          <span className="flex min-w-0 items-center gap-1">
-                            <KIcon name={itemIcon(it.kind)} className="size-3.5 shrink-0" />
-                            <span className="truncate">{itemLabel(it)}</span>
-                            {it.createdAt && (
-                              <span className="ml-1 inline-flex shrink-0 items-center gap-1 whitespace-nowrap opacity-70">
-                                <KIcon name="clock" className="size-3" /> {fmtTime(it.createdAt)}
-                              </span>
-                            )}
-                            {it.kokCount > 0 && (
-                              <span className="ml-1 inline-flex shrink-0 items-center gap-1 whitespace-nowrap">
-                                <KIcon name="shuttle" className="size-3" /> {it.kokCount} kok
-                              </span>
-                            )}
-                          </span>
-                          {g.items.length > 1 && (
-                            <span className="tabular shrink-0 font-mono">{fmt(it.amount)}</span>
+                        <div key={`${it.gameId}-${i}`} className="flex flex-col gap-0.5">
+                          <div className="flex items-center gap-2 text-[11px] text-ink-faint">
+                            <span className="flex min-w-0 flex-1 items-center gap-1">
+                              <KIcon name={itemIcon(it.kind)} className="size-3.5 shrink-0" />
+                              <span className="truncate">{itemLabel(it)}</span>
+                            </span>
+                            <span className="flex shrink-0 items-center gap-2 whitespace-nowrap">
+                              {it.createdAt && (
+                                <span className="inline-flex items-center gap-1 opacity-70">
+                                  <KIcon name="clock" className="size-3" /> {fmtTime(it.createdAt)}
+                                </span>
+                              )}
+                              {it.kokCount > 0 && (
+                                <span className="inline-flex items-center gap-1">
+                                  <KIcon name="shuttle" className="size-3" /> {it.kokCount} kok
+                                </span>
+                              )}
+                              {g.items.length > 1 && (
+                                <span className="tabular font-mono">{fmt(it.amount)}</span>
+                              )}
+                            </span>
+                          </div>
+                          {carryTarget === itemKey(it) && (
+                            <div className="ml-5 text-[10px] font-medium text-paid">
+                              dicicil {fmt(d.carry)} / {fmt(it.amount)}
+                            </div>
                           )}
                         </div>
                       ))}
