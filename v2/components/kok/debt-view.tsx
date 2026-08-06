@@ -37,7 +37,13 @@ interface DateGroup {
   items: DebtItem[];
 }
 
-function groupItems(items: DebtItem[]): DateGroup[] {
+/**
+ * `carry` dikurangi dari total grup tanggal yang punya item `carryTarget` —
+ * biar jumlah semua grup match sama `d.total` (owedGross − carry) di header,
+ * bukan cuma owedGross mentah yang bikin breakdown per-tanggal keliatan lebih
+ * gede dari total atas.
+ */
+function groupItems(items: DebtItem[], carry = 0, carryTarget: string | null = null): DateGroup[] {
   const map = new Map<string, DateGroup>();
   for (const it of items) {
     let g = map.get(it.date);
@@ -52,6 +58,7 @@ function groupItems(items: DebtItem[]): DateGroup[] {
     // "turnamen_kok" tetap partai yang benar-benar dimainkan — ikut kehitung "main".
     else g.games += 1;
     g.items.push(it);
+    if (carry > 0 && carryTarget === itemKey(it)) g.total -= carry;
   }
   // Terbaru dulu — item per debt-nya sendiri gak selalu masuk urut tanggal
   // (game dulu baru turnamen di buildDebtSummary), jadi harus disortir eksplisit.
@@ -130,7 +137,7 @@ function todayLabel(): string {
 }
 
 function debtShareText(d: DebtEntry): string {
-  const grouped = groupItems(d.items);
+  const grouped = groupItems(d.items, d.carry, carryTargetKey(d.items, d.carry));
   const kinds = countKinds(d.items);
   const totalKoks = d.items.reduce((s, it) => s + (Number(it.kokCount) || 0), 0);
   const lines = [
@@ -168,7 +175,7 @@ function debtShareCaption(d: DebtEntry): string {
 }
 
 function debtShareBlocks(d: DebtEntry, photo?: string): ShareCardBlock[] {
-  const grouped = groupItems(d.items);
+  const grouped = groupItems(d.items, d.carry, carryTargetKey(d.items, d.carry));
   const kinds = countKinds(d.items);
   const totalKoks = d.items.reduce((s, it) => s + (Number(it.kokCount) || 0), 0);
   const blocks: ShareCardBlock[] = [
@@ -341,10 +348,10 @@ function DebtCard({
   const [cicil, setCicil] = useState(false);
   const [amount, setAmount] = useState("");
   const panelId = useId();
-  const grouped = groupItems(d.items);
+  const carryTarget = carryTargetKey(d.items, d.carry);
+  const grouped = groupItems(d.items, d.carry, carryTarget);
   const kinds = countKinds(d.items);
   const totalKoks = d.items.reduce((s, it) => s + (Number(it.kokCount) || 0), 0);
-  const carryTarget = carryTargetKey(d.items, d.carry);
   const photo = photoMap[d.name];
   const shareTextPayload = useMemo(() => debtShareText(d), [d]);
   const shareBlocks = useMemo(() => debtShareBlocks(d, photo), [d, photo]);
@@ -438,36 +445,50 @@ function DebtCard({
                       <span className="tabular shrink-0 font-mono text-sm font-bold text-owe">{fmt(g.total)}</span>
                     </div>
                     <div className="mt-1 flex flex-col gap-1">
-                      {g.items.map((it, i) => (
-                        <div key={`${it.gameId}-${i}`} className="flex flex-col gap-0.5">
-                          <div className="flex items-center gap-2 text-[11px] text-ink-faint">
-                            <span className="flex min-w-0 flex-1 items-center gap-1">
-                              <KIcon name={itemIcon(it.kind)} className="size-3.5 shrink-0" />
-                              <span className="truncate">{itemLabel(it)}</span>
-                            </span>
-                            <span className="flex shrink-0 items-center gap-2 whitespace-nowrap">
-                              {it.createdAt && (
-                                <span className="inline-flex items-center gap-1 opacity-70">
-                                  <KIcon name="clock" className="size-3" /> {fmtTime(it.createdAt)}
+                      {g.items.map((it, i) => {
+                        const isCarryTarget = carryTarget === itemKey(it);
+                        return (
+                          <div key={`${it.gameId}-${i}`} className="flex flex-col gap-0.5">
+                            <div className="flex items-center gap-2 text-[11px] text-ink-faint">
+                              <span className="flex min-w-0 flex-1 items-center gap-1">
+                                <KIcon name={itemIcon(it.kind)} className="size-3.5 shrink-0" />
+                                <span className="truncate">{itemLabel(it)}</span>
+                              </span>
+                              {/* Lebar tetap per kolom, apa pun isinya — jam/kok/nominal harus rata
+                                  vertikal antar baris (kolom lebar-fleksibel bikin baris lain ikut geser). */}
+                              <span className="flex shrink-0 items-center whitespace-nowrap">
+                                <span className="inline-flex w-14 items-center justify-end gap-1 opacity-70">
+                                  {it.createdAt && (
+                                    <>
+                                      <KIcon name="clock" className="size-3" /> {fmtTime(it.createdAt)}
+                                    </>
+                                  )}
                                 </span>
-                              )}
-                              {it.kokCount > 0 && (
-                                <span className="inline-flex items-center gap-1">
-                                  <KIcon name="shuttle" className="size-3" /> {it.kokCount} kok
+                                <span className="inline-flex w-16 items-center justify-end gap-1">
+                                  {it.kokCount > 0 && (
+                                    <>
+                                      <KIcon name="shuttle" className="size-3" /> {it.kokCount} kok
+                                    </>
+                                  )}
                                 </span>
-                              )}
-                              {g.items.length > 1 && (
-                                <span className="tabular font-mono">{fmt(it.amount)}</span>
-                              )}
-                            </span>
-                          </div>
-                          {carryTarget === itemKey(it) && (
-                            <div className="ml-5 text-[10px] font-medium text-paid">
-                              dicicil {fmt(d.carry)} / {fmt(it.amount)}
+                                <span
+                                  className={cn(
+                                    "tabular w-16 text-right font-mono",
+                                    isCarryTarget && "font-bold text-paid",
+                                  )}
+                                >
+                                  {g.items.length > 1 || isCarryTarget ? fmt(it.amount) : ""}
+                                </span>
+                              </span>
                             </div>
-                          )}
-                        </div>
-                      ))}
+                            {isCarryTarget && (
+                              <div className="text-right text-[10px] font-bold text-paid">
+                                dicicil {fmt(d.carry)}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
                       {rel && (
                         <span className="self-start rounded-full bg-court/10 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-court">
                           {rel}
