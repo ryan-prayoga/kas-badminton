@@ -257,8 +257,8 @@ export function HistoryView({
                       )}
                       {grp.tournamentEntries.length > 0 && (
                         <span className="inline-flex items-center gap-1 font-semibold text-paid">
-                          <KIcon name="trophy" className="size-3.5" /> {grp.tournamentEntries.length}{" "}
-                          turnamen
+                          <KIcon name="trophy" className="size-3.5" />{" "}
+                          {grp.tournamentEntries.reduce((s, e) => s + e.matches.length, 0)} partai turnamen
                         </span>
                       )}
                       <span className="tabular inline-flex items-center gap-1 font-mono">

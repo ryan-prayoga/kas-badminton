@@ -284,6 +284,10 @@ export interface TournamentCost {
   feeUnpaid: number;
   paidCount: number;
   unpaidCount: number;
+  /** Rupiah kok per-partai yang statusnya udah lunas (beda tagihan dari fee di atas —
+   * lihat matchKokPaid). Kok lepas (looseKoks, gak diikat ke partai) gak masuk sini,
+   * belum ada tracking bayar buat itu. */
+  kokPaid: number;
 }
 
 export interface EnrichedTournament extends StoredTournament {

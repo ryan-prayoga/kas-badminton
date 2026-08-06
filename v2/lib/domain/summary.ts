@@ -59,15 +59,16 @@ export function summarize(db: DbSnapshot, isAdmin: boolean): SummaryPayload {
     debtSummary: buildDebtSummary(games, db.carry ?? {}, tournaments),
   };
 
-  if (isAdmin) {
-    const paid =
-      games.reduce((s, g) => s + g.summary.paidTotal, 0) +
-      tournaments.reduce((s, t) => s + t.cost.feePaid, 0);
-    // Bisa negatif kalau penyesuaian "kas masuk" > total keluar — net tetap harus bener.
-    const expense = Number(db.totalExpense) || 0;
-    payload.kas = { paid, expense, net: paid - expense };
-    payload.expenses = db.expenses ?? [];
-  }
+  // Saldo kas transparan ke publik juga (bukan cuma admin) — cuma total masuk/keluar
+  // dan tanggal per pembelian (lihat select-nya di repo/snapshot.ts), bukan detail
+  // sensitif kayak siapa yang catat atau catatan pembelian.
+  const paid =
+    games.reduce((s, g) => s + g.summary.paidTotal, 0) +
+    tournaments.reduce((s, t) => s + t.cost.feePaid + t.cost.kokPaid, 0);
+  // Bisa negatif kalau penyesuaian "kas masuk" > total keluar — net tetap harus bener.
+  const expense = Number(db.totalExpense) || 0;
+  payload.kas = { paid, expense, net: paid - expense };
+  payload.expenses = db.expenses ?? [];
 
   return payload;
 }

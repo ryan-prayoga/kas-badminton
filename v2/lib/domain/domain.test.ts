@@ -282,7 +282,7 @@ describe("stock", () => {
 });
 
 describe("summarize", () => {
-  it("publik sembunyikan merchantQris, admin tampil + kas", () => {
+  it("publik sembunyikan merchantQris tapi tetap tampil kas (transparan)", () => {
     const db = {
       settings: { defaultPricePerPerson: 3000, merchantQris: "QRISPAYLOAD" },
       players: [{ name: "A", photo: null }],
@@ -295,7 +295,8 @@ describe("summarize", () => {
     const pub = summarize(db, false);
     expect(pub.settings.qrisEnabled).toBe(true);
     expect(pub.settings.merchantQris).toBeUndefined();
-    expect(pub.kas).toBeUndefined();
+    // Saldo kas publik: keputusan produk — transparan ke semua orang, bukan cuma admin.
+    expect(pub.kas).toEqual({ paid: 0, expense: 5000, net: -5000 });
 
     const adm = summarize(db, true);
     expect(adm.settings.merchantQris).toBe("QRISPAYLOAD");

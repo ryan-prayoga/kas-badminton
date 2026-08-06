@@ -610,7 +610,9 @@ export function buildRoundRobin(
 
 // --- Biaya & iuran ---
 
-export function tournamentCost(t: Pick<StoredTournament, "koks" | "fee" | "fees">): TournamentCost {
+export function tournamentCost(
+  t: Pick<StoredTournament, "koks" | "fee" | "fees">,
+): Omit<TournamentCost, "kokPaid"> {
   const koks = Array.isArray(t.koks) ? t.koks : [];
   const fee = Math.max(0, Math.round(Number(t.fee) || 0));
   const fees = Array.isArray(t.fees) ? t.fees : [];
@@ -628,9 +630,26 @@ export function tournamentCost(t: Pick<StoredTournament, "koks" | "fee" | "fees"
   };
 }
 
+/** Rupiah kok per-partai yang udah lunas, dijumlah lintas partai — beda tagihan
+ * dari fee (lihat tournamentCost). Butuh matches yang udah di-resolve (kokPaid
+ * per slot), jadi baru bisa dihitung setelah buildBracket/buildRoundRobin. */
+function matchesKokPaid(matches: BracketMatch[]): number {
+  let total = 0;
+  for (const m of matches) {
+    if (m.kokTotal <= 0) continue;
+    const perPerson = matchKokPerPerson(m);
+    if (perPerson <= 0) continue;
+    const names = matchParticipants(m);
+    for (let i = 0; i < names.length; i++) {
+      if (names[i] && m.kokPaid[i]) total += perPerson;
+    }
+  }
+  return total;
+}
+
 export function enrichTournament(t: Partial<StoredTournament>): EnrichedTournament {
   const stored = normalizeStoredTournament(t);
-  const cost = tournamentCost(stored);
+  const baseCost = tournamentCost(stored);
 
   if (stored.format === "round_robin") {
     const roundRobin = buildRoundRobin(stored);
@@ -643,7 +662,7 @@ export function enrichTournament(t: Partial<StoredTournament>): EnrichedTourname
       playedCount: roundRobin.playedCount,
       totalCount: roundRobin.totalCount,
       finished: roundRobin.totalCount > 0 && roundRobin.playedCount === roundRobin.totalCount,
-      cost,
+      cost: { ...baseCost, kokPaid: matchesKokPaid(roundRobin.matches) },
     };
   }
 
@@ -661,7 +680,7 @@ export function enrichTournament(t: Partial<StoredTournament>): EnrichedTourname
     playedCount: played,
     totalCount: playable.length,
     finished: bracket.champion !== null,
-    cost,
+    cost: { ...baseCost, kokPaid: matchesKokPaid(matches) },
   };
 }
 

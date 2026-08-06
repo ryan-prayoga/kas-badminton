@@ -676,4 +676,18 @@ describe("hutang kok per partai turnamen", () => {
     expect(plan.touched).toEqual([{ kind: "turnamen_kok", id: "t1", index: 0, matchId: "r0-0" }]);
     expect(plan.paymentAmount).toBe(2500);
   });
+
+  it("cost.kokPaid ikut kehitung dari slot yang udah lunas, beda dari feePaid", () => {
+    const belumBayar = enrichTournament(tourWithMatchKok());
+    expect(belumBayar.cost.kokPaid).toBe(0);
+
+    // 2 dari 4 pemain partai r0-0 udah lunas → 2 x 2500.
+    const separuh = enrichTournament(tourWithMatchKok({ "r0-0": [true, true, false, false] }));
+    expect(separuh.cost.kokPaid).toBe(5000);
+
+    // Semua 4 lunas → kokPaid = koksTotal (2500 x 4).
+    const semua = enrichTournament(tourWithMatchKok({ "r0-0": [true, true, true, true] }));
+    expect(semua.cost.kokPaid).toBe(10000);
+    expect(semua.cost.kokPaid).toBe(semua.cost.kokTotal);
+  });
 });

@@ -355,7 +355,7 @@ export function StatsView({
   const totalKok = gameKok + tournamentKok;
   const paidIn =
     scoped.reduce((s, g) => s + g.summary.paidTotal, 0) +
-    scopedTournaments.reduce((s, t) => s + t.cost.feePaid, 0);
+    scopedTournaments.reduce((s, t) => s + t.cost.feePaid + t.cost.kokPaid, 0);
 
   const expenseIn = useMemo(() => {
     if (!kas) return 0;
