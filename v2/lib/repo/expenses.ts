@@ -49,3 +49,22 @@ export async function listBalanceAdjustments(limit = 200): Promise<PaymentHistor
     createdAt: r.created_at.toISOString(),
   }));
 }
+
+/** Riwayat beli stok kok (stok awal jenis baru + tambah stok) — buat digabung ke riwayat transaksi. */
+export async function listKokPurchases(limit = 200): Promise<PaymentHistoryEntry[]> {
+  const rows = await prisma.expenses.findMany({
+    where: { type_id: { not: null } },
+    orderBy: { created_at: "desc" },
+    take: limit,
+  });
+  return rows.map((r) => ({
+    id: r.id,
+    name: `Beli kok · ${r.type_name ?? "?"} (${r.slops} slop)`,
+    amount: Math.abs(r.amount),
+    type: "beli_kok",
+    recordedBy: null,
+    gameId: null,
+    tournamentId: null,
+    createdAt: r.created_at.toISOString(),
+  }));
+}

@@ -17,9 +17,9 @@ interface DayGroup {
   total: number;
 }
 
-/** Kas keluar (penyesuaian) mengurangi net; sisanya (lunas/cicil/kas masuk) menambah. */
+/** Kas keluar (penyesuaian/beli kok) mengurangi net; sisanya (lunas/cicil/kas masuk) menambah. */
 function signedAmount(e: PaymentHistoryEntry): number {
-  return e.type === "saldo_keluar" ? -e.amount : e.amount;
+  return e.type === "saldo_keluar" || e.type === "beli_kok" ? -e.amount : e.amount;
 }
 
 function groupByDay(entries: PaymentHistoryEntry[]): DayGroup[] {
@@ -47,6 +47,7 @@ const ENTRY_META: Record<
   cicil: { label: "Cicil", tone: "owe" },
   saldo_masuk: { label: "Kas masuk", tone: "paid", icon: "cashIn" },
   saldo_keluar: { label: "Kas keluar", tone: "owe", icon: "cashOut" },
+  beli_kok: { label: "Beli kok", tone: "owe", icon: "cart" },
 };
 
 function EntryRow({ entry, photoMap }: { entry: PaymentHistoryEntry; photoMap: PhotoMap }) {

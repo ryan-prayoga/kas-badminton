@@ -1,5 +1,5 @@
 import { getData } from "@/lib/data";
-import { listBalanceAdjustments } from "@/lib/repo/expenses";
+import { listBalanceAdjustments, listKokPurchases } from "@/lib/repo/expenses";
 import { listPaymentHistory } from "@/lib/repo/payments";
 import { AppFrame } from "@/components/kok/app-frame";
 import { PaymentHistoryView } from "@/components/kok/payment-history-view";
@@ -9,13 +9,14 @@ import { SessionBadge } from "@/components/session-badge";
 export const dynamic = "force-dynamic";
 
 export default async function RiwayatBayarPage() {
-  const [data, paymentHistory, balanceAdjustments] = await Promise.all([
+  const [data, paymentHistory, balanceAdjustments, kokPurchases] = await Promise.all([
     getData(),
     listPaymentHistory(),
     listBalanceAdjustments(),
+    listKokPurchases(),
   ]);
   const isAdmin = data.me.role === "admin";
-  const entries = [...paymentHistory, ...balanceAdjustments].sort((a, b) =>
+  const entries = [...paymentHistory, ...balanceAdjustments, ...kokPurchases].sort((a, b) =>
     b.createdAt.localeCompare(a.createdAt),
   );
 
