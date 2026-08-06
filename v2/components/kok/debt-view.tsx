@@ -38,13 +38,11 @@ interface DateGroup {
 
 function groupItems(items: DebtItem[]): DateGroup[] {
   const map = new Map<string, DateGroup>();
-  const order: string[] = [];
   for (const it of items) {
     let g = map.get(it.date);
     if (!g) {
       g = { date: it.date, total: 0, count: 0, koks: 0, games: 0, tournaments: [], items: [] };
       map.set(it.date, g);
-      order.push(it.date);
     }
     g.total += Number(it.amount) || 0;
     g.count += 1;
@@ -54,7 +52,9 @@ function groupItems(items: DebtItem[]): DateGroup[] {
     else g.games += 1;
     g.items.push(it);
   }
-  return order.map((d) => map.get(d)!);
+  // Terbaru dulu — item per debt-nya sendiri gak selalu masuk urut tanggal
+  // (game dulu baru turnamen di buildDebtSummary), jadi harus disortir eksplisit.
+  return [...map.values()].sort((a, b) => b.date.localeCompare(a.date));
 }
 
 /** "3 main", "1 turnamen", atau "2 main · 1 turnamen". */

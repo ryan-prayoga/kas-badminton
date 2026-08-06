@@ -56,6 +56,28 @@ export function gameCost(game: Pick<StoredGame, "koks">): GameCost {
   return { perPerson, total: perPerson * 4, kokCount: koks.length };
 }
 
+/**
+ * Partai ke berapa tiap game di hari itu — urut dari yang paling dulu dicatat
+ * (createdAt paling lama = Partai 1). Dipakai di Rekap & Riwayat biar nomornya
+ * konsisten dan "Main" tidak ambigu kalau orang main lebih dari sekali sehari.
+ */
+export function gameMatchNumbers(
+  games: Pick<StoredGame, "id" | "date" | "createdAt">[],
+): Map<string, number> {
+  const byDate = new Map<string, Pick<StoredGame, "id" | "date" | "createdAt">[]>();
+  for (const g of games) {
+    const list = byDate.get(g.date);
+    if (list) list.push(g);
+    else byDate.set(g.date, [g]);
+  }
+  const out = new Map<string, number>();
+  for (const list of byDate.values()) {
+    const sorted = [...list].sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+    sorted.forEach((g, i) => out.set(g.id, i + 1));
+  }
+  return out;
+}
+
 export function enrichGame(game: Partial<StoredGame>): EnrichedGame {
   const g = normalizeStoredGame(game);
   const cost = gameCost(g);

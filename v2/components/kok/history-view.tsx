@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { gameMatchNumbers } from "@/lib/domain/game";
 import { finalPlayedMatchId, matchPlayedDate, playedMatches } from "@/lib/domain/tournament";
 import type { BracketMatch, EnrichedGame, EnrichedTournament } from "@/lib/domain/types";
 import { currentPeriodKey, fmt, fmtDateFull, periodKey, toLocalIso } from "@/lib/format";
@@ -156,6 +157,7 @@ export function HistoryView({
 
   const filtered = period === "all" ? games : games.filter((g) => periodKey(g.date) === period);
   const groups = groupByDate(filtered, tournaments, period);
+  const matchNumbers = gameMatchNumbers(filtered);
   const tournamentCount = new Set(groups.flatMap((g) => g.tournamentEntries.map((e) => e.tournament.id)))
     .size;
   const isOpen = (date: string, i: number) => (date in open ? open[date] : i === 0);
@@ -278,6 +280,7 @@ export function HistoryView({
                           players={players}
                           defaultPrice={defaultPrice}
                           onPaidChange={handlePaidChange}
+                          matchNumber={matchNumbers.get(g.id)}
                         />
                       ))}
                     </div>

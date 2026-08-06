@@ -3,7 +3,7 @@
 import { useEffect, useState, useTransition } from "react";
 import { toast } from "sonner";
 import type { EnrichedGame, KokType, PlayerRow } from "@/lib/domain/types";
-import { fmt, fmtDateTime } from "@/lib/format";
+import { fmt, fmtDateTime, fmtTime } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { deleteGameAction, markAllPaidAction, setPaidAction } from "@/server/actions/games";
 import { useConfirm } from "@/components/confirm-dialog";
@@ -99,6 +99,7 @@ export function GameCard({
   players,
   defaultPrice,
   onPaidChange,
+  matchNumber,
 }: {
   game: EnrichedGame;
   photoMap: PhotoMap;
@@ -109,6 +110,8 @@ export function GameCard({
   defaultPrice?: number;
   /** Lapor jumlah "belum bayar" optimistik ke parent biar badge grup sinkron dgn kartu. */
   onPaidChange?: (gameId: string, unpaidCount: number) => void;
+  /** Partai ke berapa di hari itu (1, 2, 3, ...) — biar jelas kalau lebih dari 1 game sehari. */
+  matchNumber?: number;
 }) {
   const confirm = useConfirm();
   const [pending, start] = useTransition();
@@ -192,9 +195,18 @@ export function GameCard({
       )}
     >
       <div className="flex items-center justify-between gap-3 px-1">
-        <div className="flex min-w-0 items-center gap-1.5 text-xs text-ink-soft">
-          <KIcon name="shuttle" className="size-3.5 shrink-0 text-ink-faint" />
-          <span className="truncate">{kokSummaryLabel(game)}</span>
+        <div className="flex min-w-0 flex-col gap-0.5">
+          <div className="flex min-w-0 items-center gap-1.5 text-xs font-semibold text-ink-soft">
+            <KIcon name="racket" className="size-3.5 shrink-0 text-ink-faint" />
+            <span className="truncate">{matchNumber ? `Partai ${matchNumber}` : "Main"}</span>
+            <span className="inline-flex shrink-0 items-center gap-1 text-ink-faint opacity-70">
+              <KIcon name="clock" className="size-3" /> {fmtTime(game.createdAt)}
+            </span>
+          </div>
+          <div className="flex min-w-0 items-center gap-1.5 text-xs text-ink-soft">
+            <KIcon name="shuttle" className="size-3.5 shrink-0 text-ink-faint" />
+            <span className="truncate">{kokSummaryLabel(game)}</span>
+          </div>
         </div>
         {allPaid ? (
           <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-paid/12 px-2 py-0.5 text-[11px] font-bold text-paid">

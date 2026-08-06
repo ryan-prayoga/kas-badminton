@@ -9,7 +9,7 @@
 // memperlakukan ketiganya sebagai "slot belum bayar" yang sama, jadi
 // cicilan/lunasin-semua otomatis nutup semuanya, dari yang paling pas.
 
-import { gameCost } from "./game";
+import { gameCost, gameMatchNumbers } from "./game";
 import {
   matchKokPerPerson,
   matchParticipants,
@@ -26,26 +26,6 @@ import type {
   StoredGame,
   StoredTournament,
 } from "./types";
-
-/**
- * Partai ke berapa tiap game di hari itu — urut dari yang paling dulu dicatat
- * (createdAt paling lama = Partai 1), biar "Main" di rekap tidak ambigu
- * kalau orang yang sama main lebih dari sekali di hari yang sama.
- */
-function gameMatchNumbers(games: EnrichedGame[]): Map<string, number> {
-  const byDate = new Map<string, EnrichedGame[]>();
-  for (const g of games) {
-    const list = byDate.get(g.date);
-    if (list) list.push(g);
-    else byDate.set(g.date, [g]);
-  }
-  const out = new Map<string, number>();
-  for (const list of byDate.values()) {
-    const sorted = [...list].sort((a, b) => a.createdAt.localeCompare(b.createdAt));
-    sorted.forEach((g, i) => out.set(g.id, i + 1));
-  }
-  return out;
-}
 
 /** Ringkasan hutang per orang: sisa = max(0, owedGross − carry). */
 export function buildDebtSummary(
