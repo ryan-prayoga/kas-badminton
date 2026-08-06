@@ -396,9 +396,17 @@ export async function addTournamentKoks(
     if (stockErr) throw new DomainError(stockErr);
 
     await applyStockDeltasTx(tx, stockDeltas([], added));
+    // Total kok partai ini berubah → status lunas lama (dari jumlah kok yang beda)
+    // tidak valid lagi. Reset biar tidak ketagih ke tagihan baru yang belum dibayar.
+    const matchKokPaid = { ...t.matchKokPaid };
+    if (boundTo) delete matchKokPaid[boundTo];
     await tx.tournaments.update({
       where: { id },
-      data: { koks: [...t.koks, ...added] as unknown as Json, updated_at: new Date() },
+      data: {
+        koks: [...t.koks, ...added] as unknown as Json,
+        match_kok_paid: matchKokPaid as unknown as Json,
+        updated_at: new Date(),
+      },
     });
   });
 }
@@ -410,9 +418,16 @@ export async function removeTournamentKok(id: string, kokId: string): Promise<vo
     if (!removed) throw new DomainError("Kok tidak ditemukan", 404);
     const koks = t.koks.filter((k) => k.id !== kokId);
     if (removed.typeId) await applyStockDeltasTx(tx, new Map([[removed.typeId, 1]]));
+    // Sama seperti nambah: total kok berubah, status lunas lama dibuang.
+    const matchKokPaid = { ...t.matchKokPaid };
+    if (removed.matchId) delete matchKokPaid[removed.matchId];
     await tx.tournaments.update({
       where: { id },
-      data: { koks: koks as unknown as Json, updated_at: new Date() },
+      data: {
+        koks: koks as unknown as Json,
+        match_kok_paid: matchKokPaid as unknown as Json,
+        updated_at: new Date(),
+      },
     });
   });
 }
