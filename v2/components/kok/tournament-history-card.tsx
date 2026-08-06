@@ -2,36 +2,19 @@
 
 // Kartu turnamen di halaman Riwayat. Sengaja beda dari GameCard: border emas +
 // ribbon "Turnamen", tapi tiap partai yang sudah main niru gaya GameCard — kotak
-// lapangan dengan status lunas per pemain (dari iuran turnamen), plus baris
-// skor per game ditumpuk (niru SideRow bagan) biar kelihatan mana yang menang.
+// lapangan dengan status lunas KOK per pemain (bukan iuran patungan — itu urusan
+// halaman detail turnamen, /turnamen/[id]), plus baris skor per game ditumpuk
+// (niru SideRow bagan) biar kelihatan mana yang menang.
 
 import Link from "next/link";
-import { useState, useTransition, type MouseEvent } from "react";
-import { toast } from "sonner";
-import {
-  finalPlayedMatchId,
-  matchTitle,
-  pairLabel,
-  tournamentStatus,
-} from "@/lib/domain/tournament";
+import { useState, type MouseEvent } from "react";
+import { finalPlayedMatchId, matchParticipants, matchTitle, pairLabel, tournamentStatus } from "@/lib/domain/tournament";
 import type { BracketMatch, EnrichedTournament, KokType } from "@/lib/domain/types";
 import { fmt } from "@/lib/format";
 import { cn } from "@/lib/utils";
-import { safeAction } from "@/lib/action-result";
-import { setFeePaidAction } from "@/server/actions/tournaments";
 import { KIcon } from "@/components/kok/icons";
 import { MatchDialog } from "@/components/kok/match-dialog";
 import { STATUS_META } from "@/components/kok/tournament-detail-view";
-
-/** Status lunas satu peserta dari iuran turnamen — patungan dicatat per orang, bukan per partai. */
-function feeIndex(t: EnrichedTournament, name: string): number {
-  const n = name.trim().toLowerCase();
-  return t.fees.findIndex((f) => f.name.trim().toLowerCase() === n);
-}
-function feePaid(t: EnrichedTournament, name: string): boolean {
-  const i = feeIndex(t, name);
-  return i >= 0 ? t.fees[i].paid : false;
-}
 
 /** "2 kok · Rp6.000/org · Yonex Aerosensa 50" — harga per orang, sama kayak
  * kokSummaryLabel di GameCard (bukan total partai). Jenisnya cuma disebut kalau
@@ -129,64 +112,38 @@ function ScoreRows({
   );
 }
 
-/** Chip status lunas satu pemain — sama gaya persis dengan CourtSide di GameCard.
- * Admin: klik nama → langsung toggle status lunas iuran turnamen orang itu. */
-function PlayerChip({
-  t,
-  name,
-  editable,
-  pending,
-  onToggle,
-}: {
-  t: EnrichedTournament;
-  name: string;
-  editable: boolean;
-  pending: boolean;
-  onToggle: (name: string, next: boolean) => void;
-}) {
-  const paid = feePaid(t, name);
-  const canToggle = editable && feeIndex(t, name) >= 0;
-  const Tag = canToggle ? "button" : "div";
+/** Chip status lunas KOK satu pemain di partai ini. `paid = null` = partai ini gak ada
+ * kok sama sekali → netral (gak ada yang ditagih, jadi gak ada status buat ditampilin).
+ * Read-only — beda dari iuran patungan (yang toggle-nya ada di halaman detail turnamen),
+ * lunas/belumnya kok cuma kebentuk lewat cicilan/lunasin-semua tagihan orang itu. */
+function PlayerChip({ name, paid }: { name: string; paid: boolean | null }) {
   return (
-    <Tag
-      {...(canToggle
-        ? {
-            type: "button" as const,
-            disabled: pending,
-            onClick: (e: MouseEvent) => {
-              e.preventDefault();
-              e.stopPropagation();
-              onToggle(name, !paid);
-            },
-          }
-        : {})}
+    <div
       className={cn(
         "flex min-w-0 w-full items-center gap-1.5 rounded-lg border px-2 py-1.5 text-left",
-        paid ? "border-paid/40 bg-paid/10 text-paid" : "border-owe/40 bg-owe/10 text-owe",
-        canToggle && "min-h-11 transition active:scale-[0.98] disabled:opacity-60",
+        paid === null
+          ? "border-line bg-surface-2 text-ink-soft"
+          : paid
+            ? "border-paid/40 bg-paid/10 text-paid"
+            : "border-owe/40 bg-owe/10 text-owe",
       )}
     >
-      <KIcon name={paid ? "checkCircle" : "clock"} className="size-[15px] shrink-0" />
+      {paid !== null ? (
+        <KIcon name={paid ? "checkCircle" : "clock"} className="size-[15px] shrink-0" />
+      ) : null}
       <span className="truncate text-sm font-semibold leading-tight text-ink">{name || "—"}</span>
-    </Tag>
+    </div>
   );
 }
 
-/** Kotak lapangan mini partai penentu — status lunas per pemain (bukan skor), niru court GameCard. */
-function MatchCourt({
-  t,
-  match,
-  editable,
-  pending,
-  onTogglePaid,
-}: {
-  t: EnrichedTournament;
-  match: BracketMatch;
-  editable: boolean;
-  pending: boolean;
-  onTogglePaid: (name: string, next: boolean) => void;
-}) {
+/** Kotak lapangan mini partai penentu — status lunas KOK per pemain (bukan skor, dan
+ * bukan iuran patungan — lihat komentar file). Niru court GameCard: checkmark = kok
+ * partai ini udah lunas buat orang itu. */
+function MatchCourt({ match }: { match: BracketMatch }) {
   if (!match.a.pair || !match.b.pair) return null;
+  const hasKok = match.koks.length > 0;
+  const names = matchParticipants(match);
+  const paidAt = (i: number): boolean | null => (hasKok ? Boolean(match.kokPaid[i]) : null);
   return (
     <div className="court-surface relative mt-2.5 overflow-visible rounded-xl border border-court/20 p-2">
       <div className="court-net pointer-events-none absolute inset-y-4 left-1/2 z-0 w-[2px] -translate-x-1/2" />
@@ -195,12 +152,12 @@ function MatchCourt({
       </span>
       <div className="relative z-[1] grid grid-cols-2 gap-x-1">
         <div className="flex min-w-0 flex-col gap-1.5 pr-3.5">
-          <PlayerChip t={t} name={match.a.pair.a} editable={editable} pending={pending} onToggle={onTogglePaid} />
-          <PlayerChip t={t} name={match.a.pair.b} editable={editable} pending={pending} onToggle={onTogglePaid} />
+          <PlayerChip name={names[0]} paid={paidAt(0)} />
+          <PlayerChip name={names[1]} paid={paidAt(1)} />
         </div>
         <div className="flex min-w-0 flex-col gap-1.5 pl-3.5">
-          <PlayerChip t={t} name={match.b.pair.a} editable={editable} pending={pending} onToggle={onTogglePaid} />
-          <PlayerChip t={t} name={match.b.pair.b} editable={editable} pending={pending} onToggle={onTogglePaid} />
+          <PlayerChip name={names[2]} paid={paidAt(2)} />
+          <PlayerChip name={names[3]} paid={paidAt(3)} />
         </div>
       </div>
     </div>
@@ -227,21 +184,11 @@ export function TournamentHistoryCard({
   const status = tournamentStatus(t, today);
   const meta = STATUS_META[status];
   // Partai penentu (final/terakhir) turnamen secara keseluruhan — bukan cuma di grup tanggal
-  // ini — biar juara & status lunas cuma nempel sekali walau partainya kepisah tanggal.
+  // ini — biar juara cuma nempel sekali walau partainya kepisah tanggal.
   const finalId = finalPlayedMatchId(t);
 
   const canManageKok = editable && !!kokTypes && defaultPrice !== undefined;
-  const [pending, start] = useTransition();
   const [openMatch, setOpenMatch] = useState<{ id: string; mode: "score" | "kok" } | null>(null);
-
-  const toggleFee = (name: string, next: boolean) => {
-    const i = feeIndex(t, name);
-    if (i < 0) return;
-    start(async () => {
-      const res = await safeAction(() => setFeePaidAction(t.id, i, next));
-      if (!res.ok) toast.error(res.error);
-    });
-  };
 
   // Satu partai = satu card, biar konsisten dengan riwayat game biasa (tak ditumpuk).
   return (
@@ -289,7 +236,7 @@ export function TournamentHistoryCard({
                 editable={canManageKok}
                 onOpen={() => setOpenMatch({ id: m.id, mode: "score" })}
               />
-              <MatchCourt t={t} match={m} editable={editable} pending={pending} onTogglePaid={toggleFee} />
+              <MatchCourt match={m} />
 
               <div className="mt-2.5 flex flex-wrap items-center justify-between gap-x-3 gap-y-1 text-[11px]">
                 {m.koks.length > 0 ? (
