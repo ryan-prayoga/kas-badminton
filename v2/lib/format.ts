@@ -110,6 +110,16 @@ export function fmtDateTime(iso: string): string {
   return `${fmtDate(`${y}-${mo}-${day}`)}, ${hh}.${mm}`;
 }
 
+/** "09.39" — jam saja, dari ISO datetime (waktu lokal). */
+export function fmtTime(iso: string): string {
+  if (!iso) return "";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "";
+  const hh = String(d.getHours()).padStart(2, "0");
+  const mm = String(d.getMinutes()).padStart(2, "0");
+  return `${hh}.${mm}`;
+}
+
 /** Ringkas kapan ditandai lunas: "Hari ini · 09.39" / "18 Jul · 09.39". */
 export function fmtPaidAt(iso: string): string {
   if (!iso) return "";

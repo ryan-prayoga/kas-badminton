@@ -2,12 +2,21 @@
 // Planner murni: balik daftar slot yang harus di-flip jadi paid + carry baru
 // + nominal payment yang dicatat. Repo yang eksekusi tulisannya.
 //
-// Dua sumber tagihan: main biasa (per pemain per game) dan iuran patungan
-// turnamen (per peserta per turnamen). Planner memperlakukan keduanya sebagai
-// "slot belum bayar" yang sama, jadi cicilan/lunasin-semua otomatis nutup
-// dua-duanya, dari yang paling lama.
+// Tiga sumber tagihan: main biasa (per pemain per game), iuran patungan
+// turnamen (flat, rata ke semua peserta), dan kok per partai turnamen (cuma
+// ditagih ke 4 pemain partai itu — beda pasangan main beda jumlah partai,
+// jadi tidak adil kalau dirata ke semua peserta lewat fee). Planner
+// memperlakukan ketiganya sebagai "slot belum bayar" yang sama, jadi
+// cicilan/lunasin-semua otomatis nutup semuanya, dari yang paling pas.
 
 import { gameCost } from "./game";
+import {
+  matchKokPerPerson,
+  matchParticipants,
+  matchPlayedDate,
+  matchTitle,
+  tournamentMatches,
+} from "./tournament";
 import type {
   CarryMap,
   DebtEntry,
@@ -17,6 +26,26 @@ import type {
   StoredGame,
   StoredTournament,
 } from "./types";
+
+/**
+ * Partai ke berapa tiap game di hari itu — urut dari yang paling dulu dicatat
+ * (createdAt paling lama = Partai 1), biar "Main" di rekap tidak ambigu
+ * kalau orang yang sama main lebih dari sekali di hari yang sama.
+ */
+function gameMatchNumbers(games: EnrichedGame[]): Map<string, number> {
+  const byDate = new Map<string, EnrichedGame[]>();
+  for (const g of games) {
+    const list = byDate.get(g.date);
+    if (list) list.push(g);
+    else byDate.set(g.date, [g]);
+  }
+  const out = new Map<string, number>();
+  for (const list of byDate.values()) {
+    const sorted = [...list].sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+    sorted.forEach((g, i) => out.set(g.id, i + 1));
+  }
+  return out;
+}
 
 /** Ringkasan hutang per orang: sisa = max(0, owedGross − carry). */
 export function buildDebtSummary(
@@ -29,6 +58,7 @@ export function buildDebtSummary(
     if (!byName[name]) byName[name] = { name, owedGross: 0, items: [] };
     return byName[name];
   };
+  const matchNumbers = gameMatchNumbers(games);
 
   for (const g of games) {
     for (const p of g.players) {
@@ -42,6 +72,8 @@ export function buildDebtSummary(
         amount: g.cost.perPerson,
         kokCount: g.cost.kokCount,
         kind: "game",
+        createdAt: g.createdAt,
+        matchNumber: matchNumbers.get(g.id),
       });
     }
   }
@@ -57,12 +89,37 @@ export function buildDebtSummary(
         date: t.date,
         name: f.name,
         amount: t.fee,
-        // Kok turnamen itu pool bersama, bukan per orang — jadi ini cuma info jumlah kok
-        // yang sudah kepakai di turnamen ini, bukan basis pembagian nominal `amount`.
-        kokCount: t.cost.kokCount,
+        // Iuran flat ini bukan basis kok — kok per partai punya item sendiri di bawah.
+        kokCount: 0,
         kind: "turnamen",
         label: t.name,
+        createdAt: t.createdAt,
       });
+    }
+  }
+
+  for (const t of tournaments) {
+    for (const m of t.matches) {
+      if (m.kokTotal <= 0) continue;
+      const perPerson = matchKokPerPerson(m);
+      if (perPerson <= 0) continue;
+      const names = matchParticipants(m);
+      for (let i = 0; i < names.length; i++) {
+        const name = names[i];
+        if (!name || m.kokPaid[i]) continue;
+        const e = bucket(name);
+        e.owedGross += perPerson;
+        e.items.push({
+          gameId: `${t.id}::${m.id}`,
+          date: matchPlayedDate(t, m),
+          name,
+          amount: perPerson,
+          kokCount: m.koks.length,
+          kind: "turnamen_kok",
+          label: `${t.name} · ${matchTitle(t, m)}`,
+          createdAt: t.createdAt,
+        });
+      }
     }
   }
 
@@ -76,10 +133,16 @@ export function buildDebtSummary(
 
 export interface TouchedSlot {
   kind: DebtKind;
-  /** id game, atau id turnamen kalau kind = "turnamen". */
+  /** id game, atau id turnamen kalau kind = "turnamen"/"turnamen_kok". */
   id: string;
-  /** index pemain di game (0-3), atau index peserta di daftar iuran turnamen. */
+  /**
+   * index pemain di game (0-3), index peserta di daftar iuran turnamen, atau
+   * slot pemain di partai (0-3, urutan [sisiA.a, sisiA.b, sisiB.a, sisiB.b])
+   * kalau kind = "turnamen_kok".
+   */
   index: number;
+  /** Cuma kepake buat kind "turnamen_kok" — id partai yang kok-nya ditagih. */
+  matchId?: string;
 }
 
 export interface SettlePlan {
@@ -120,16 +183,35 @@ function unpaidRefs(
     }
   }
   for (const t of tournaments) {
-    if (t.fee <= 0) continue;
-    for (let i = 0; i < t.fees.length; i++) {
-      if (t.fees[i].name === name && !t.fees[i].paid) {
+    if (t.fee > 0) {
+      for (let i = 0; i < t.fees.length; i++) {
+        if (t.fees[i].name === name && !t.fees[i].paid) {
+          refs.push({
+            kind: "turnamen",
+            id: t.id,
+            index: i,
+            date: t.date,
+            createdAt: t.createdAt,
+            amount: t.fee,
+          });
+        }
+      }
+    }
+    for (const m of tournamentMatches(t)) {
+      if (m.kokTotal <= 0) continue;
+      const perPerson = matchKokPerPerson(m);
+      if (perPerson <= 0) continue;
+      const names = matchParticipants(m);
+      for (let i = 0; i < names.length; i++) {
+        if (names[i] !== name || m.kokPaid[i]) continue;
         refs.push({
-          kind: "turnamen",
+          kind: "turnamen_kok",
           id: t.id,
           index: i,
-          date: t.date,
+          matchId: m.id,
+          date: matchPlayedDate(t, m),
           createdAt: t.createdAt,
-          amount: t.fee,
+          amount: perPerson,
         });
       }
     }
@@ -145,7 +227,7 @@ function byOldest(a: UnpaidRef, b: UnpaidRef): number {
 }
 
 function slot(r: UnpaidRef): TouchedSlot {
-  return { kind: r.kind, id: r.id, index: r.index };
+  return { kind: r.kind, id: r.id, index: r.index, ...(r.matchId ? { matchId: r.matchId } : {}) };
 }
 
 /**

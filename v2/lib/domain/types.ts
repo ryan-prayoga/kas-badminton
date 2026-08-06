@@ -69,19 +69,26 @@ export interface EnrichedGame extends StoredGame {
   };
 }
 
-/** Sumber tagihan: main biasa atau iuran patungan turnamen. */
-export type DebtKind = "game" | "turnamen";
+/**
+ * Sumber tagihan: main biasa, iuran patungan turnamen (flat, semua peserta),
+ * atau kok satu partai turnamen (cuma 4 pemain partai itu yang nanggung).
+ */
+export type DebtKind = "game" | "turnamen" | "turnamen_kok";
 
 export interface DebtItem {
-  /** id game, atau id turnamen kalau kind = "turnamen". */
+  /** id game, id turnamen (kind "turnamen"), atau `${tournamentId}::${matchId}` (kind "turnamen_kok"). */
   gameId: string;
   date: string;
   name: string;
   amount: number;
   kokCount: number;
   kind: DebtKind;
-  /** Nama turnamen — hanya untuk kind "turnamen". */
+  /** Nama turnamen (kind "turnamen") atau "nama turnamen · judul partai" (kind "turnamen_kok"). */
   label?: string;
+  /** Jam dicatat (ISO lengkap dengan waktu) — buat ditampilkan di rekap. */
+  createdAt: string;
+  /** Partai ke berapa di hari itu (1, 2, 3, ...) — cuma kepake buat kind "game". */
+  matchNumber?: number;
 }
 
 export interface DebtEntry {
@@ -184,6 +191,12 @@ export interface StoredTournament {
   results: Record<string, MatchScore>;
   koks: TournamentKok[];
   fees: TournamentFee[];
+  /**
+   * Record<matchId, boolean[4]> — status lunas kok per partai, urutan tetap
+   * [sisiA.a, sisiA.b, sisiB.a, sisiB.b]. Kok satu partai ditagih ke 4 pemain
+   * partai itu saja, terpisah dari `fee` (iuran flat semua peserta).
+   */
+  matchKokPaid: Record<string, boolean[]>;
   notes: string | null;
   recordedBy: string | null;
   createdAt: string;
@@ -218,6 +231,8 @@ export interface BracketMatch {
   koks: TournamentKok[];
   /** Total rupiah kok partai ini. */
   kokTotal: number;
+  /** Status lunas kok partai ini per pemain, urutan tetap [sisiA.a, sisiA.b, sisiB.a, sisiB.b]. */
+  kokPaid: boolean[];
 }
 
 export interface BracketRound {

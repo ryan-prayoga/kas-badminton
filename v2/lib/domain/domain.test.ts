@@ -183,6 +183,19 @@ describe("buildDebtSummary", () => {
     // urutan menurun berdasarkan total
     expect(debt[0].total).toBeGreaterThanOrEqual(debt[debt.length - 1].total);
   });
+
+  it("item kind game bawa jam dicatat + nomor partai di hari itu (urut createdAt)", () => {
+    const games = [
+      enrichGame(game({ id: "g1", createdAt: "2026-01-01T09:30:00.000Z" })),
+      enrichGame(game({ id: "g2", createdAt: "2026-01-01T08:00:00.000Z" })),
+    ];
+    const debt = buildDebtSummary(games, {});
+    const a = debt.find((d) => d.name === "A")!;
+    // g2 dicatat lebih pagi (08.00) → Partai 1, meski urutan input g1 duluan.
+    const byGame = Object.fromEntries(a.items.map((i) => [i.gameId, i]));
+    expect(byGame.g2).toMatchObject({ matchNumber: 1, createdAt: "2026-01-01T08:00:00.000Z" });
+    expect(byGame.g1).toMatchObject({ matchNumber: 2, createdAt: "2026-01-01T09:30:00.000Z" });
+  });
 });
 
 describe("planInstallment (greedy oldest-first)", () => {

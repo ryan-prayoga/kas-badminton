@@ -3,7 +3,15 @@
 import { useId, useMemo, useState, useTransition } from "react";
 import { toast } from "sonner";
 import type { DebtEntry, DebtItem } from "@/lib/domain/types";
-import { fmt, fmtDate, fmtDateFull, formatThousands, relativeDay, toLocalIso } from "@/lib/format";
+import {
+  fmt,
+  fmtDate,
+  fmtDateFull,
+  fmtTime,
+  formatThousands,
+  relativeDay,
+  toLocalIso,
+} from "@/lib/format";
 import { APP_URL, type ShareCardBlock } from "@/lib/share";
 import { cn } from "@/lib/utils";
 import { payInstallmentAction, settleAllAction } from "@/server/actions/players";
@@ -24,6 +32,8 @@ interface DateGroup {
   games: number;
   /** Nama turnamen yang iurannya belum dibayar di tanggal ini. */
   tournaments: string[];
+  /** Item mentah per tanggal — buat render satu baris per game/turnamen, gak digabung. */
+  items: DebtItem[];
 }
 
 function groupItems(items: DebtItem[]): DateGroup[] {
@@ -32,7 +42,7 @@ function groupItems(items: DebtItem[]): DateGroup[] {
   for (const it of items) {
     let g = map.get(it.date);
     if (!g) {
-      g = { date: it.date, total: 0, count: 0, koks: 0, games: 0, tournaments: [] };
+      g = { date: it.date, total: 0, count: 0, koks: 0, games: 0, tournaments: [], items: [] };
       map.set(it.date, g);
       order.push(it.date);
     }
@@ -40,7 +50,9 @@ function groupItems(items: DebtItem[]): DateGroup[] {
     g.count += 1;
     g.koks += Number(it.kokCount) || 0;
     if (it.kind === "turnamen") g.tournaments.push(it.label || "Turnamen");
+    // "turnamen_kok" tetap partai yang benar-benar dimainkan — ikut kehitung "main".
     else g.games += 1;
+    g.items.push(it);
   }
   return order.map((d) => map.get(d)!);
 }
@@ -58,9 +70,28 @@ function countKinds(items: DebtItem[]): { games: number; tournaments: number } {
   let tournaments = 0;
   for (const it of items) {
     if (it.kind === "turnamen") tournaments += 1;
+    // "turnamen_kok" = partai yang beneran dimainkan, ikut kehitung "main".
     else games += 1;
   }
   return { games, tournaments };
+}
+
+/**
+ * Ikon baris item: main biasa = raket, turnamen (iuran maupun kok per partai) = trofi —
+ * tag "X kok" di sebelahnya sudah pakai ikon kok sendiri, jangan dobel.
+ */
+function itemIcon(kind: DebtItem["kind"]): "racket" | "trophy" {
+  return kind === "game" ? "racket" : "trophy";
+}
+
+/**
+ * "Partai 2" (game ke-2 yang dicatat di hari itu, jatuh ke "Main" kalau nomornya hilang),
+ * "Tes · Patungan" (iuran flat turnamen — biar tidak ketuker sama nama partai di bawahnya).
+ */
+function itemLabel(it: DebtItem): string {
+  if (it.kind === "game") return it.matchNumber ? `Partai ${it.matchNumber}` : "Main";
+  if (it.kind === "turnamen") return `${it.label || "Turnamen"} · Patungan`;
+  return it.label || "Kok partai";
 }
 
 function todayLabel(): string {
@@ -377,25 +408,33 @@ function DebtCard({
                       </span>
                       <span className="tabular shrink-0 font-mono text-sm font-bold text-owe">{fmt(g.total)}</span>
                     </div>
-                    <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-ink-faint">
-                      {g.games > 0 && (
-                        <span className="flex items-center gap-1 whitespace-nowrap">
-                          <KIcon name="racket" className="size-3.5" /> {g.games} main
-                        </span>
-                      )}
-                      {g.tournaments.map((t, i) => (
-                        <span key={`${t}-${i}`} className="flex min-w-0 items-center gap-1">
-                          <KIcon name="trophy" className="size-3.5 shrink-0" />
-                          <span className="truncate">{t}</span>
-                        </span>
+                    <div className="mt-1 flex flex-col gap-1">
+                      {g.items.map((it, i) => (
+                        <div
+                          key={`${it.gameId}-${i}`}
+                          className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 text-[11px] text-ink-faint"
+                        >
+                          <span className="flex min-w-0 items-center gap-1">
+                            <KIcon name={itemIcon(it.kind)} className="size-3.5 shrink-0" />
+                            <span className="truncate">{itemLabel(it)}</span>
+                            {it.createdAt && (
+                              <span className="ml-1 inline-flex shrink-0 items-center gap-1 whitespace-nowrap opacity-70">
+                                <KIcon name="clock" className="size-3" /> {fmtTime(it.createdAt)}
+                              </span>
+                            )}
+                            {it.kokCount > 0 && (
+                              <span className="ml-1 inline-flex shrink-0 items-center gap-1 whitespace-nowrap">
+                                <KIcon name="shuttle" className="size-3" /> {it.kokCount} kok
+                              </span>
+                            )}
+                          </span>
+                          {g.items.length > 1 && (
+                            <span className="tabular shrink-0 font-mono">{fmt(it.amount)}</span>
+                          )}
+                        </div>
                       ))}
-                      {g.koks > 0 && (
-                        <span className="flex items-center gap-1 whitespace-nowrap">
-                          <KIcon name="shuttle" className="size-3" /> {g.koks} kok
-                        </span>
-                      )}
                       {rel && (
-                        <span className="rounded-full bg-court/10 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-court">
+                        <span className="self-start rounded-full bg-court/10 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-court">
                           {rel}
                         </span>
                       )}

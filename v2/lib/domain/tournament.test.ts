@@ -620,3 +620,60 @@ describe("hutang campuran game + turnamen", () => {
     expect(plan.paymentAmount).toBe(8000);
   });
 });
+
+describe("hutang kok per partai turnamen", () => {
+  // Kok cuma dipasang di partai pertama (Iskandar/Arta vs Yoga/Faiz) — pasangan
+  // di partai lain (r0-1, Bidoel/Deni vs Elvin/Galih) tidak ikut nanggung,
+  // beda dari iuran flat yang rata ke semua peserta turnamen.
+  function tourWithMatchKok(matchKokPaid?: Record<string, boolean[]>) {
+    return tour({
+      id: "t1",
+      date: "2026-02-01",
+      size: 4,
+      fee: 0,
+      names: [
+        ["Iskandar", "Arta"],
+        ["Yoga", "Faiz"],
+        ["Bidoel", "Deni"],
+        ["Elvin", "Galih"],
+      ],
+      koks: [kok(2500, "r0-0")],
+      matchKokPaid,
+    });
+  }
+
+  it("cuma 4 pemain partai itu yang ditagih, bukan semua peserta turnamen", () => {
+    const debt = buildDebtSummary([], {}, [enrichTournament(tourWithMatchKok())]);
+    // Bidoel/Deni/Elvin/Galih main di partai lain (r0-1) — tidak ada kok di situ, jadi tidak nagih.
+    expect(debt.map((d) => d.name).sort()).toEqual(["Arta", "Faiz", "Iskandar", "Yoga"]);
+    const iskandar = debt.find((d) => d.name === "Iskandar")!;
+    expect(iskandar.items).toEqual([
+      {
+        gameId: "t1::r0-0",
+        date: "2026-02-01",
+        name: "Iskandar",
+        amount: 2500,
+        kokCount: 1,
+        kind: "turnamen_kok",
+        label: "Tarkam · Semifinal · Partai 1",
+        createdAt: "2026-03-01T00:00:00.000Z",
+      },
+    ]);
+  });
+
+  it("yang sudah ditandai lunas hilang dari rekap, sisanya tetap nagih", () => {
+    const debt = buildDebtSummary(
+      [],
+      {},
+      [enrichTournament(tourWithMatchKok({ "r0-0": [true, false, false, false] }))],
+    );
+    expect(debt.map((d) => d.name).sort()).toEqual(["Arta", "Faiz", "Yoga"]);
+  });
+
+  it("lunasin semua nutup kok partai, bukan cuma iuran", () => {
+    const t = [tourWithMatchKok()];
+    const plan = planSettle([], {}, "Iskandar", t);
+    expect(plan.touched).toEqual([{ kind: "turnamen_kok", id: "t1", index: 0, matchId: "r0-0" }]);
+    expect(plan.paymentAmount).toBe(2500);
+  });
+});

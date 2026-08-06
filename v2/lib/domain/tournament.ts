@@ -276,6 +276,23 @@ function normalizeKoks(
   });
 }
 
+/** Selalu 4 boolean — [sisiA.a, sisiA.b, sisiB.a, sisiB.b]. Kurang/lebih dijepit, bukan-boolean dibuang jadi false. */
+function normalizeKokPaid(raw: unknown): boolean[] {
+  const arr = Array.isArray(raw) ? raw : [];
+  return [0, 1, 2, 3].map((i) => Boolean(arr[i]));
+}
+
+/** matchId yang tidak dikenal dibuang — partai itu sudah tidak ada lagi di bagan. */
+function normalizeMatchKokPaid(raw: unknown, validIds: Set<string>): Record<string, boolean[]> {
+  const out: Record<string, boolean[]> = {};
+  if (!raw || typeof raw !== "object") return out;
+  for (const [id, value] of Object.entries(raw as Record<string, unknown>)) {
+    if (!validIds.has(id)) continue;
+    out[id] = normalizeKokPaid(value);
+  }
+  return out;
+}
+
 export function normalizeStoredTournament<T extends Partial<StoredTournament>>(
   t: T,
   genId?: () => string,
@@ -301,6 +318,7 @@ export function normalizeStoredTournament<T extends Partial<StoredTournament>>(
     results: normalizeResults(t.results, validIds),
     koks: normalizeKoks(t.koks, validIds, date, endDate),
     fees: syncFees(pairs, Array.isArray(t.fees) ? (t.fees as TournamentFee[]) : []),
+    matchKokPaid: normalizeMatchKokPaid(t.matchKokPaid, validIds),
     notes: t.notes ?? null,
     recordedBy: t.recordedBy ?? null,
     createdAt: t.createdAt ?? "",
@@ -409,13 +427,17 @@ export function seedSlots(pairs: TournamentPair[], size: number): (TournamentPai
 }
 
 export function buildBracket(
-  t: Pick<StoredTournament, "size" | "pairs" | "results"> & { koks?: TournamentKok[] },
+  t: Pick<StoredTournament, "size" | "pairs" | "results"> & {
+    koks?: TournamentKok[];
+    matchKokPaid?: Record<string, boolean[]>;
+  },
 ): Bracket {
   const size = normalizeSize(t.size);
   const slots = bracketSize(size);
   const total = roundCount(slots);
   const pairs = seedSlots(t.pairs, size);
   const byMatch = koksByMatch(t.koks ?? []);
+  const kokPaidMap = t.matchKokPaid ?? {};
   const rounds: BracketRound[] = [];
   let prev: BracketMatch[] = [];
 
@@ -451,6 +473,7 @@ export function buildBracket(
         autoWin,
         koks,
         kokTotal: koksTotal(koks),
+        kokPaid: normalizeKokPaid(kokPaidMap[id]),
       });
     }
     rounds.push({ round, label: roundLabel(round, total), matches });
@@ -478,10 +501,14 @@ function pointsOf(score: MatchScore | null): { a: number; b: number } {
  * lalu selisih poin, lalu poin dibuat, terakhir nama — biar urutannya stabil.
  */
 export function buildRoundRobin(
-  t: Pick<StoredTournament, "size" | "pairs" | "results"> & { koks?: TournamentKok[] },
+  t: Pick<StoredTournament, "size" | "pairs" | "results"> & {
+    koks?: TournamentKok[];
+    matchKokPaid?: Record<string, boolean[]>;
+  },
 ): RoundRobin {
   const size = normalizeSize(t.size);
   const byMatch = koksByMatch(t.koks ?? []);
+  const kokPaidMap = t.matchKokPaid ?? {};
   const matches: BracketMatch[] = [];
 
   const rows = new Map<string, StandingRow>();
@@ -531,6 +558,7 @@ export function buildRoundRobin(
         autoWin: false,
         koks,
         kokTotal: koksTotal(koks),
+        kokPaid: normalizeKokPaid(kokPaidMap[id]),
       });
 
       if (!winner || !pairA || !pairB) continue;
@@ -640,6 +668,24 @@ export function enrichTournament(t: Partial<StoredTournament>): EnrichedTourname
 /** Semua partai yang sudah punya skor, urut sama seperti t.matches (round lalu index). */
 export function playedMatches(t: Pick<EnrichedTournament, "matches">): BracketMatch[] {
   return t.matches.filter((m) => m.score);
+}
+
+/** Turunkan semua partai dari data mentah turnamen, apa pun formatnya — dipakai buat billing kok per partai. */
+export function tournamentMatches(
+  t: Pick<StoredTournament, "format" | "size" | "pairs" | "results" | "koks" | "matchKokPaid">,
+): BracketMatch[] {
+  if (normalizeFormat(t.format) === "round_robin") return buildRoundRobin(t).matches;
+  return buildBracket(t).rounds.flatMap((r) => r.matches);
+}
+
+/** 4 nama pemain partai ini, urutan tetap [sisiA.a, sisiA.b, sisiB.a, sisiB.b]. Slot BYE/kosong = "". */
+export function matchParticipants(m: Pick<BracketMatch, "a" | "b">): string[] {
+  return [m.a.pair?.a ?? "", m.a.pair?.b ?? "", m.b.pair?.a ?? "", m.b.pair?.b ?? ""];
+}
+
+/** Bagian kok partai ini per orang — sama seperti gameCost().perPerson. */
+export function matchKokPerPerson(m: Pick<BracketMatch, "koks">): number {
+  return m.koks.reduce((s, k) => s + (Number(k.pricePerPerson) || 0), 0);
 }
 
 /** Tanggal partai ini benar-benar dimainkan — skor lama tanpa `playedAt` jatuh ke tanggal mulai turnamen. */

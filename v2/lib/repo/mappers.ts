@@ -36,6 +36,7 @@ export function rowToTournament(r: TournamentRow): StoredTournament {
     results: r.results as unknown as StoredTournament["results"],
     koks: r.koks as unknown as StoredTournament["koks"],
     fees: r.fees as unknown as StoredTournament["fees"],
+    matchKokPaid: r.match_kok_paid as unknown as StoredTournament["matchKokPaid"],
     notes: r.notes,
     recordedBy: r.recorded_by ?? null,
     createdAt: r.created_at.toISOString(),

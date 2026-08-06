@@ -49,12 +49,12 @@ async function writeCarryTx(
   }
 }
 
-function groupByOwner(touched: TouchedSlot[], kind: TouchedSlot["kind"]): Map<string, number[]> {
-  const map = new Map<string, number[]>();
+function groupByOwner(touched: TouchedSlot[], kind: TouchedSlot["kind"]): Map<string, TouchedSlot[]> {
+  const map = new Map<string, TouchedSlot[]>();
   for (const t of touched) {
     if (t.kind !== kind) continue;
     if (!map.has(t.id)) map.set(t.id, []);
-    map.get(t.id)!.push(t.index);
+    map.get(t.id)!.push(t);
   }
   return map;
 }
@@ -73,11 +73,11 @@ async function applyTouchedTx(
 ): Promise<void> {
   const stamp = at.toISOString();
 
-  for (const [gameId, indexes] of groupByOwner(touched, "game")) {
+  for (const [gameId, slots] of groupByOwner(touched, "game")) {
     const game = games.find((g) => g.id === gameId);
     if (!game) continue;
-    for (const i of indexes) {
-      const p = game.players[i];
+    for (const s of slots) {
+      const p = game.players[s.index];
       p.paid = true;
       p.paidAt = stamp;
       p.paidBy = by || undefined;
@@ -88,11 +88,11 @@ async function applyTouchedTx(
     });
   }
 
-  for (const [tournamentId, indexes] of groupByOwner(touched, "turnamen")) {
+  for (const [tournamentId, slots] of groupByOwner(touched, "turnamen")) {
     const t = tournaments.find((x) => x.id === tournamentId);
     if (!t) continue;
-    for (const i of indexes) {
-      const f = t.fees[i];
+    for (const s of slots) {
+      const f = t.fees[s.index];
       if (!f) continue;
       f.paid = true;
       f.paidAt = stamp;
@@ -101,6 +101,23 @@ async function applyTouchedTx(
     await tx.tournaments.update({
       where: { id: tournamentId },
       data: { fees: t.fees as unknown as JsonArray, updated_at: new Date() },
+    });
+  }
+
+  // Kok per partai: status lunas per pemain, disimpan per matchId (bukan array posisi flat).
+  for (const [tournamentId, slots] of groupByOwner(touched, "turnamen_kok")) {
+    const t = tournaments.find((x) => x.id === tournamentId);
+    if (!t) continue;
+    const paidMap: Record<string, boolean[]> = { ...t.matchKokPaid };
+    for (const s of slots) {
+      if (!s.matchId) continue;
+      const arr = [...(paidMap[s.matchId] ?? [false, false, false, false])];
+      arr[s.index] = true;
+      paidMap[s.matchId] = arr;
+    }
+    await tx.tournaments.update({
+      where: { id: tournamentId },
+      data: { match_kok_paid: paidMap as unknown as JsonArray, updated_at: new Date() },
     });
   }
 }
