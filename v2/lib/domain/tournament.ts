@@ -684,6 +684,51 @@ export function enrichTournament(t: Partial<StoredTournament>): EnrichedTourname
   };
 }
 
+export interface TournamentPodium {
+  /** Juara 1. */
+  champion: TournamentPair | null;
+  /** Juara 2 — runner-up. */
+  runnerUp: TournamentPair | null;
+  /** Juara 3. Bisa 2 pasangan di knockout (dua kalah semifinal, tidak ada perebutan juara 3). */
+  third: TournamentPair[];
+}
+
+/**
+ * Podium juara 1/2/3 turnamen yang sudah selesai. Round robin ambil dari 3
+ * teratas klasemen; knockout ambil pemenang final (juara 1/2) + dua kalah
+ * semifinal (juara 3, sengaja tidak dibedakan peringkatnya — tidak ada
+ * perebutan juara 3 di sini). Turnamen yang belum selesai balik semua null/[].
+ */
+export function tournamentPodium(t: EnrichedTournament): TournamentPodium {
+  if (!t.finished) return { champion: null, runnerUp: null, third: [] };
+
+  if (t.roundRobin) {
+    const { standings } = t.roundRobin;
+    return {
+      champion: t.champion,
+      runnerUp: standings[1]?.pair ?? null,
+      third: standings[2] ? [standings[2].pair] : [],
+    };
+  }
+
+  if (t.bracket) {
+    const rounds = t.bracket.rounds;
+    const final = rounds[rounds.length - 1]?.matches[0] ?? null;
+    if (!final?.winner) return { champion: t.champion, runnerUp: null, third: [] };
+    const runnerUp = (final.winner === "a" ? final.b.pair : final.a.pair) ?? null;
+    const semis = rounds[rounds.length - 2]?.matches ?? [];
+    const third: TournamentPair[] = [];
+    for (const m of semis) {
+      if (!m.winner) continue; // BYE atau belum dimainkan — bukan kalah semifinal beneran
+      const loser = m.winner === "a" ? m.b.pair : m.a.pair;
+      if (loser) third.push(loser);
+    }
+    return { champion: t.champion, runnerUp, third };
+  }
+
+  return { champion: t.champion, runnerUp: null, third: [] };
+}
+
 /** Semua partai yang sudah punya skor, urut sama seperti t.matches (round lalu index). */
 export function playedMatches(t: Pick<EnrichedTournament, "matches">): BracketMatch[] {
   return t.matches.filter((m) => m.score);

@@ -2,12 +2,16 @@
 // Planner murni: balik daftar slot yang harus di-flip jadi paid + carry baru
 // + nominal payment yang dicatat. Repo yang eksekusi tulisannya.
 //
-// Tiga sumber tagihan: main biasa (per pemain per game), iuran patungan
-// turnamen (flat, rata ke semua peserta), dan kok per partai turnamen (cuma
-// ditagih ke 4 pemain partai itu — beda pasangan main beda jumlah partai,
-// jadi tidak adil kalau dirata ke semua peserta lewat fee). Planner
-// memperlakukan ketiganya sebagai "slot belum bayar" yang sama, jadi
-// cicilan/lunasin-semua otomatis nutup semuanya, dari yang paling pas.
+// Cuma dua sumber tagihan di sini: main biasa (per pemain per game) dan kok
+// per partai turnamen (cuma ditagih ke 4 pemain partai itu — beda pasangan
+// main beda jumlah partai, jadi tidak adil kalau dirata ke semua peserta).
+// Keduanya sama-sama uang kok/kas, jadi cicilan/lunasin-semua otomatis nutup
+// keduanya, dari yang paling pas.
+//
+// Iuran patungan turnamen (fee flat, pool terpisah dari kas kok) SENGAJA
+// tidak ikut di sini — itu ditagih & dilunasin sendiri di halaman Turnamen
+// (lihat setFeePaidAction/markAllFeesPaidAction), biar Rekap & Belum Bayar
+// fokus ke kok aja dan gak nyampur dua pool duit yang beda.
 
 import { gameCost, gameMatchNumbers } from "./game";
 import {
@@ -59,26 +63,6 @@ export function buildDebtSummary(
   }
 
   for (const t of tournaments) {
-    if (t.fee <= 0) continue;
-    for (const f of t.fees) {
-      if (f.paid || !f.name) continue;
-      const e = bucket(f.name);
-      e.owedGross += t.fee;
-      e.items.push({
-        gameId: t.id,
-        date: t.date,
-        name: f.name,
-        amount: t.fee,
-        // Iuran flat ini bukan basis kok — kok per partai punya item sendiri di bawah.
-        kokCount: 0,
-        kind: "turnamen",
-        label: t.name,
-        createdAt: t.createdAt,
-      });
-    }
-  }
-
-  for (const t of tournaments) {
     for (const m of t.matches) {
       if (m.kokTotal <= 0) continue;
       const perPerson = matchKokPerPerson(m);
@@ -113,12 +97,11 @@ export function buildDebtSummary(
 
 export interface TouchedSlot {
   kind: DebtKind;
-  /** id game, atau id turnamen kalau kind = "turnamen"/"turnamen_kok". */
+  /** id game, atau id turnamen kalau kind = "turnamen_kok". */
   id: string;
   /**
-   * index pemain di game (0-3), index peserta di daftar iuran turnamen, atau
-   * slot pemain di partai (0-3, urutan [sisiA.a, sisiA.b, sisiB.a, sisiB.b])
-   * kalau kind = "turnamen_kok".
+   * index pemain di game (0-3), atau slot pemain di partai (0-3, urutan
+   * [sisiA.a, sisiA.b, sisiB.a, sisiB.b]) kalau kind = "turnamen_kok".
    */
   index: number;
   /** Cuma kepake buat kind "turnamen_kok" — id partai yang kok-nya ditagih. */
@@ -163,20 +146,6 @@ function unpaidRefs(
     }
   }
   for (const t of tournaments) {
-    if (t.fee > 0) {
-      for (let i = 0; i < t.fees.length; i++) {
-        if (t.fees[i].name === name && !t.fees[i].paid) {
-          refs.push({
-            kind: "turnamen",
-            id: t.id,
-            index: i,
-            date: t.date,
-            createdAt: t.createdAt,
-            amount: t.fee,
-          });
-        }
-      }
-    }
     for (const m of tournamentMatches(t)) {
       if (m.kokTotal <= 0) continue;
       const perPerson = matchKokPerPerson(m);
@@ -213,10 +182,11 @@ function slot(r: UnpaidRef): TouchedSlot {
 /**
  * Bayar sebagian: greedy lunasin tagihan yang nominalnya paling pas (best-fit)
  * dulu, bukan yang paling lama. Jadi cicilan 10.000 buat orang yang punya
- * utang kok 3.000 + 2.500 + iuran patungan 10.000 bakal nutup patungan itu
- * pas (diff 0), bukan malah kepecah nyicil kok 5.500 lalu nyisa ganjil di
- * patungan. Tiap langkah pilih ref ber-amount ≤ credit dengan selisih paling
- * kecil; kalau seri, yang paling lama menang (byOldest) biar deterministik.
+ * utang kok main 3.000 + 2.500 + kok partai turnamen 10.000 bakal nutup kok
+ * partai itu pas (diff 0), bukan malah kepecah nyicil kok main 5.500 lalu
+ * nyisa ganjil di kok partai. Tiap langkah pilih ref ber-amount ≤ credit
+ * dengan selisih paling kecil; kalau seri, yang paling lama menang (byOldest)
+ * biar deterministik.
  */
 export function planInstallment(
   games: StoredGame[],

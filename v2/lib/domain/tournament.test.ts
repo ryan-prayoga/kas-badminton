@@ -21,6 +21,7 @@ import {
   syncFees,
   tournamentCost,
   tournamentDays,
+  tournamentPodium,
   tournamentStatus,
 } from "./tournament";
 import type {
@@ -526,7 +527,9 @@ describe("kok per partai", () => {
   });
 });
 
-describe("hutang campuran game + turnamen", () => {
+describe("iuran patungan turnamen tidak ikut hutang kok", () => {
+  // Rekap/Belum Bayar fokus kok aja — iuran patungan (pool terpisah) ditagih
+  // & dilunasin sendiri di halaman Turnamen (setFeePaidAction), bukan lewat sini.
   const games = [enrichGame(game({ id: "g1", date: "2026-01-01", koks: [kok(3000)] }))];
   const tournaments = [
     enrichTournament(
@@ -545,20 +548,20 @@ describe("hutang campuran game + turnamen", () => {
     ),
   ];
 
-  it("iuran belum bayar masuk rekap sebagai item terpisah", () => {
+  it("iuran belum bayar tidak nempel di rekap kok", () => {
     const debt = buildDebtSummary(games, {}, tournaments);
     const a = debt.find((d) => d.name === "A")!;
-    expect(a.owedGross).toBe(3000 + 5000);
-    expect(a.items.map((i) => i.kind)).toEqual(["game", "turnamen"]);
-    expect(a.items[1]).toMatchObject({ label: "Tarkam", amount: 5000, kokCount: 0 });
+    expect(a.owedGross).toBe(3000);
+    expect(a.items.map((i) => i.kind)).toEqual(["game"]);
   });
 
-  it("turnamen dengan iuran 0 tidak menagih siapa pun", () => {
+  it("turnamen tanpa kok partai tidak menagih siapa pun, walau iurannya belum lunas", () => {
     const gratis = [enrichTournament(tour({ id: "t2", fee: 0 }))];
     expect(buildDebtSummary([], {}, gratis)).toEqual([]);
+    expect(buildDebtSummary([], {}, tournaments)).toEqual([]);
   });
 
-  it("cicilan nutup tagihan terlama dulu, lintas game & turnamen", () => {
+  it("cicilan cuma nutup kok main, iuran patungan diabaikan", () => {
     const plan = planInstallment(
       games.map((g) => g as StoredGame),
       {},
@@ -567,57 +570,18 @@ describe("hutang campuran game + turnamen", () => {
       tournaments,
     );
     expect(plan.touched).toEqual([{ kind: "game", id: "g1", index: 0 }]);
-    expect(plan.clearsDebt).toBe(false);
+    expect(plan.clearsDebt).toBe(true); // kok-nya lunas, iuran bukan urusan sini
   });
 
-  it("cicilan pas nutup tagihan yang nominalnya pas (best-fit), bukan yang tertua", () => {
-    // Kok 3000 (tertua) + kok 2500 + patungan 10000. Cicil 10000 harus pas
-    // nutup patungan (diff 0), bukan malah nyicil kok dulu (5500) lalu nyisa
-    // ganjil di patungan.
-    const kokGames = [
-      enrichGame(game({ id: "kok1", date: "2026-01-01", koks: [kok(3000)] })),
-      enrichGame(game({ id: "kok2", date: "2026-01-15", koks: [kok(2500)] })),
-    ];
-    const bigTournament = [
-      enrichTournament(
-        tour({
-          id: "t-besar",
-          date: "2026-02-01",
-          size: 4,
-          fee: 10000,
-          names: [
-            ["A", "X"],
-            ["", ""],
-            ["", ""],
-            ["", ""],
-          ],
-        }),
-      ),
-    ];
-    const plan = planInstallment(
-      kokGames.map((g) => g as StoredGame),
-      {},
-      "A",
-      10000,
-      bigTournament,
-    );
-    expect(plan.touched).toEqual([{ kind: "turnamen", id: "t-besar", index: 0 }]);
-    expect(plan.carryAfter).toBeNull();
-    expect(plan.clearsDebt).toBe(false); // kok 3000 & 2500 masih nunggak
-  });
-
-  it("lunasin semua ikut menandai iuran turnamen", () => {
+  it("lunasin semua cuma nyentuh kok, iuran turnamen tetap belum bayar", () => {
     const plan = planSettle(
       games.map((g) => g as StoredGame),
       {},
       "A",
       tournaments,
     );
-    expect(plan.touched).toEqual([
-      { kind: "game", id: "g1", index: 0 },
-      { kind: "turnamen", id: "t1", index: 0 },
-    ]);
-    expect(plan.paymentAmount).toBe(8000);
+    expect(plan.touched).toEqual([{ kind: "game", id: "g1", index: 0 }]);
+    expect(plan.paymentAmount).toBe(3000);
   });
 });
 
@@ -689,5 +653,71 @@ describe("hutang kok per partai turnamen", () => {
     const semua = enrichTournament(tourWithMatchKok({ "r0-0": [true, true, true, true] }));
     expect(semua.cost.kokPaid).toBe(10000);
     expect(semua.cost.kokPaid).toBe(semua.cost.kokTotal);
+  });
+});
+
+describe("tournamentPodium", () => {
+  it("turnamen belum selesai → semua null/kosong", () => {
+    const t = enrichTournament(
+      tour({
+        id: "t1",
+        size: 4,
+        names: [
+          ["Iskandar", "Arta"],
+          ["Yoga", "Faiz"],
+          ["Bidoel", "Deni"],
+          ["Elvin", "Galih"],
+        ],
+      }),
+    );
+    expect(tournamentPodium(t)).toEqual({ champion: null, runnerUp: null, third: [] });
+  });
+
+  it("knockout: juara 1/2 dari final, juara 3 dari dua kalah semifinal", () => {
+    const t = enrichTournament(
+      tour({
+        id: "t1",
+        size: 4,
+        names: [
+          ["Iskandar", "Arta"],
+          ["Yoga", "Faiz"],
+          ["Bidoel", "Deni"],
+          ["Elvin", "Galih"],
+        ],
+        results: {
+          "r0-0": sc(30, 20), // Iskandar/Arta ngalahin Yoga/Faiz
+          "r0-1": sc(30, 10), // Bidoel/Deni ngalahin Elvin/Galih
+          "r1-0": sc(30, 25), // final: Iskandar/Arta juara
+        },
+      }),
+    );
+    const podium = tournamentPodium(t);
+    expect(pairLabel(podium.champion)).toBe("Iskandar / Arta");
+    expect(pairLabel(podium.runnerUp)).toBe("Bidoel / Deni");
+    expect(podium.third.map(pairLabel).sort()).toEqual(["Elvin / Galih", "Yoga / Faiz"]);
+  });
+
+  it("round robin: juara 1/2/3 dari 3 teratas klasemen", () => {
+    const t = enrichTournament(
+      tour({
+        id: "t1",
+        format: "round_robin",
+        size: 3,
+        names: [
+          ["Iskandar", "Arta"],
+          ["Yoga", "Faiz"],
+          ["Bidoel", "Deni"],
+        ],
+        results: {
+          "rr0-1": sc(30, 20), // Iskandar/Arta > Yoga/Faiz
+          "rr0-2": sc(30, 10), // Iskandar/Arta > Bidoel/Deni
+          "rr1-2": sc(30, 15), // Yoga/Faiz > Bidoel/Deni
+        },
+      }),
+    );
+    const podium = tournamentPodium(t);
+    expect(pairLabel(podium.champion)).toBe("Iskandar / Arta");
+    expect(pairLabel(podium.runnerUp)).toBe("Yoga / Faiz");
+    expect(podium.third.map(pairLabel)).toEqual(["Bidoel / Deni"]);
   });
 });

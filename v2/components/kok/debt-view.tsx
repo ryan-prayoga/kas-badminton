@@ -29,9 +29,16 @@ interface DateGroup {
   total: number;
   count: number;
   koks: number;
-  /** Berapa item yang datang dari main biasa. */
+  /** Berapa item yang datang dari main biasa (kok partai turnamen ikut kehitung "main"). */
   games: number;
-  /** Nama turnamen yang iurannya belum dibayar di tanggal ini. */
+  /**
+   * Nama turnamen yang iurannya belum dibayar di tanggal ini — kosong terus di
+   * praktiknya, sebab buildDebtSummary (lihat lib/domain/debt.ts) sengaja gak
+   * ngirim item kind "turnamen" (iuran patungan) ke sini lagi. Halaman ini
+   * fokus kok aja; patungan ditagih & dilunasin sendiri di halaman Turnamen.
+   * Field & cabang kode terkait dibiarin — defensif kalau suatu saat ada
+   * sumber tagihan lain yang masuk sini.
+   */
   tournaments: string[];
   /** Item mentah per tanggal — buat render satu baris per game/turnamen, gak digabung. */
   items: DebtItem[];

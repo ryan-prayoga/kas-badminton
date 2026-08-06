@@ -7,9 +7,11 @@ import type {
   EnrichedTournament,
   ExpenseRow,
   KokType,
+  TournamentPair,
 } from "@/lib/domain/types";
+import { matchKokPerPerson, matchParticipants, tournamentPodium } from "@/lib/domain/tournament";
 import { currentPeriodKey, fmt, fmtDate, periodKey, periodLabel, toLocalIso } from "@/lib/format";
-import { APP_URL, type ShareCardBlock, type ShareMetric } from "@/lib/share";
+import { APP_URL, type ShareCardBlock, type ShareChip, type ShareMetric } from "@/lib/share";
 import { cn } from "@/lib/utils";
 import { Avatar, type PhotoMap } from "@/components/kok/avatar";
 import { PeriodFilter } from "@/components/kok/period-filter";
@@ -49,11 +51,16 @@ function StatCard({
 interface PlayerStat {
   name: string;
   main: number;
+  /** Total kok terpakai (main + partai turnamen yang diikuti). */
   kok: number;
+  /** Total uang keluar — kok main + kok partai turnamen + iuran patungan turnamen. */
   keluar: number;
-  nunggak: number;
   /** Berapa turnamen yang diikuti di periode ini. */
   turnamen: number;
+  /** Riwayat juara turnamen — juara1 = Juara 1, dst. */
+  juara1: number;
+  juara2: number;
+  juara3: number;
 }
 
 /** Teks share WhatsApp-friendly (*bold*, rapi, mudah dibaca). */
@@ -91,9 +98,7 @@ function buildStatsShareText({
   tourFeeUnpaidCount?: number;
 }): string {
   const net = paid - expense;
-  const nunggak = players.filter((p) => p.nunggak > 0);
-  const lunas = players.filter((p) => p.nunggak <= 0);
-  const orangNunggak = debtPeople ?? nunggak.length;
+  const orangNunggak = debtPeople ?? 0;
 
   const lines: string[] = [
     "🏸 *Kok Badminton · Statistik*",
@@ -124,25 +129,25 @@ function buildStatsShareText({
     lines.push(`📦 Stok sisa: ${stockLeft} kok`);
   }
 
-  if (nunggak.length) {
-    lines.push("", `💸 *Belum lunas (${nunggak.length})*`);
-    nunggak.forEach((p, i) => {
+  if (players.length) {
+    lines.push("", `👤 *Statistik pemain (${players.length})*`);
+    // ringkas: max 15 nama, sisanya digabung
+    const show = players.slice(0, 15);
+    show.forEach((p, i) => {
+      const juara = [
+        p.juara1 ? `🥇×${p.juara1}` : "",
+        p.juara2 ? `🥈×${p.juara2}` : "",
+        p.juara3 ? `🥉×${p.juara3}` : "",
+      ]
+        .filter(Boolean)
+        .join(" ");
       lines.push(
-        `${i + 1}. *${p.name}* — ${fmt(p.nunggak)}`,
-        `   ${p.main} main · ${p.kok} kok · total keluar ${fmt(p.keluar)}`,
+        `${i + 1}. *${p.name}* — ${p.main} main · ${p.kok} kok${p.turnamen ? ` · ${p.turnamen} turnamen` : ""}${juara ? ` · ${juara}` : ""}`,
+        `   total keluar ${fmt(p.keluar)}`,
       );
     });
-  }
-
-  if (lunas.length) {
-    lines.push("", `✅ *Sudah lunas (${lunas.length})*`);
-    // ringkas: max 12 nama, sisanya digabung
-    const show = lunas.slice(0, 12);
-    show.forEach((p, i) => {
-      lines.push(`${i + 1}. ${p.name} — ${p.main} main · ${p.kok} kok`);
-    });
-    if (lunas.length > 12) {
-      lines.push(`… +${lunas.length - 12} pemain lain`);
+    if (players.length > 15) {
+      lines.push(`… +${players.length - 15} pemain lain`);
     }
   }
 
@@ -214,7 +219,7 @@ function buildStatsShareBlocks({
   tourFeeUnpaidCount?: number;
 }): ShareCardBlock[] {
   const net = paid - expense;
-  const nunggakCount = debtPeople ?? players.filter((p) => p.nunggak > 0).length;
+  const nunggakCount = debtPeople ?? 0;
 
   // Urutan + label + sub persis grid StatCard di web
   const metricItems: ShareMetric[] = [];
@@ -309,18 +314,27 @@ function buildStatsShareBlocks({
     });
   } else {
     for (const [i, p] of players.entries()) {
+      const juara = [
+        p.juara1 ? `🥇×${p.juara1}` : "",
+        p.juara2 ? `🥈×${p.juara2}` : "",
+        p.juara3 ? `🥉×${p.juara3}` : "",
+      ]
+        .filter(Boolean)
+        .join(" ");
+      const chips: ShareChip[] = [
+        { icon: "racket", text: `${p.main} main` },
+        { icon: "shuttle", text: `${p.kok} kok` },
+      ];
+      if (p.turnamen > 0) chips.push({ icon: "trophy", text: `${p.turnamen} turnamen` });
+      if (juara) chips.push({ icon: "trophy", text: juara });
       blocks.push({
         kind: "person",
         rank: i + 1,
         name: p.name,
         photo: photoMap?.[p.name],
-        chips: [
-          { icon: "racket", text: `${p.main} main` },
-          { icon: "shuttle", text: `${p.kok} kok` },
-          { icon: "cash", text: fmt(p.keluar) },
-        ],
-        right: p.nunggak > 0 ? fmt(p.nunggak) : "Lunas",
-        rightTone: p.nunggak > 0 ? "owe" : "paid",
+        chips,
+        right: fmt(p.keluar),
+        rightTone: "court",
         initial: p.name.slice(0, 1),
       });
     }
@@ -441,8 +455,10 @@ export function StatsView({
         main: 0,
         kok: 0,
         keluar: 0,
-        nunggak: 0,
         turnamen: 0,
+        juara1: 0,
+        juara2: 0,
+        juara3: 0,
       };
       map.set(name, s);
       return s;
@@ -460,24 +476,43 @@ export function StatsView({
       }
     }
 
-    // Kok turnamen itu pool bersama — tidak dibagi ke pemain, tapi iurannya masuk "keluar".
     for (const t of scopedTournaments) {
+      // Iuran patungan: sekali per turnamen yang diikuti, ikut kehitung "keluar".
       for (const f of t.fees) {
         if (!f.name) continue;
         const s = bucket(f.name);
         s.turnamen += 1;
         s.keluar += t.fee;
       }
+      // Kok per partai turnamen — cuma ditagih ke 4 pemain partai itu, beda dari iuran.
+      for (const m of t.matches) {
+        if (m.kokTotal <= 0) continue;
+        const perPerson = matchKokPerPerson(m);
+        for (const name of matchParticipants(m)) {
+          if (!name) continue;
+          const s = bucket(name);
+          s.kok += m.koks.length;
+          s.keluar += perPerson;
+        }
+      }
+      // Riwayat juara — juara 1/2/3 dari turnamen yang sudah selesai.
+      const podium = tournamentPodium(t);
+      const bump = (pair: TournamentPair | null, key: "juara1" | "juara2" | "juara3") => {
+        if (!pair) return;
+        for (const name of [pair.a, pair.b]) {
+          if (!name) continue;
+          bucket(name)[key] += 1;
+        }
+      };
+      bump(podium.champion, "juara1");
+      bump(podium.runnerUp, "juara2");
+      for (const pair of podium.third) bump(pair, "juara3");
     }
 
-    for (const s of map.values()) {
-      // Sisa tagihan asli (sudah dipotong cicilan), sama seperti Rekap — bukan per periode.
-      s.nunggak = debtMap.get(s.name) ?? 0;
-    }
     return [...map.values()].sort(
-      (a, b) => b.nunggak - a.nunggak || b.main - a.main || a.name.localeCompare(b.name, "id"),
+      (a, b) => b.keluar - a.keluar || b.main - a.main || a.name.localeCompare(b.name, "id"),
     );
-  }, [scoped, scopedTournaments, debtMap]);
+  }, [scoped, scopedTournaments]);
 
   const periodName = period === "all" ? "Semua waktu" : periodLabel(period);
 
@@ -690,22 +725,30 @@ export function StatsView({
                         <KIcon name="trophy" className="size-3" /> {s.turnamen} turnamen
                       </span>
                     )}
-                    <span className="tabular inline-flex items-center gap-1 font-mono">
-                      <KIcon name="cash" className="size-3" /> {fmt(s.keluar)}
-                    </span>
                   </div>
-                </div>
-                <div className="shrink-0 text-right">
-                  {s.nunggak > 0 ? (
-                    <div className="inline-flex items-center gap-1 text-sm font-bold text-owe">
-                      <KIcon name="alert" className="size-3.5" />
-                      <span className="tabular font-mono">{fmt(s.nunggak)}</span>
-                    </div>
-                  ) : (
-                    <div className="inline-flex items-center gap-1 text-sm font-bold text-paid">
-                      <KIcon name="checkCircle" className="size-3.5" /> Lunas
+                  {(s.juara1 > 0 || s.juara2 > 0 || s.juara3 > 0) && (
+                    <div className="mt-1 flex flex-wrap items-center gap-x-2.5 gap-y-1 text-[11px] font-bold">
+                      {s.juara1 > 0 && (
+                        <span className="inline-flex items-center gap-1 text-amber-500">
+                          <KIcon name="medal" className="size-3.5" /> Juara 1 ×{s.juara1}
+                        </span>
+                      )}
+                      {s.juara2 > 0 && (
+                        <span className="inline-flex items-center gap-1 text-slate-400">
+                          <KIcon name="medal" className="size-3.5" /> Juara 2 ×{s.juara2}
+                        </span>
+                      )}
+                      {s.juara3 > 0 && (
+                        <span className="inline-flex items-center gap-1 text-orange-700">
+                          <KIcon name="medal" className="size-3.5" /> Juara 3 ×{s.juara3}
+                        </span>
+                      )}
                     </div>
                   )}
+                </div>
+                <div className="shrink-0 text-right">
+                  <div className="tabular font-mono text-sm font-bold text-ink">{fmt(s.keluar)}</div>
+                  <div className="text-[10px] text-ink-faint">total keluar</div>
                 </div>
               </div>
             ))}

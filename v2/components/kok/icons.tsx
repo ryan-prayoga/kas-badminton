@@ -20,6 +20,7 @@ import wallet from "@iconify-icons/mdi/wallet-outline";
 import history from "@iconify-icons/mdi/history";
 import chart from "@iconify-icons/mdi/chart-box-outline";
 import trophy from "@iconify-icons/mdi/trophy-outline";
+import medal from "@iconify-icons/mdi/medal-outline";
 import pkg from "@iconify-icons/mdi/package-variant";
 import users from "@iconify-icons/mdi/account-multiple-outline";
 import pencil from "@iconify-icons/mdi/pencil-outline";
@@ -66,6 +67,7 @@ export const ICONS = {
   history,
   chart,
   trophy,
+  medal,
   package: pkg,
   users,
   pencil,
