@@ -6,22 +6,31 @@
 // skor per game ditumpuk (niru SideRow bagan) biar kelihatan mana yang menang.
 
 import Link from "next/link";
+import { useState, useTransition, type MouseEvent } from "react";
+import { toast } from "sonner";
 import {
   finalPlayedMatchId,
   matchTitle,
   pairLabel,
   tournamentStatus,
 } from "@/lib/domain/tournament";
-import type { BracketMatch, EnrichedTournament } from "@/lib/domain/types";
+import type { BracketMatch, EnrichedTournament, KokType } from "@/lib/domain/types";
 import { fmt } from "@/lib/format";
 import { cn } from "@/lib/utils";
+import { safeAction } from "@/lib/action-result";
+import { setFeePaidAction } from "@/server/actions/tournaments";
 import { KIcon } from "@/components/kok/icons";
+import { MatchDialog } from "@/components/kok/match-dialog";
 import { STATUS_META } from "@/components/kok/tournament-detail-view";
 
 /** Status lunas satu peserta dari iuran turnamen — patungan dicatat per orang, bukan per partai. */
-function feePaid(t: EnrichedTournament, name: string): boolean {
+function feeIndex(t: EnrichedTournament, name: string): number {
   const n = name.trim().toLowerCase();
-  return t.fees.find((f) => f.name.trim().toLowerCase() === n)?.paid ?? false;
+  return t.fees.findIndex((f) => f.name.trim().toLowerCase() === n);
+}
+function feePaid(t: EnrichedTournament, name: string): boolean {
+  const i = feeIndex(t, name);
+  return i >= 0 ? t.fees[i].paid : false;
 }
 
 /** "2 kok · Rp6.000/org · Yonex Aerosensa 50" — harga per orang, sama kayak
@@ -45,15 +54,41 @@ function kokSummary(m: BracketMatch): string {
   return `${base} · ${names.length} jenis`;
 }
 
-/** Baris skor ditumpuk 2 — niru SideRow bagan: pemenang ditonjolkan, kalah pudar. Tiap kolom = 1 game. */
-function ScoreRows({ match }: { match: BracketMatch }) {
+/** Baris skor ditumpuk 2 — niru SideRow bagan: pemenang ditonjolkan, kalah pudar. Tiap kolom = 1 game.
+ * Admin: seluruh boks bisa diklik → langsung buka dialog ubah skor partai ini. */
+function ScoreRows({
+  match,
+  editable,
+  onOpen,
+}: {
+  match: BracketMatch;
+  editable: boolean;
+  onOpen: () => void;
+}) {
   if (!match.score) return null;
   const rows = [
     { side: match.a, scores: match.score.games.map((g) => g.a), isWinner: match.winner === "a" },
     { side: match.b, scores: match.score.games.map((g) => g.b), isWinner: match.winner === "b" },
   ];
+  const Tag = editable ? "button" : "div";
   return (
-    <div className="mt-2.5 overflow-hidden rounded-xl border border-line">
+    <Tag
+      {...(editable
+        ? {
+            type: "button" as const,
+            "aria-label": "Ubah skor partai ini",
+            onClick: (e: MouseEvent) => {
+              e.preventDefault();
+              e.stopPropagation();
+              onOpen();
+            },
+          }
+        : {})}
+      className={cn(
+        "mt-2.5 block w-full overflow-hidden rounded-xl border border-line text-left",
+        editable && "transition active:scale-[0.99]",
+      )}
+    >
       {rows.map((r, i) => (
         <div
           key={i}
@@ -90,28 +125,67 @@ function ScoreRows({ match }: { match: BracketMatch }) {
           </span>
         </div>
       ))}
-    </div>
+    </Tag>
   );
 }
 
-/** Chip status lunas satu pemain — sama gaya persis dengan CourtSide di GameCard. */
-function PlayerChip({ t, name }: { t: EnrichedTournament; name: string }) {
+/** Chip status lunas satu pemain — sama gaya persis dengan CourtSide di GameCard.
+ * Admin: klik nama → langsung toggle status lunas iuran turnamen orang itu. */
+function PlayerChip({
+  t,
+  name,
+  editable,
+  pending,
+  onToggle,
+}: {
+  t: EnrichedTournament;
+  name: string;
+  editable: boolean;
+  pending: boolean;
+  onToggle: (name: string, next: boolean) => void;
+}) {
   const paid = feePaid(t, name);
+  const canToggle = editable && feeIndex(t, name) >= 0;
+  const Tag = canToggle ? "button" : "div";
   return (
-    <div
+    <Tag
+      {...(canToggle
+        ? {
+            type: "button" as const,
+            disabled: pending,
+            onClick: (e: MouseEvent) => {
+              e.preventDefault();
+              e.stopPropagation();
+              onToggle(name, !paid);
+            },
+          }
+        : {})}
       className={cn(
-        "flex min-w-0 items-center gap-1.5 rounded-lg border px-2 py-1.5",
+        "flex min-w-0 w-full items-center gap-1.5 rounded-lg border px-2 py-1.5 text-left",
         paid ? "border-paid/40 bg-paid/10 text-paid" : "border-owe/40 bg-owe/10 text-owe",
+        canToggle && "min-h-11 transition active:scale-[0.98] disabled:opacity-60",
       )}
     >
       <KIcon name={paid ? "checkCircle" : "clock"} className="size-[15px] shrink-0" />
       <span className="truncate text-sm font-semibold leading-tight text-ink">{name || "—"}</span>
-    </div>
+    </Tag>
   );
 }
 
 /** Kotak lapangan mini partai penentu — status lunas per pemain (bukan skor), niru court GameCard. */
-function MatchCourt({ t, match }: { t: EnrichedTournament; match: BracketMatch }) {
+function MatchCourt({
+  t,
+  match,
+  editable,
+  pending,
+  onTogglePaid,
+}: {
+  t: EnrichedTournament;
+  match: BracketMatch;
+  editable: boolean;
+  pending: boolean;
+  onTogglePaid: (name: string, next: boolean) => void;
+}) {
   if (!match.a.pair || !match.b.pair) return null;
   return (
     <div className="court-surface relative mt-2.5 overflow-visible rounded-xl border border-court/20 p-2">
@@ -121,12 +195,12 @@ function MatchCourt({ t, match }: { t: EnrichedTournament; match: BracketMatch }
       </span>
       <div className="relative z-[1] grid grid-cols-2 gap-x-1">
         <div className="flex min-w-0 flex-col gap-1.5 pr-3.5">
-          <PlayerChip t={t} name={match.a.pair.a} />
-          <PlayerChip t={t} name={match.a.pair.b} />
+          <PlayerChip t={t} name={match.a.pair.a} editable={editable} pending={pending} onToggle={onTogglePaid} />
+          <PlayerChip t={t} name={match.a.pair.b} editable={editable} pending={pending} onToggle={onTogglePaid} />
         </div>
         <div className="flex min-w-0 flex-col gap-1.5 pl-3.5">
-          <PlayerChip t={t} name={match.b.pair.a} />
-          <PlayerChip t={t} name={match.b.pair.b} />
+          <PlayerChip t={t} name={match.b.pair.a} editable={editable} pending={pending} onToggle={onTogglePaid} />
+          <PlayerChip t={t} name={match.b.pair.b} editable={editable} pending={pending} onToggle={onTogglePaid} />
         </div>
       </div>
     </div>
@@ -137,11 +211,17 @@ export function TournamentHistoryCard({
   tournament,
   matches,
   today,
+  editable = false,
+  kokTypes,
+  defaultPrice,
 }: {
   tournament: EnrichedTournament;
   /** Partai turnamen ini yang tampil di grup tanggal ini saja (sudah difilter di history-view). */
   matches: BracketMatch[];
   today: string;
+  editable?: boolean;
+  kokTypes?: KokType[];
+  defaultPrice?: number;
 }) {
   const t = tournament;
   const status = tournamentStatus(t, today);
@@ -149,6 +229,19 @@ export function TournamentHistoryCard({
   // Partai penentu (final/terakhir) turnamen secara keseluruhan — bukan cuma di grup tanggal
   // ini — biar juara & status lunas cuma nempel sekali walau partainya kepisah tanggal.
   const finalId = finalPlayedMatchId(t);
+
+  const canManageKok = editable && !!kokTypes && defaultPrice !== undefined;
+  const [pending, start] = useTransition();
+  const [openMatch, setOpenMatch] = useState<{ id: string; mode: "score" | "kok" } | null>(null);
+
+  const toggleFee = (name: string, next: boolean) => {
+    const i = feeIndex(t, name);
+    if (i < 0) return;
+    start(async () => {
+      const res = await safeAction(() => setFeePaidAction(t.id, i, next));
+      if (!res.ok) toast.error(res.error);
+    });
+  };
 
   // Satu partai = satu card, biar konsisten dengan riwayat game biasa (tak ditumpuk).
   return (
@@ -191,20 +284,52 @@ export function TournamentHistoryCard({
                 </div>
               ) : null}
 
-              <ScoreRows match={m} />
-              <MatchCourt t={t} match={m} />
+              <ScoreRows
+                match={m}
+                editable={canManageKok}
+                onOpen={() => setOpenMatch({ id: m.id, mode: "score" })}
+              />
+              <MatchCourt t={t} match={m} editable={editable} pending={pending} onTogglePaid={toggleFee} />
 
-              <div className="mt-2.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px]">
+              <div className="mt-2.5 flex flex-wrap items-center justify-between gap-x-3 gap-y-1 text-[11px]">
                 {m.koks.length > 0 ? (
                   <span className="inline-flex items-center gap-1 text-ink-soft">
                     <KIcon name="shuttle" className="size-3.5" /> {kokSummary(m)}
                   </span>
+                ) : (
+                  <span />
+                )}
+                {canManageKok ? (
+                  <button
+                    type="button"
+                    aria-label="Tambah kok partai ini"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      setOpenMatch({ id: m.id, mode: "kok" });
+                    }}
+                    className="grid size-8 shrink-0 place-items-center rounded-lg text-ink-faint transition hover:bg-court/10 hover:text-court active:scale-[0.98]"
+                  >
+                    <KIcon name="plus" className="size-4" />
+                  </button>
                 ) : null}
               </div>
             </div>
           </Link>
         );
       })}
+
+      {canManageKok ? (
+        <MatchDialog
+          tournament={t}
+          matchId={openMatch?.id ?? null}
+          initialMode={openMatch?.mode ?? "score"}
+          onClose={() => setOpenMatch(null)}
+          editable={editable}
+          kokTypes={kokTypes!}
+          defaultPrice={defaultPrice!}
+        />
+      ) : null}
     </>
   );
 }

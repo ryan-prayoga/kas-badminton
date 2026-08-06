@@ -84,6 +84,7 @@ export function MatchDialog({
   editable,
   kokTypes,
   defaultPrice,
+  initialMode = "score",
 }: {
   tournament: EnrichedTournament;
   /** Id partai yang dibuka; null = dialog tertutup. */
@@ -92,6 +93,8 @@ export function MatchDialog({
   editable: boolean;
   kokTypes: KokType[];
   defaultPrice: number;
+  /** "kok" = langsung buka form tambah kok (dari tombol + di kartu Riwayat). */
+  initialMode?: "score" | "kok";
 }) {
   const t = tournament;
   const [format, setFormat] = useState<ScoreFormat>(t.scoreFormat);
@@ -113,10 +116,12 @@ export function MatchDialog({
 
   // Isi form saat partai yang dibuka berganti — pola reset-saat-render (sama
   // seperti GameCard). Sengaja bukan efek: ketikan tidak boleh kereset tiap
-  // kali data turnamen ter-refresh, cuma saat pindah partai.
-  const [formFor, setFormFor] = useState<string | null>(matchId);
-  if (formFor !== matchId) {
-    setFormFor(matchId);
+  // kali data turnamen ter-refresh, cuma saat pindah partai. `initialMode` ikut
+  // jadi kunci reset biar buka ulang partai yang sama dgn mode beda (skor ↔ kok) tetap kepicu.
+  const resetKey = matchId ? `${matchId}:${initialMode}` : null;
+  const [formFor, setFormFor] = useState<string | null>(resetKey);
+  if (formFor !== resetKey) {
+    setFormFor(resetKey);
     const m = matchId ? t.matches.find((x) => x.id === matchId) : null;
     setFormat(m?.score?.format ?? t.scoreFormat);
     const next = emptyGames();
@@ -125,7 +130,7 @@ export function MatchDialog({
     });
     setGames(next);
     setPlayedDate(m?.score?.playedAt || defaultKokDate(t.date, t.endDate));
-    setAddingKok(false);
+    setAddingKok(editable && initialMode === "kok");
     setLines([newKokLine(active, defaultPrice)]);
     setKokDate(defaultKokDate(t.date, t.endDate));
   }

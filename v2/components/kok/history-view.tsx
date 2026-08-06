@@ -295,6 +295,9 @@ export function HistoryView({
                           tournament={e.tournament}
                           matches={e.matches}
                           today={today}
+                          editable={editable}
+                          kokTypes={kokTypes}
+                          defaultPrice={defaultPrice}
                         />
                       ))}
                       {grp.games.map((g) => (
