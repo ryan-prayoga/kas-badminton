@@ -70,6 +70,9 @@ function buildStatsShareText({
   players,
   stockLeft,
   debtPeople,
+  tourFeeTotal,
+  tourFeePaid,
+  tourFeeUnpaidCount,
 }: {
   periodName: string;
   totalGames: number;
@@ -83,6 +86,9 @@ function buildStatsShareText({
   players: PlayerStat[];
   stockLeft?: number;
   debtPeople?: number;
+  tourFeeTotal?: number;
+  tourFeePaid?: number;
+  tourFeeUnpaidCount?: number;
 }): string {
   const net = paid - expense;
   const nunggak = players.filter((p) => p.nunggak > 0);
@@ -102,6 +108,12 @@ function buildStatsShareText({
 
   if (totalTournaments > 0) {
     lines.push(`🏆 Turnamen: ${totalTournaments}`);
+  }
+
+  if (tourFeeTotal) {
+    lines.push(
+      `🎟️ Iuran turnamen: ${fmt(tourFeePaid ?? 0)} terkumpul${tourFeeUnpaidCount ? ` (${tourFeeUnpaidCount} orang belum bayar)` : " — semua lunas ✅"}`,
+    );
   }
 
   if (showKas) {
@@ -179,6 +191,9 @@ function buildStatsShareBlocks({
   debtPeople,
   typesWithStock,
   photoMap,
+  tourFeeTotal,
+  tourFeePaid,
+  tourFeeUnpaidCount,
 }: {
   periodName: string;
   totalGames: number;
@@ -194,6 +209,9 @@ function buildStatsShareBlocks({
   debtPeople?: number;
   typesWithStock?: number;
   photoMap?: PhotoMap;
+  tourFeeTotal?: number;
+  tourFeePaid?: number;
+  tourFeeUnpaidCount?: number;
 }): ShareCardBlock[] {
   const net = paid - expense;
   const nunggakCount = debtPeople ?? players.filter((p) => p.nunggak > 0).length;
@@ -249,6 +267,15 @@ function buildStatsShareBlocks({
       tone: "court",
       icon: "trophy",
       sub: "bagan tercatat",
+    });
+  }
+  if (tourFeeTotal) {
+    metricItems.push({
+      label: "Iuran Turnamen",
+      value: fmt(tourFeePaid ?? 0),
+      tone: tourFeeUnpaidCount ? "owe" : "paid",
+      icon: "trophy",
+      sub: tourFeeUnpaidCount ? `${tourFeeUnpaidCount} orang belum · dari ${fmt(tourFeeTotal)}` : "Semua lunas",
     });
   }
   if (stockLeft !== undefined) {
@@ -353,9 +380,17 @@ export function StatsView({
   // Kok turnamen dicatat sama seperti kok game: potong stok, ikut total terpakai.
   const tournamentKok = scopedTournaments.reduce((s, t) => s + t.cost.kokCount, 0);
   const totalKok = gameKok + tournamentKok;
+  // Kas cuma game + kok turnamen (kokPaid) — iuran patungan (feePaid) pool terpisah,
+  // jangan digabung ke saldo kas. Lihat kartu "Iuran Turnamen" di bawah.
   const paidIn =
     scoped.reduce((s, g) => s + g.summary.paidTotal, 0) +
-    scopedTournaments.reduce((s, t) => s + t.cost.feePaid + t.cost.kokPaid, 0);
+    scopedTournaments.reduce((s, t) => s + t.cost.kokPaid, 0);
+
+  // Turnamen yang masih berlangsung (belum finished) & punya iuran patungan.
+  const activeFeeTournaments = scopedTournaments.filter((t) => !t.finished && t.fee > 0);
+  const tourFeeTotal = activeFeeTournaments.reduce((s, t) => s + t.cost.feeTotal, 0);
+  const tourFeePaid = activeFeeTournaments.reduce((s, t) => s + t.cost.feePaid, 0);
+  const tourFeeUnpaidCount = activeFeeTournaments.reduce((s, t) => s + t.cost.unpaidCount, 0);
 
   const expenseIn = useMemo(() => {
     if (!kas) return 0;
@@ -460,6 +495,9 @@ export function StatsView({
       players,
       stockLeft,
       debtPeople,
+      tourFeeTotal,
+      tourFeePaid,
+      tourFeeUnpaidCount,
     };
     return {
       text: buildStatsShareText(args),
@@ -487,6 +525,9 @@ export function StatsView({
     debtPeople,
     typesWithStock,
     photoMap,
+    tourFeeTotal,
+    tourFeePaid,
+    tourFeeUnpaidCount,
   ]);
 
   return (
@@ -566,15 +607,6 @@ export function StatsView({
           value={String(totalKok)}
           sub={tournamentKok ? `${gameKok} main · ${tournamentKok} turnamen` : "total kok"}
         />
-        {scopedTournaments.length > 0 && (
-          <StatCard
-            icon="trophy"
-            iconClass="text-court"
-            label="Turnamen"
-            value={String(scopedTournaments.length)}
-            sub="bagan tercatat"
-          />
-        )}
         <StatCard
           icon="package"
           iconClass={stockLeft > 0 ? "text-paid" : "text-danger"}
@@ -597,6 +629,29 @@ export function StatsView({
               />
             );
           })()}
+        {scopedTournaments.length > 0 && (
+          <StatCard
+            icon="trophy"
+            iconClass="text-court"
+            label="Turnamen"
+            value={String(scopedTournaments.length)}
+            sub="bagan tercatat"
+          />
+        )}
+        {activeFeeTournaments.length > 0 && (
+          <StatCard
+            icon="trophy"
+            iconClass="text-owe"
+            label="Iuran Turnamen"
+            value={fmt(tourFeePaid)}
+            valueClass="text-owe"
+            sub={
+              tourFeeUnpaidCount
+                ? `${tourFeeUnpaidCount} orang belum · dari ${fmt(tourFeeTotal)}`
+                : "Semua lunas"
+            }
+          />
+        )}
       </div>
 
       <div className="rounded-xl2 border border-line bg-surface p-4 shadow-card">
