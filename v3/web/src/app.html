@@ -4,6 +4,29 @@
 		<meta charset="utf-8" />
 		<meta name="viewport" content="width=device-width, initial-scale=1" />
 		<meta name="text-scale" content="scale" />
+		<link rel="preconnect" href="https://fonts.googleapis.com" />
+		<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+		<link
+			href="https://fonts.googleapis.com/css2?family=Archivo:wght@600;700;800&family=Hanken+Grotesk:wght@400;500;600;700&display=swap"
+			rel="stylesheet"
+		/>
+		<script>
+			// Set tema sebelum lukis pertama — hindari kedip (FOUC). Sumber kebenaran
+			// sama dengan src/lib/theme.ts, disalin di sini karena harus jalan
+			// sebelum modul mana pun dimuat.
+			(function () {
+				try {
+					var saved = localStorage.getItem('kok-theme');
+					var theme =
+						saved === 'light' || saved === 'dark'
+							? saved
+							: window.matchMedia('(prefers-color-scheme: dark)').matches
+								? 'dark'
+								: 'light';
+					document.documentElement.setAttribute('data-theme', theme);
+				} catch (e) {}
+			})();
+		</script>
 		%sveltekit.head%
 	</head>
 	<body data-sveltekit-preload-data="hover">
