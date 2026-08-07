@@ -34,3 +34,15 @@ RETURNING *;
 UPDATE memberships SET auto_deduct = $3
 WHERE club_id = $1 AND user_id = $2 AND left_at IS NULL
 RETURNING *;
+
+-- name: ListMembershipsWithClubByUser :many
+-- GET /me (API.md §1) — dipanggil lewat store.WithUser (migrasi 00021),
+-- BUKAN WithClub: policy memberships_tenant_read mengizinkan baca lintas
+-- klub selama user_id = current_user_id(). clubs sendiri tidak ber-RLS
+-- (00016), jadi JOIN-nya aman dipanggil tanpa app.club_id sama sekali.
+SELECT m.club_id, m.role, m.role_expires_at, m.auto_deduct,
+       c.slug AS club_slug, c.name AS club_name
+FROM memberships m
+JOIN clubs c ON c.id = m.club_id
+WHERE m.user_id = $1 AND m.left_at IS NULL AND c.deleted_at IS NULL
+ORDER BY m.joined_at;

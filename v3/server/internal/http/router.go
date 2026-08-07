@@ -47,6 +47,7 @@ func Mount(r chi.Router, s *store.Store, bus *realtime.Bus, notifier notify.Noti
 			r.Use(RequireAuth(s))
 
 			r.Get("/events", handleEvents(s, bus))
+			r.Get("/me", handleGetMe(s))
 
 			// Tanpa {clubId} — superadmin TIDAK boleh baca isi klub (§6.5).
 			r.Route("/admin", func(r chi.Router) {
@@ -94,6 +95,7 @@ func Mount(r chi.Router, s *store.Store, bus *realtime.Bus, notifier notify.Noti
 
 					r.Get("/", handleGetClub(s))
 					r.Get("/members", handleListMembers(s))
+					r.Get("/me/bill", handleGetMyBill(s))
 
 					r.Group(func(r chi.Router) {
 						r.Use(RequireIdempotency(s))
@@ -109,6 +111,9 @@ func Mount(r chi.Router, s *store.Store, bus *realtime.Bus, notifier notify.Noti
 						// Diri sendiri ATAU admin — bukan RequirePerm murni,
 						// dicek manual di handler (clubs_members.go).
 						r.Patch("/members/{userId}/auto-deduct", handleUpdateAutoDeduct(s))
+
+						r.With(RequirePerm(perm.ManageMoney)).
+							Post("/bills/mark-paid", handleMarkBillsPaid(s))
 					})
 
 					r.Route("/links", func(r chi.Router) {

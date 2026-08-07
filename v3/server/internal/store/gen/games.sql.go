@@ -393,6 +393,96 @@ func (q *Queries) ListGamesByClub(ctx context.Context, arg ListGamesByClubParams
 	return items, nil
 }
 
+const listUnpaidGamePlayersByPayer = `-- name: ListUnpaidGamePlayersByPayer :many
+SELECT gp.id, gp.game_id, gp.amount, gp.disputed_at, g.played_on
+FROM game_players gp
+JOIN games g ON g.id = gp.game_id
+WHERE gp.club_id = $1 AND gp.payer_id = $2 AND gp.paid_at IS NULL AND g.deleted_at IS NULL
+ORDER BY g.played_on DESC, gp.id DESC
+`
+
+type ListUnpaidGamePlayersByPayerParams struct {
+	ClubID  uuid.UUID `json:"club_id"`
+	PayerID uuid.UUID `json:"payer_id"`
+}
+
+type ListUnpaidGamePlayersByPayerRow struct {
+	ID         uuid.UUID          `json:"id"`
+	GameID     uuid.UUID          `json:"game_id"`
+	Amount     int64              `json:"amount"`
+	DisputedAt pgtype.Timestamptz `json:"disputed_at"`
+	PlayedOn   pgtype.Date        `json:"played_on"`
+}
+
+// Baris-baris "tagihanku" (API.md §4 GET .../me/bill `items`), pasangan
+// dari SumUnpaidByPayer di atas — ikut nampilin yang disputed (status beda
+// di Go), tapi disputed TETAP TIDAK ikut total_owed (itu SumUnpaidByPayer,
+// WHERE-nya beda: AND disputed_at IS NULL).
+func (q *Queries) ListUnpaidGamePlayersByPayer(ctx context.Context, arg ListUnpaidGamePlayersByPayerParams) ([]ListUnpaidGamePlayersByPayerRow, error) {
+	rows, err := q.db.Query(ctx, listUnpaidGamePlayersByPayer, arg.ClubID, arg.PayerID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListUnpaidGamePlayersByPayerRow{}
+	for rows.Next() {
+		var i ListUnpaidGamePlayersByPayerRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.GameID,
+			&i.Amount,
+			&i.DisputedAt,
+			&i.PlayedOn,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const markGamePlayersPaid = `-- name: MarkGamePlayersPaid :many
+UPDATE game_players
+SET paid_at = now()
+WHERE club_id = $1 AND id = ANY($2::uuid[])
+  AND paid_at IS NULL AND disputed_at IS NULL
+RETURNING id
+`
+
+type MarkGamePlayersPaidParams struct {
+	ClubID uuid.UUID   `json:"club_id"`
+	Ids    []uuid.UUID `json:"ids"`
+}
+
+// Aksi massal "tandai lunas" (API.md §0 "boleh berhasil sebagian" + §4
+// POST bills/mark-paid) — dipanggil BENDAHARA (perm.ManageMoney) yang
+// mencatat uang cash diterima dari anggota lain, BUKAN pemain menandai
+// tagihan sendiri (itu jalur payments/claim + verifikasi, F6). Filter
+// club_id di WHERE (dari WithClub) + id di daftar yang diminta; disputed
+// sengaja tidak ikut kena — harus diselesaikan dulu sebelum ditandai lunas.
+func (q *Queries) MarkGamePlayersPaid(ctx context.Context, arg MarkGamePlayersPaidParams) ([]uuid.UUID, error) {
+	rows, err := q.db.Query(ctx, markGamePlayersPaid, arg.ClubID, arg.Ids)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []uuid.UUID{}
+	for rows.Next() {
+		var id uuid.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const softDeleteGame = `-- name: SoftDeleteGame :one
 UPDATE games
 SET deleted_at = now(), updated_at = now(), version = version + 1
@@ -444,6 +534,28 @@ func (q *Queries) SumUnpaidByPayer(ctx context.Context, arg SumUnpaidByPayerPara
 	var total int64
 	err := row.Scan(&total)
 	return total, err
+}
+
+const sumWalletBalance = `-- name: SumWalletBalance :one
+SELECT COALESCE(SUM(amount), 0)::bigint AS balance
+FROM wallet_entries
+WHERE club_id = $1 AND user_id = $2
+`
+
+type SumWalletBalanceParams struct {
+	ClubID uuid.UUID `json:"club_id"`
+	UserID uuid.UUID `json:"user_id"`
+}
+
+// Saldo dompet = SUM ledger append-only (DDL.sql "Saldo tidak boleh
+// minus", ditegakkan trigger DB, bukan diasumsikan di sini). Tulis
+// ledgernya sendiri (deposit, potong otomatis) baru dibangun F6 — F5
+// cuma baca, selalu 0 sampai F6 nambah baris pertama.
+func (q *Queries) SumWalletBalance(ctx context.Context, arg SumWalletBalanceParams) (int64, error) {
+	row := q.db.QueryRow(ctx, sumWalletBalance, arg.ClubID, arg.UserID)
+	var balance int64
+	err := row.Scan(&balance)
+	return balance, err
 }
 
 const updateGame = `-- name: UpdateGame :one

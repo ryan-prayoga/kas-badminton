@@ -68,3 +68,36 @@ RETURNING *;
 SELECT COALESCE(SUM(amount), 0)::bigint AS total
 FROM game_players
 WHERE club_id = $1 AND payer_id = $2 AND paid_at IS NULL AND disputed_at IS NULL;
+
+-- name: ListUnpaidGamePlayersByPayer :many
+-- Baris-baris "tagihanku" (API.md §4 GET .../me/bill `items`), pasangan
+-- dari SumUnpaidByPayer di atas — ikut nampilin yang disputed (status beda
+-- di Go), tapi disputed TETAP TIDAK ikut total_owed (itu SumUnpaidByPayer,
+-- WHERE-nya beda: AND disputed_at IS NULL).
+SELECT gp.id, gp.game_id, gp.amount, gp.disputed_at, g.played_on
+FROM game_players gp
+JOIN games g ON g.id = gp.game_id
+WHERE gp.club_id = $1 AND gp.payer_id = $2 AND gp.paid_at IS NULL AND g.deleted_at IS NULL
+ORDER BY g.played_on DESC, gp.id DESC;
+
+-- name: MarkGamePlayersPaid :many
+-- Aksi massal "tandai lunas" (API.md §0 "boleh berhasil sebagian" + §4
+-- POST bills/mark-paid) — dipanggil BENDAHARA (perm.ManageMoney) yang
+-- mencatat uang cash diterima dari anggota lain, BUKAN pemain menandai
+-- tagihan sendiri (itu jalur payments/claim + verifikasi, F6). Filter
+-- club_id di WHERE (dari WithClub) + id di daftar yang diminta; disputed
+-- sengaja tidak ikut kena — harus diselesaikan dulu sebelum ditandai lunas.
+UPDATE game_players
+SET paid_at = now()
+WHERE club_id = $1 AND id = ANY(sqlc.arg(ids)::uuid[])
+  AND paid_at IS NULL AND disputed_at IS NULL
+RETURNING id;
+
+-- name: SumWalletBalance :one
+-- Saldo dompet = SUM ledger append-only (DDL.sql "Saldo tidak boleh
+-- minus", ditegakkan trigger DB, bukan diasumsikan di sini). Tulis
+-- ledgernya sendiri (deposit, potong otomatis) baru dibangun F6 — F5
+-- cuma baca, selalu 0 sampai F6 nambah baris pertama.
+SELECT COALESCE(SUM(amount), 0)::bigint AS balance
+FROM wallet_entries
+WHERE club_id = $1 AND user_id = $2;

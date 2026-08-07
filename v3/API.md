@@ -248,17 +248,26 @@ GET /clubs/{clubId}/me/bill
     "wallet_balance": 12000,
     "auto_deduct": true,
     "items": [
-      { "kind": "game", "game_id": "...", "amount": 15000, "played_on": "2026-08-08",
-        "status": "unpaid" },
-      { "kind": "game", "game_id": "...", "amount": 16000, "played_on": "2026-08-06",
-        "status": "pending_review", "claimed_at": "..." }
+      { "kind": "game", "id": "...", "game_id": "...", "amount": 15000,
+        "played_on": "2026-08-08", "status": "unpaid" },
+      { "kind": "game", "id": "...", "game_id": "...", "amount": 16000,
+        "played_on": "2026-08-06", "status": "pending_review", "claimed_at": "..." }
     ]
   }
 ```
 
+`id` = id baris tagihan itu sendiri (`game_players.id` buat `kind: "game"`) —
+inilah yang dikirim balik ke `item_ids` di `POST bills/mark-paid` di bawah,
+BUKAN `game_id`: satu game bisa punya beberapa baris tagihan (pemain
+berbeda, atau satu penanggung menanggung beberapa pemain di game yang
+sama), jadi `game_id` sendirian tidak cukup menunjuk baris yang mana.
+`game_id` tetap ikut buat tautan ke detail main itu.
+
 `status` di tiap item: `unpaid` | `pending_review` (§9.3) | `disputed` (§9.4).
 Item `disputed` tidak ikut `total_owed`. Ini yang membuat status "menunggu
 dicek bendahara" jujur di UI, bukan angka yang diam-diam tidak berubah.
+`pending_review` baru terisi mulai F6 (payments/claim + verifikasi) — F5
+cuma menghasilkan `unpaid`/`disputed`.
 
 **Bendahara**
 

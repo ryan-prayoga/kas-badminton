@@ -150,10 +150,27 @@ type Querier interface {
 	// sqlc.narg supaya q kosong ("") berarti "semua anggota", bukan filter yang
 	// tak pernah cocok.
 	ListMembers(ctx context.Context, arg ListMembersParams) ([]ListMembersRow, error)
+	// GET /me (API.md §1) — dipanggil lewat store.WithUser (migrasi 00021),
+	// BUKAN WithClub: policy memberships_tenant_read mengizinkan baca lintas
+	// klub selama user_id = current_user_id(). clubs sendiri tidak ber-RLS
+	// (00016), jadi JOIN-nya aman dipanggil tanpa app.club_id sama sekali.
+	ListMembershipsWithClubByUser(ctx context.Context, userID uuid.UUID) ([]ListMembershipsWithClubByUserRow, error)
 	ListPendingClaimRequests(ctx context.Context, clubID uuid.UUID) ([]ClaimRequest, error)
 	// Daftar perangkat aktif (PLAN.md §7.2.2) — terbaru dulu.
 	ListSessionsByUser(ctx context.Context, userID uuid.UUID) ([]Session, error)
+	// Baris-baris "tagihanku" (API.md §4 GET .../me/bill `items`), pasangan
+	// dari SumUnpaidByPayer di atas — ikut nampilin yang disputed (status beda
+	// di Go), tapi disputed TETAP TIDAK ikut total_owed (itu SumUnpaidByPayer,
+	// WHERE-nya beda: AND disputed_at IS NULL).
+	ListUnpaidGamePlayersByPayer(ctx context.Context, arg ListUnpaidGamePlayersByPayerParams) ([]ListUnpaidGamePlayersByPayerRow, error)
 	ListWebauthnCredentialsByUser(ctx context.Context, userID uuid.UUID) ([]WebauthnCredential, error)
+	// Aksi massal "tandai lunas" (API.md §0 "boleh berhasil sebagian" + §4
+	// POST bills/mark-paid) — dipanggil BENDAHARA (perm.ManageMoney) yang
+	// mencatat uang cash diterima dari anggota lain, BUKAN pemain menandai
+	// tagihan sendiri (itu jalur payments/claim + verifikasi, F6). Filter
+	// club_id di WHERE (dari WithClub) + id di daftar yang diminta; disputed
+	// sengaja tidak ikut kena — harus diselesaikan dulu sebelum ditandai lunas.
+	MarkGamePlayersPaid(ctx context.Context, arg MarkGamePlayersPaidParams) ([]uuid.UUID, error)
 	MarkWaMessageFailed(ctx context.Context, arg MarkWaMessageFailedParams) error
 	MarkWaMessageSent(ctx context.Context, id uuid.UUID) error
 	// Dipanggil internal/realtime.Bus.Publish di DALAM transaksi tenant yang
@@ -184,6 +201,11 @@ type Querier interface {
 	// Query "tagihanku" — satu index scan lewat game_players_unpaid_idx
 	// (indeks paling penting di seluruh skema, DDL.sql baris 371-379).
 	SumUnpaidByPayer(ctx context.Context, arg SumUnpaidByPayerParams) (int64, error)
+	// Saldo dompet = SUM ledger append-only (DDL.sql "Saldo tidak boleh
+	// minus", ditegakkan trigger DB, bukan diasumsikan di sini). Tulis
+	// ledgernya sendiri (deposit, potong otomatis) baru dibangun F6 — F5
+	// cuma baca, selalu 0 sampai F6 nambah baris pertama.
+	SumWalletBalance(ctx context.Context, arg SumWalletBalanceParams) (int64, error)
 	SuspendClub(ctx context.Context, id uuid.UUID) (Club, error)
 	TouchSession(ctx context.Context, id uuid.UUID) error
 	// Replace penuh, sama pola UpdateClubSettings (clubs_settings.sql) — merge

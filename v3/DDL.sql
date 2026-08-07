@@ -752,6 +752,31 @@ GRANT SELECT, INSERT, UPDATE, DELETE ON
   TO kok_app;
 GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO kok_app;
 
+-- Pengecualian buat memberships (F5, migrasi 00021): GET /me (§API.md 1)
+-- butuh baca "klub apa saja yang saya ikuti" LINTAS klub tanpa app.club_id
+-- diset. Policy generik di atas diganti (bukan ditambah) khusus tabel ini
+-- jadi dua: tulis (FOR ALL) tetap murni club_id = current_club() —
+-- INSERT/UPDATE/DELETE tidak berubah; baca (FOR SELECT) ditambah jalur
+-- user_id = current_user_id(), permissive policies di-OR jadi
+-- SELECT-nya efektif (club_id = current_club() OR user_id = ini). User
+-- cuma bisa lihat baris miliknya sendiri lintas klub, tidak pernah baris
+-- orang lain di klub yang bukan dia anggota, dan tidak bisa menulis
+-- (join/leave/ubah peran) tanpa app.club_id yang benar seperti sebelumnya.
+CREATE OR REPLACE FUNCTION current_user_id() RETURNS uuid AS $$
+  SELECT NULLIF(current_setting('app.user_id', true), '')::uuid;
+$$ LANGUAGE sql STABLE;
+
+DROP POLICY memberships_tenant ON memberships;
+
+CREATE POLICY memberships_tenant_write ON memberships
+  FOR ALL
+  USING (club_id = current_club())
+  WITH CHECK (club_id = current_club());
+
+CREATE POLICY memberships_tenant_read ON memberships
+  FOR SELECT
+  USING (club_id = current_club() OR user_id = current_user_id());
+
 COMMIT;
 
 -- ============================================================================

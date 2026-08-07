@@ -138,6 +138,55 @@ func (q *Queries) ListMembers(ctx context.Context, arg ListMembersParams) ([]Lis
 	return items, nil
 }
 
+const listMembershipsWithClubByUser = `-- name: ListMembershipsWithClubByUser :many
+SELECT m.club_id, m.role, m.role_expires_at, m.auto_deduct,
+       c.slug AS club_slug, c.name AS club_name
+FROM memberships m
+JOIN clubs c ON c.id = m.club_id
+WHERE m.user_id = $1 AND m.left_at IS NULL AND c.deleted_at IS NULL
+ORDER BY m.joined_at
+`
+
+type ListMembershipsWithClubByUserRow struct {
+	ClubID        uuid.UUID          `json:"club_id"`
+	Role          ClubRole           `json:"role"`
+	RoleExpiresAt pgtype.Timestamptz `json:"role_expires_at"`
+	AutoDeduct    bool               `json:"auto_deduct"`
+	ClubSlug      string             `json:"club_slug"`
+	ClubName      string             `json:"club_name"`
+}
+
+// GET /me (API.md §1) — dipanggil lewat store.WithUser (migrasi 00021),
+// BUKAN WithClub: policy memberships_tenant_read mengizinkan baca lintas
+// klub selama user_id = current_user_id(). clubs sendiri tidak ber-RLS
+// (00016), jadi JOIN-nya aman dipanggil tanpa app.club_id sama sekali.
+func (q *Queries) ListMembershipsWithClubByUser(ctx context.Context, userID uuid.UUID) ([]ListMembershipsWithClubByUserRow, error) {
+	rows, err := q.db.Query(ctx, listMembershipsWithClubByUser, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListMembershipsWithClubByUserRow{}
+	for rows.Next() {
+		var i ListMembershipsWithClubByUserRow
+		if err := rows.Scan(
+			&i.ClubID,
+			&i.Role,
+			&i.RoleExpiresAt,
+			&i.AutoDeduct,
+			&i.ClubSlug,
+			&i.ClubName,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const updateMembershipAutoDeduct = `-- name: UpdateMembershipAutoDeduct :one
 UPDATE memberships SET auto_deduct = $3
 WHERE club_id = $1 AND user_id = $2 AND left_at IS NULL
