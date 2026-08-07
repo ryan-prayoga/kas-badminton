@@ -102,6 +102,10 @@ pemain, format main yang tidak lagi mengunci di 4 orang, dan desain ulang total.
 | Target skala | **~10 klub, ~300 orang** — tanpa keputusan yang mengunci di skala itu |
 | Offline | **Baca offline + antrean tulis** |
 | Arah visual | **Sport editorial** — hierarki ekstrem, angka sebagai elemen terbesar |
+| Gerak | Beranggaran, maksimum 300ms, hanya `transform`/`opacity`. **Tanpa `backdrop-blur`** |
+| Panduan awam | **driver.js**, dimuat malas, sekali per panduan, selalu bisa dilewati |
+| Pemain tamu | Boleh dicatat tanpa akun — jadi anggota `unclaimed` yang bisa diklaim nanti |
+| Salah catat | **Batalkan cepat** 8 detik untuk pencatat; **sanggahan** untuk yang dicatat |
 | Layar utama | **Tagihanku dulu** |
 | QRIS | Statis sebagai default; dinamis jadi jalur cepat opsional |
 | Rekening bank | Ditunda, tidak masuk lingkup sekarang |
@@ -291,6 +295,17 @@ saat perannya berubah.
 Profil, pemilih klub, dan pengaturan ada di avatar pojok header, bukan memakan
 slot tab.
 
+**Pencarian ada di mana pun ada daftar orang.** Klub 300 anggota tidak bisa
+disisir dengan menggulir. v2 punya kotak cari di Rekap saja; di v3 pola yang sama
+dipakai di daftar anggota, daftar tagihan, riwayat main, dan pemilih pemain saat
+mencatat — satu komponen, bukan lima ketikan berbeda. Pencarian mencakup nama
+tampilan, username, dan alias lama.
+
+**Layar pertama saat belum punya klub.** Orang bisa sampai ke app tanpa klub —
+mendaftar duluan, atau klaimnya belum disetujui. Layar itu tidak boleh kosong:
+tampilkan dua jalan yang jelas, **"Gabung klub"** (masukkan kode atau pindai QR)
+dan **"Bikin klub"**, plus status permintaan yang sedang menunggu kalau ada.
+
 ### 5.5 Beranda
 
 Urutan dari atas:
@@ -335,7 +350,118 @@ keluhan pertama setelah rilis:
   Daftar panjang jadi tabel padat dengan angka rata kanan. Bagan turnamen tampil
   utuh tanpa gulir mendatar.
 
-### 5.7 Fitur v2 yang wajib ikut pindah
+### 5.7 Gerak & kehalusan
+
+"Smooth" adalah alasan utama v3 ada, jadi ia butuh spesifikasi, bukan selera.
+
+**Kesalahpahaman yang harus dihindari sejak awal: halus bukan berarti banyak
+animasi.** Sebagian besar rasa halus datang dari hal yang *tidak* dilakukan —
+tidak ada layout yang bergeser, tidak ada frame yang jatuh, tidak ada penantian
+yang terlihat. Animasi menambah poles di atas fondasi itu; ia tidak bisa
+menggantikannya. App yang penuh animasi di atas render yang berat justru terasa
+lebih parah daripada app polos yang cepat.
+
+**Anggaran gerak**
+
+| Jenis | Durasi | Easing |
+|---|---|---|
+| Umpan balik sentuh (tekan tombol) | 80–120ms | `ease-out` |
+| Perubahan keadaan (lunas ↔ belum, centang) | 150–200ms | `ease-out` |
+| Sheet, dialog, panel masuk/keluar | 220–280ms | `cubic-bezier(0.22, 1, 0.36, 1)` |
+| Perpindahan halaman | 200–300ms | sama |
+| Penataan ulang daftar | 200ms | `ease-in-out` |
+
+Tidak ada animasi yang melebihi **300ms**. Di atas itu berhenti terasa responsif
+dan mulai terasa seperti menunggu.
+
+**Hanya properti yang murah.** Animasi terbatas pada `transform` dan `opacity` —
+keduanya ditangani compositor tanpa memicu layout ulang. Jangan pernah
+menganimasikan `width`, `height`, `top`, `left`, `margin`, atau `padding`. Untuk
+efek buka-tutup memakai trik `grid-template-rows: 0fr → 1fr` seperti v2
+(`.acc-panel` di `v2/app/globals.css`) — itu pengecualian yang sah karena murah
+dan hasilnya mulus.
+
+**Yang harus dihindari karena membuat patah-patah**
+
+- **`backdrop-filter` / `backdrop-blur`.** v2 memakainya di bottom nav
+  (`backdrop-blur-xl` di [`v2/components/kok/bottom-nav.tsx`](../v2/components/kok/bottom-nav.tsx)),
+  dan itu salah satu sumber jank paling terkenal di Safari mobile — ia memaksa
+  komposisi ulang tiap frame saat konten di belakangnya bergulir. v3 memakai
+  latar solid atau semi-transparan tanpa blur.
+- **Bayangan besar dan tersebar** pada elemen yang bergerak atau bergulir.
+- **Animasi masuk pada setiap item daftar** saat halaman dibuka. v2 memasang
+  `animate-rise` di hampir semua kartu; dengan 50 baris itu jadi gelombang yang
+  membuat halaman terasa lambat justru saat harus terasa cepat. Di v3, animasi
+  masuk hanya untuk item yang **benar-benar baru datang** (mis. lewat realtime),
+  bukan untuk isi yang memang sudah ada.
+- **Spinner untuk aksi lokal.** Menandai lunas tidak boleh memunculkan pemuat —
+  ia berubah seketika (§4.2). Spinner hanya untuk yang benar-benar menunggu
+  jaringan dan tidak bisa dioptimistiskan.
+
+**Yang lebih penting daripada animasi**
+
+- **Nol pergeseran tata letak.** Ruang untuk gambar, angka, dan badge dipesan di
+  muka. Angka memakai figur tabular supaya tidak melompat saat nilainya berubah.
+- **Daftar panjang** memakai `content-visibility: auto` dengan
+  `contain-intrinsic-size`, dan virtualisasi kalau melewati beberapa ratus baris.
+- **Gulir tidak boleh memicu render ulang.** Store yang berlangganan harus
+  berbutir halus — satu baris berubah, satu baris yang dirender.
+- **Kerja berat menjauh dari main thread.** Render kartu share PNG dan kompresi
+  foto lewat Web Worker, bukan di jalur interaksi.
+
+**View Transitions** dipakai untuk perpindahan tema dan perpindahan
+daftar → detail, dengan syarat degradasi mulus di browser yang belum
+mendukungnya. v2 sudah memakainya untuk tema dan hasilnya bagus — ide itu
+dipertahankan, implementasinya ditulis ulang.
+
+**Transisi bawaan Svelte** (`transition:`, `animate:flip`) sudah cukup untuk
+hampir semua kebutuhan. Jangan menambah pustaka animasi.
+
+**`prefers-reduced-motion` dihormati sungguhan** — bukan sekadar mempercepat
+durasi, tapi mengganti gerak dengan pemudaran sederhana atau tanpa gerak sama
+sekali. Sebagian orang merasa mual karena gerak parallax dan skala; itu bukan
+preferensi gaya.
+
+**Diukur, bukan dirasakan.** Sebelum F5 ditutup: rekam profil gulir di HP
+kelas menengah asli (bukan simulator desktop), pastikan tidak ada frame di atas
+16ms saat menggulir daftar main sepanjang satu bulan.
+
+### 5.8 Panduan di dalam app
+
+Untuk pengguna awam, sebagian alur tidak bisa dijelaskan lewat tata letak saja —
+terutama yang jarang dilakukan dan sulit ditebak akibatnya. Di situ dipakai
+**[driver.js](https://driverjs.com)**: pustaka kecil (~5KB gzip) yang menyorot
+elemen dan menempelkan penjelasan berurutan.
+
+**Dipakai untuk:**
+
+- **Perkenalan pertama** setelah gabung klub — di mana tagihanku, di mana
+  mencatat main, di mana bertanya.
+- **Memasang app ke Home Screen** — langkah yang mustahil ditebak sendiri di iOS,
+  dan jadi syarat notifikasi bisa jalan (§10.2).
+- **Menjelaskan potong-otomatis deposit** saat pertama kali ada saldo, sebelum
+  ada uang yang berkurang tanpa diminta.
+- **Pengurus baru** — sekali saat seseorang pertama kali diberi peran bendahara
+  atau pencatat, menunjukkan apa yang kini bisa dilakukannya.
+
+**Aturan yang menjaga panduan tetap menolong, bukan mengganggu:**
+
+- **Dimuat malas.** Tidak ikut shell — diambil hanya saat panduannya benar-benar
+  dijalankan, supaya anggaran 80KB tidak terganggu.
+- **Sekali seumur hidup per panduan**, disimpan di server (bukan `localStorage`)
+  supaya ganti HP tidak mengulang dari awal.
+- **Selalu bisa dilewati**, dan bisa dipanggil ulang kapan saja dari menu Bantuan.
+- **Tidak pernah muncul otomatis di tengah pekerjaan.** Panduan datang di awal
+  sesi atau saat pengguna menekan tanda tanya — tidak menyela orang yang sedang
+  mencatat main.
+- **Bukan penambal desain yang buruk.** Kalau sebuah layar butuh panduan supaya
+  bisa dipakai, layarnya yang salah. Panduan hanya untuk hal yang jarang
+  dilakukan atau berkonsekuensi, bukan untuk menjelaskan tombol yang seharusnya
+  jelas sendiri (§5.2 nomor 1).
+- **Hormati `prefers-reduced-motion`** dan pastikan sorotannya bisa ditelusuri
+  keyboard. Overlay yang menjebak fokus adalah masalah aksesibilitas yang nyata.
+
+### 5.9 Fitur v2 yang wajib ikut pindah
 
 Fungsinya ikut, tampilannya dirancang ulang. Ditulis di sini supaya tidak hilang
 saat rewrite:
@@ -555,6 +681,17 @@ anggota klub, bukan cuma pengurus.
 Kalau seluruh klubnya tidak punya admin yang bisa dihubungi, superadmin bisa
 melakukannya — tapi itu jalur luar biasa yang juga tercatat.
 
+### 7.2.2 Daftar perangkat
+
+`sessions` menyimpan `device_label`, jadi tampilkan gunanya: satu layar berisi
+perangkat yang sedang masuk (label, terakhir aktif, lokasi kasar dari IP) dengan
+tombol **keluarkan** per baris dan **keluarkan semua kecuali ini**.
+
+Ini bukan pelengkap. Sesi berumur 90 hari — HP yang hilang, dijual, atau dipinjam
+adalah cara paling mungkin orang lain masuk ke akun seseorang, dan tanpa layar ini
+tidak ada cara menutupnya selain menghubungi admin. Mengeluarkan perangkat juga
+mencabut passkey yang terdaftar di situ.
+
 ### 7.3 Menempelkan nama lama v2 ke akun
 
 Migrasi membuat akun **bayangan** (`status = unclaimed`) untuk tiap nama di v2 —
@@ -636,6 +773,33 @@ satu lapangan.
 **UI catat main:** default ganda 4 orang (satu tap, secepat v2), dengan pilihan
 mengubah format. Migrasi mengisi semua game lama sebagai ganda 4 orang.
 
+### 8.1 Pemain tamu — orang yang belum (atau tidak akan) punya akun
+
+v2 memakai nama sebagai teks bebas, jadi siapa pun bisa dicatat. v3 memakai
+`user_id`, dan itu **tidak boleh** berarti setiap orang wajib punya akun sebelum
+bisa ikut main. Kenyataannya klub sering kedatangan teman yang main sekali lalu
+tidak pernah kembali; memaksanya mendaftar dan verifikasi WA hanya untuk dicatat
+sekali akan membunuh kecepatan mencatat — dan mencatat yang lambat berarti tidak
+dicatat sama sekali.
+
+**Jalannya lewat akun bayangan yang sudah ada** (§7.3): pencatat mengetik nama
+apa saja; kalau tidak cocok dengan anggota mana pun, sistem membuat anggota
+berstatus `unclaimed` di klub itu. Orang itu langsung bisa ditagih, punya
+riwayat, dan muncul di rekap — persis seperti v2. Kalau suatu hari dia mau
+bergabung, dia tinggal mengklaim namanya lewat QR dan seluruh riwayatnya
+menempel.
+
+Konsekuensi yang harus disadari:
+
+- **Kuota anggota menghitung akun bayangan juga.** Klub yang sering kedatangan
+  tamu akan menumpuk nama. Perlu cara menggabungkan atau merapikan nama di panel
+  anggota.
+- **Nama tamu ikut tampil di halaman publik.** Itu alasan `noindex` di §12 bukan
+  formalitas.
+- Pencatat harus dibantu supaya tidak membuat duplikat karena salah ketik —
+  autocomplete wajib memunculkan nama mirip lebih dulu sebelum menawarkan
+  "buat baru".
+
 ---
 
 ## 9. Uang
@@ -715,7 +879,30 @@ Klaim yang menganggur lebih dari **3 hari** memicu pengingat ke bendahara dan
 verifikator. Beban menunggu harus jatuh ke pengurus, bukan ke orang yang sudah
 membayar.
 
-### 9.4 QRIS
+### 9.4 Salah catat: batalkan cepat dan sanggahan
+
+Dua jalur berbeda untuk dua masalah berbeda. Keduanya wajib ada — ini app yang
+menambah tagihan ke orang lain, dan orang harus punya jalan keluar saat keliru.
+
+**Batalkan cepat (untuk yang mencatat).** Aksi keliru paling sering terjadi
+sedetik setelah dilakukan: salah tap nama, salah tandai lunas, salah hapus. Tiap
+aksi seperti itu memunculkan toast dengan tombol **Batalkan** yang hidup ~8 detik.
+Selama jendela itu, aksinya benar-benar dibatalkan, bukan dibuat aksi
+berlawanan — jadi jurnal audit tidak penuh oleh pasangan "tandai lunas /
+batal lunas" yang membingungkan. Lewat jendela itu, koreksi ditempuh lewat edit
+biasa dan tercatat sebagaimana mestinya. v2 sama sekali tidak punya ini: salah
+tap berarti mencari sendiri cara mengembalikannya.
+
+**Sanggahan (untuk yang dicatat).** Notifikasi "kamu dicatat ikut main" membawa
+tombol **"Saya tidak ikut"**. Menekannya menandai baris itu disengketakan,
+memberi tahu pencatat dan bendahara, dan **menahan tagihannya** sampai
+diselesaikan — tanpa menghapus apa pun sepihak. Yang mencatat bisa memperbaiki
+atau menjelaskan.
+
+Tanpa ini, satu-satunya cara membantah adalah ribut di grup WhatsApp, dan
+justru itu yang app ini seharusnya kurangi.
+
+### 9.5 QRIS
 
 v2 mengubah QRIS statis merchant jadi dinamis lewat `@prasetya/qris`. Kadang
 berhasil, kadang ditolak atau kedaluwarsa saat dipindai — wajar, karena sebagian
@@ -745,6 +932,7 @@ v3 tidak menggantungkan pembayaran pada jalur yang tidak selalu berhasil:
 |---|---|---|
 | OTP login / perangkat baru | **WA** | Belum ada akun, belum bisa berlangganan push |
 | Undangan klaim akun | **WA** | Pemain belum punya app |
+| **Kamu dicatat ikut main** | **Push** | Uang orang bertambah tanpa dia melakukan apa-apa — dia berhak tahu seketika |
 | Tagihan baru · deposit berubah · pembayaran diverifikasi · undangan turnamen · jadwal partai · ringkasan bulanan · permintaan klaim masuk | **Push** | Rutin |
 | Tunggakan lewat batas | **WA** | Jarang, penting; penunggak paling mungkin belum memasang app |
 | Push gagal / tak berlangganan > **14 hari** | **WA** | Jaring pengaman; kalau tidak, orang itu tak pernah dapat kabar |
@@ -1071,8 +1259,13 @@ yang memamerkan seluruh komponen.
 > **Sengaja jadi fase tersendiri.** Kalau menumpang di fase fitur, hasilnya jadi
 > tambal-sulam seperti v2 yang punya dua sistem komponen hidup berdampingan.
 
+Termasuk **token gerak** (§5.7): durasi, easing, dan aturan properti yang boleh
+dianimasikan. Ditetapkan di sini supaya tiap fitur berikutnya memakai gerak yang
+sama, bukan menciptakan sendiri-sendiri.
+
 **Selesai kalau:** halaman contoh menampilkan semua komponen di terang & gelap, di
-tiga breakpoint, dan setiap token teks lolos kontras 4.5:1.
+tiga breakpoint, dan setiap token teks lolos kontras 4.5:1; profil gulir halaman
+contoh di HP asli tidak punya frame di atas 16ms.
 
 ### F4 — Identitas & akses
 
@@ -1090,7 +1283,8 @@ endpoint uang.
 
 Beranda (tagihanku sebagai hero), Main, Klub. Store optimistic, cermin IndexedDB,
 **outbox tulis**, service worker + ajakan pembaruan versi, halaman offline &
-error, onboarding "pasang ke Home Screen".
+error, pencarian orang, layar "belum punya klub", batalkan cepat, pemain tamu,
+panduan driver.js (perkenalan + "pasang ke Home Screen").
 
 **Selesai kalau:** alur harian penuh berfungsi di 375px **dan** 1440px; menandai
 lunas terasa instan (nol round-trip sebelum UI berubah); mode pesawat tetap bisa
@@ -1159,6 +1353,30 @@ menghapus akunnya sendiri dan mengunduh datanya.
 
 **Verifikasi gagal = transaksi dibatalkan**, bukan peringatan yang bisa diabaikan.
 
+**Merapikan nama sebelum migrasi — langkah wajib, bukan opsional.** v2 memakai
+nama sebagai kunci utama (`players.name` adalah primary key), dan nama diketik
+manual berkali-kali selama bertahun-tahun. Hampir pasti ada `Rian`, `rian`, dan
+`Ryan` yang sebenarnya satu orang, masing-masing memegang riwayat dan tagihan
+sendiri. Kalau dimigrasikan apa adanya, orang itu jadi tiga anggota di v3 dan
+tagihannya terpecah tiga — dan setelah pemiliknya mengklaim salah satu, dua
+sisanya jadi hantu yang sulit digabungkan.
+
+Karena itu `cmd/migrate-v2` menjalankan tahap pra-migrasi:
+
+1. Cetak daftar nama yang mirip (normalisasi huruf besar-kecil, spasi ganda,
+   jarak Levenshtein kecil) beserta jumlah game dan nilai tagihan masing-masing.
+2. **Manusia yang memutuskan** mana yang digabung — bukan tebakan otomatis.
+   Salah menggabungkan dua orang berbeda jauh lebih merusak daripada membiarkan
+   satu orang punya dua entri.
+3. Keputusan disimpan sebagai berkas pemetaan yang ikut masuk repo, supaya
+   migrasi tetap **idempoten** dan latihan berulang menghasilkan hasil sama persis.
+4. Nama yang digabung tetap tersimpan semua di `user_aliases`, jadi riwayat lama
+   yang menyebut nama versi mana pun tetap menemukan orangnya.
+
+`recorded_by` di v2 juga berupa teks nama bebas ("Admin", nama operator).
+Dipetakan ke user kalau cocok; kalau tidak, disimpan apa adanya sebagai teks —
+jangan mengarang penautan yang tidak pasti pada data pembukuan.
+
 Karena **tidak ada jalur pulang**, pengamannya ada di depan: latihan migrasi
 berulang di salinan produksi sampai nol selisih; cadangan DB tepat sebelum cutover
 yang **sudah diuji restore**; masa pemantauan ketat beberapa hari pertama.
@@ -1189,6 +1407,11 @@ arsip, dan **v1 (Express di akar repo) dimatikan**.
 | **Orang terkunci karena kehilangan nomor WA** | Admin klub bisa memindahkan akun ke nomor baru, wajib beralasan dan tercatat di jurnal audit yang dibaca seluruh anggota (§7.2.1) |
 | **Kuota WA pecah tepat di hari onboarding** | Jatah onboarding sekali pakai 300 pesan, terpisah dari kuota harian (§12.1) |
 | **Klub dihapus padahal masih memegang titipan pemain** | Penghapusan permanen ditahan selama saldo deposit belum nol; superadmin diberi tahu (§12.2) |
+| **Nama duplikat v2 memecah tagihan satu orang jadi beberapa** | Tahap merapikan nama sebelum migrasi, diputuskan manusia, disimpan sebagai berkas pemetaan yang ikut repo (F10) |
+| **Orang ditagih untuk main yang tidak diikutinya** | Notifikasi "kamu dicatat ikut main" seketika + tombol sanggah yang menahan tagihan sampai selesai (§9.4) |
+| **Salah tap merusak data dan tak bisa dikembalikan** | Batalkan cepat 8 detik yang benar-benar membatalkan, bukan membuat aksi berlawanan (§9.4) |
+| **Animasi justru bikin patah-patah** | Anggaran gerak ≤300ms, hanya properti compositor, tanpa `backdrop-blur`, animasi masuk hanya untuk item yang benar-benar baru; profil gulir diukur di HP asli (§5.7) |
+| **Panduan driver.js jadi gangguan, bukan bantuan** | Dimuat malas, sekali per panduan, tak pernah menyela pekerjaan, dan bukan penambal layar yang memang membingungkan (§5.8) |
 | **Lingkup membengkak** | Fase berurutan; F0–F5 sudah app berguna untuk satu klub walau sisanya tertunda |
 | **v3 tetap terasa berat** | Anggaran performa ditegakkan sejak F5, diukur bukan diasumsikan |
 
@@ -1230,12 +1453,24 @@ arsip, dan **v1 (Express di akar repo) dimatikan**.
     dihormati; pengalihan ke WA jalan saat push gagal; kuota per klub berfungsi.
 15. **Performa** — ukuran shell, waktu tap→UI berubah untuk "tandai lunas",
     Lighthouse mobile.
-16. **Aksesibilitas** — telusuri satu halaman penuh dengan Tab saja; rasio kontras
+16. **Kehalusan** — rekam profil gulir di **HP kelas menengah asli**, bukan
+    simulator desktop: tidak ada frame > 16ms saat menggulir daftar main sepanjang
+    satu bulan. Periksa juga tidak ada pergeseran tata letak saat data masuk, dan
+    `prefers-reduced-motion` benar-benar mengganti gerak, bukan sekadar
+    mempercepatnya.
+17. **Batalkan & sanggah** — batalkan dalam 8 detik benar-benar mengembalikan
+    keadaan tanpa meninggalkan pasangan aksi di jurnal audit; menyanggah menahan
+    tagihan dan memberi tahu pencatat.
+18. **Pemain tamu** — catat main dengan nama yang belum pernah ada, pastikan
+    anggota `unclaimed` terbentuk, bisa ditagih, lalu bisa diklaim lewat QR dan
+    riwayatnya menempel.
+19. **Aksesibilitas** — telusuri satu halaman penuh dengan Tab saja; rasio kontras
     tiap token teks diverifikasi sebelum dipakai; uji keterbacaan di bawah cahaya
-    terang.
-17. **Pemulihan** — restore cadangan ke instans bersih dan pastikan app jalan.
-18. **Migrasi** — perbandingan angka v2 vs v3 nol selisih, termasuk `player_carry`
-    → saldo deposit awal, sebelum cutover.
+    terang; overlay driver.js bisa ditelusuri keyboard dan tidak menjebak fokus.
+20. **Pemulihan** — restore cadangan ke instans bersih dan pastikan app jalan.
+21. **Migrasi** — perbandingan angka v2 vs v3 nol selisih, termasuk `player_carry`
+    → saldo deposit awal, sebelum cutover. Berkas pemetaan nama duplikat sudah
+    ditinjau manusia dan ikut tersimpan di repo.
 
 ---
 
@@ -1255,8 +1490,11 @@ di sini supaya mudah ditemukan saat mau disetel:
 | Ambang "tak berlangganan push" → alihkan ke WA | 14 hari | §10.1 |
 | Tenggang hapus klub | 30 hari, peringatan hari ke-23 | §12.2 |
 | Jatah onboarding WA | 300 pesan, aktif 14 hari | §12.1 |
+| Jendela "Batalkan" | 8 detik | §9.4 |
+| Pengingat klaim bayar menganggur | 3 hari | §9.3 |
 | Kuota | lihat tabel | §12.1 |
 | Anggaran performa | shell < 80KB gzip · interaksi < 100ms | §4.2 |
+| Anggaran gerak | ≤ 300ms, frame ≤ 16ms saat gulir | §5.7 |
 
 Semuanya harus dibaca dari konfigurasi, **bukan ditulis sebagai konstanta tersebar
 di dalam kode.** Yang per-klub disimpan di `clubs.settings` / `clubs.quotas`; yang
