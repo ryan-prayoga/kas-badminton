@@ -1,0 +1,38 @@
+services:
+  db:
+    image: postgres:16
+    restart: unless-stopped
+    environment:
+      - POSTGRES_USER=kok_app
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-kok_dev_only}
+      - POSTGRES_DB=kok_v3
+    ports:
+      # dipetakan ke host cuma buat dev lokal (jalanin goose/psql dari luar
+      # container); prod tidak perlu expose ini.
+      - "127.0.0.1:5434:5432"
+    volumes:
+      - kok_v3_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U kok_app -d kok_v3"]
+      interval: 2s
+      timeout: 3s
+      retries: 15
+
+  api:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      - DATABASE_URL=postgresql://kok_app:${POSTGRES_PASSWORD:-kok_dev_only}@db:5432/kok_v3
+      - PORT=8300
+      - ENV=${ENV:-dev}
+      - LOG_LEVEL=${LOG_LEVEL:-info}
+    ports:
+      - "127.0.0.1:8300:8300"
+
+volumes:
+  kok_v3_pgdata:

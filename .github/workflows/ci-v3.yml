@@ -1,0 +1,71 @@
+name: CI kas-badminton v3
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "v3/**"
+      - ".github/workflows/ci-v3.yml"
+  pull_request:
+    paths:
+      - "v3/**"
+      - ".github/workflows/ci-v3.yml"
+
+jobs:
+  server:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: v3/server
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: v3/server/go.mod
+          cache-dependency-path: v3/server/go.sum
+
+      - name: gofmt
+        run: |
+          out="$(gofmt -l .)"
+          if [ -n "$out" ]; then
+            echo "Berkas belum di-gofmt:"
+            echo "$out"
+            exit 1
+          fi
+
+      - name: go vet
+        run: go vet ./...
+
+      - name: go test
+        run: go test ./... -race -count=1
+
+      - name: go build
+        run: go build ./...
+
+  web:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: v3/web
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: v3/web/package-lock.json
+
+      - name: Install deps
+        run: npm ci
+
+      - name: svelte-check (lint tipe)
+        run: npm run check
+
+      - name: Build
+        run: npm run build

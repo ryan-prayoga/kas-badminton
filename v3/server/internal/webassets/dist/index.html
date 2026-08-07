@@ -1,0 +1,18 @@
+<!doctype html>
+<!--
+	Placeholder — bukan build produksi. go:embed butuh minimal satu berkas di
+	sini supaya `go build`/`go vet`/`go test` jalan tanpa Node sama sekali.
+
+	Dockerfile multi-stage menimpa seluruh isi direktori ini dengan hasil
+	`npm run build` di web/ sebelum meng-compile binary Go (lihat
+	v3/deploy/Dockerfile). Jangan commit hasil build Svelte ke sini.
+-->
+<html lang="id">
+	<head>
+		<meta charset="utf-8" />
+		<title>Kok Badminton v3</title>
+	</head>
+	<body>
+		<p>Kok Badminton v3 — frontend belum di-build (jalankan lewat Dockerfile, bukan `go run` langsung, untuk lihat SPA sungguhan).</p>
+	</body>
+</html>

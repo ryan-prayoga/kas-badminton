@@ -1,0 +1,5 @@
+# Hasil `npm run build` web/ di-copy ke sini oleh Dockerfile (lihat webassets.go).
+# Jangan commit build asli — cuma index.html placeholder yang di-track.
+*
+!.gitignore
+!index.html

@@ -2,6 +2,7 @@ node_modules/
 data/
 .env
 .env.*
+!v3/.env.example
 *.log
 .DS_Store
 
