@@ -1,0 +1,1105 @@
+# Kok Badminton v3 — Rencana Pembangunan
+
+Platform multi-klub untuk kas patungan kok badminton.
+**SvelteKit + Go · akun per pemain · verifikasi WhatsApp · deposit · multi-klub.**
+
+Status: **rencana, belum ada kode.** Dokumen ini adalah spesifikasi kerja.
+
+---
+
+## 0. Cara memakai dokumen ini
+
+Dokumen ini ditulis untuk dieksekusi oleh orang atau model yang **belum pernah
+melihat percakapan perancangannya**. Semua keputusan sudah diambil dan tidak perlu
+ditanyakan ulang; yang belum diputuskan ditandai eksplisit di §14.
+
+Urutan membaca kalau baru pertama kali:
+
+1. **§1 Latar** — kenapa v3 ada, dan apa yang salah dengan v2
+2. **§2 Keputusan terkunci** — jangan diubah tanpa alasan baru
+3. **§3 Invarian** — aturan yang tidak boleh dilanggar di baris kode mana pun
+4. **§12 Fase kerja** — urutan pengerjaan, mulai dari F0
+
+Aturan penting saat mengeksekusi:
+
+- **v2 adalah acuan fungsional, bukan acuan visual.** Ambil daftar kemampuan dan
+  logika uang yang sudah teruji. Jangan menyalin tata letak, penamaan, hierarki,
+  warna, atau tipografinya — semuanya dirancang ulang (§5).
+- **Jangan menyentuh `v2/` sama sekali.** v2 tetap jalan produksi sampai cutover.
+- Berkas v2 yang dirujuk di dokumen ini ada di repo yang sama dan bisa dibuka
+  langsung — path-nya relatif ke akar repo.
+
+---
+
+## 1. Latar
+
+v2 (`v2/`, Next.js 16 + Prisma + Postgres) sudah jalan produksi dan fiturnya
+lengkap. Empat hal mendorong rewrite:
+
+**1. Terasa berat dan sering macet sebagai PWA.** Penyebabnya arsitektur, bukan
+pilihan framework:
+
+- Tiap mutasi memanggil `revalidatePath("/", "layout")` — lihat
+  [`v2/lib/action-util.ts`](../v2/lib/action-util.ts).
+- `getData()` memuat **seluruh** game dan turnamen dari DB tiap request, lalu
+  seluruh halaman dirender ulang — lihat [`v2/lib/data.ts`](../v2/lib/data.ts)
+  dan [`v2/lib/repo/snapshot.ts`](../v2/lib/repo/snapshot.ts).
+- SSE cuma mengirim string `"update"`, dan klien menanggapinya dengan
+  `router.refresh()` penuh — lihat
+  [`v2/components/realtime-refresher.tsx`](../v2/components/realtime-refresher.tsx).
+
+Akibatnya menandai satu orang lunas menyeret payload seluruh aplikasi.
+**Mengganti bahasa tidak menyembuhkan ini.** v3 memperbaikinya di level desain
+(§4).
+
+**2. Tidak ada akun pemain.** Semua orang melihat data semua orang. Tidak ada
+"tagihanku" atau "statistikku".
+
+**3. Semua kewenangan menumpuk di satu admin.** Tidak ada pemisahan pencatat,
+bendahara, dan verifikator.
+
+**4. Hanya melayani satu klub.** v3 dibuka jadi platform supaya PB lain bisa
+memakai sistem yang sama.
+
+Tambahan lingkup baru: identitas berbasis nomor WhatsApp, dompet deposit per
+pemain, format main yang tidak lagi mengunci di 4 orang, dan desain ulang total.
+
+---
+
+## 2. Keputusan yang sudah terkunci
+
+| Hal | Keputusan |
+|---|---|
+| Backend | **Go** |
+| Frontend | **SvelteKit 5** (SPA statis, di-embed ke binary Go) |
+| Database | **PostgreSQL** (instans sama dengan v2, database terpisah `kok_v3`) |
+| Akses DB | **sqlc + pgx**, tanpa ORM. Migrasi skema pakai **goose** |
+| Multi-klub | **Ya sejak awal**, dengan **superadmin** tingkat sistem |
+| Domain | **`kaskok.my.id`**; app di `app.kaskok.my.id`, tautan klub `/{slug}` |
+| Superadmin | Kelola klub + metrik, **tanpa akses isi data klub** |
+| Halaman publik | **Opsional per klub**, read-only, tanpa data pribadi |
+| Transparansi kas | **Terbuka** — saldo kas, masuk, keluar terlihat semua orang. **Saklar per klub**, default nyala |
+| Saldo deposit per orang | **Selalu privat.** Tidak pernah tampil di halaman publik, apa pun posisi saklar transparansi kas. Hanya pemiliknya, bendahara, dan admin klub yang bisa melihat |
+| Ambang tunggakan | **Diatur per klub** (hari + rupiah), dengan bawaan 14 hari & Rp 50.000 |
+| Kuota | **Longgar dan bisa dinaikkan** superadmin per klub — kecuali kuota pesan WA, yang batas platform |
+| Retensi data | **Soft-delete + tenggang 30 hari**, lalu hapus permanen. Klub yang ditangguhkan tidak pernah dihapus otomatis |
+| QR tembok | **Ada** — poster siap cetak per klub, mengarah ke halaman klub |
+| Verifikasi identitas | **Nomor WA wajib**, dikirim lewat **whatsmeow** (nomor bot sudah tersedia) |
+| Login harian | **Passkey (WebAuthn)** + **PIN 6 digit** cadangan. Bukan OTP tiap login |
+| Notifikasi | **Web Push utama**, WA hanya yang jarang & penting |
+| Identitas | Nama tampilan bebas + **username unik**; nama lama v2 jadi alias |
+| Klaim akun lama | QR/tautan grup, undangan admin per-orang, dan klaim mandiri — semua lewat persetujuan |
+| Peran | **Opsional**, boleh **berbatas waktu**; izin tak ditunjuk jatuh ke admin klub |
+| Format main | **Fleksibel** — single, ganda, atau rotasi. Bukan kunci 4 orang |
+| Deposit | **Potong otomatis** (bisa dimatikan per pemain), **tidak boleh minus** |
+| Offline | **Baca offline + antrean tulis** |
+| Arah visual | **Sport editorial** — hierarki ekstrem, angka sebagai elemen terbesar |
+| Layar utama | **Tagihanku dulu** |
+| QRIS | Statis sebagai default; dinamis jadi jalur cepat opsional |
+| Rekening bank | Ditunda, tidak masuk lingkup sekarang |
+| Data v2 | **Migrasi penuh**, jadi klub pertama |
+| Cutover | **Maju terus, tanpa jalur pulang** — bertumpu latihan berulang + cadangan teruji |
+| Hosting | VPS yang sama (Oracle Ampere, arm64), subdomain berbeda, berdampingan dengan v2 |
+| v1 (Express di akar repo) | **Dimatikan** saat cutover |
+
+---
+
+## 3. Invarian — tidak boleh dilanggar
+
+Empat aturan ini berlaku di seluruh basis kode. Pelanggarannya adalah bug, bukan
+selera.
+
+1. **Uang selalu `int64` rupiah.** Tidak pernah `float`, di mana pun, termasuk di
+   klien dan di JSON. Rupiah tidak punya pecahan yang dipakai di sini.
+2. **Setiap query menerima `club_id`.** Tanpa pengecualian. Ini yang menjaga data
+   klub tidak bocor ke klub lain.
+3. **Setiap endpoint tulis menerima `Idempotency-Key`.** Server menyimpan kunci
+   beserta hasilnya; permintaan ulang dengan kunci sama mengembalikan hasil yang
+   sama, bukan membuat entri kedua. Tanpa ini, satu tap "sudah transfer" di
+   jaringan buruk bisa menciptakan uang.
+4. **Setiap entitas yang bisa diedit punya `version`.** Permintaan tulis
+   menyertakan versi yang dilihat klien; kalau sudah berubah, server menolak
+   dengan `409` beserta keadaan terbaru. Jangan pernah menimpa diam-diam.
+
+---
+
+## 4. Arsitektur
+
+```
+v3/
+├── web/                     SvelteKit 5 (runes) + Tailwind 4 → static bundle
+│   ├── src/lib/api/         klien REST + tipe hasil generate dari OpenAPI
+│   ├── src/lib/stores/      state ternormalisasi + optimistic
+│   ├── src/lib/offline/     cermin IndexedDB + outbox tulis
+│   ├── src/lib/ui/          design system (komponen sendiri di atas Melt UI)
+│   └── src/routes/
+├── server/                  Go 1.24
+│   ├── cmd/api/             HTTP server
+│   ├── cmd/waworker/        proses tunggal pemegang koneksi whatsmeow
+│   ├── cmd/migrate-v2/      migrasi satu kali dari DB v2
+│   ├── internal/domain/     logika murni (cost, debt, wallet, bracket, stock) + test
+│   ├── internal/store/      sqlc + pgx
+│   ├── internal/http/       handler, middleware auth/tenant/RBAC, SSE
+│   ├── internal/auth/       passkey, PIN, sesi, OTP
+│   ├── internal/media/      foto & QRIS di volume disk
+│   ├── internal/poster/     render poster QR klub (PDF cetak + PNG)
+│   ├── internal/push/       Web Push (VAPID)
+│   └── internal/notify/     router notifikasi: pilih Push atau WA per kejadian
+└── deploy/                  Dockerfile multi-stage, compose, workflow CI
+```
+
+### 4.1 Kenapa SPA statis di-embed ke binary
+
+Frontend dibangun dengan `@sveltejs/adapter-static` dan dimasukkan ke binary Go
+lewat `go:embed`.
+
+- Deploy jadi **satu binary** — tidak ada runtime Node di server.
+- **Tidak ada payload SSR per navigasi** — ini kelas masalah utama v2.
+  Pindah tab = ganti komponen di memori, nol request.
+- Service worker bisa mem-precache seluruh shell → app dari home screen langsung
+  tampil, data menyusul.
+- SEO tidak relevan; semua di balik login kecuali halaman publik klub.
+
+Konsekuensi: layar pertama butuh JS. Ditangani dengan bundle kecil dan skeleton
+di HTML.
+
+Kalau nanti ada alasan kuat butuh SSR, `adapter-node` bisa ditukar **tanpa
+mengubah backend** — Go hanya bicara JSON.
+
+### 4.2 Kenapa ini akan terasa lebih cepat
+
+Bukan karena Go. Karena lima hal berikut:
+
+| Masalah v2 | Penanganan v3 |
+|---|---|
+| `getData()` memuat semua game + turnamen tiap request | Endpoint granular + paginasi; daftar main dimuat per bulan |
+| `revalidatePath("/", "layout")` tiap mutasi | Mutasi mengembalikan **entitas yang berubah saja**; store klien menambal lokal |
+| SSE cuma mengirim `"update"` → klien refresh penuh | Event bertipe `{kind, id, payload}` → store menambal tanpa refetch |
+| Navigasi = round-trip RSC | Navigasi client-side, nol request |
+| Buka app dingin = layar kosong sampai DB menjawab | Cermin IndexedDB; isi terakhir langsung tampil, lalu disegarkan |
+
+**Anggaran performa, ditegakkan sejak F5 dan diukur bukan diasumsikan:**
+
+- Shell < 80KB gzip
+- Interaksi < 100ms
+- Aksi lokal (mis. tandai lunas) **nol round-trip** sebelum UI berubah
+
+### 4.3 Realtime
+
+Postgres `LISTEN/NOTIFY` → fan-out ke pelanggan SSE. Tanpa Redis, aman lintas
+proses. Pola v2 di [`v2/lib/realtime.ts`](../v2/lib/realtime.ts) sudah benar —
+tiru strukturnya, ganti payloadnya jadi bertipe.
+
+---
+
+## 5. Desain
+
+Dirancang dari kebutuhan pengguna, bukan dari tampilan v2.
+
+### 5.1 Siapa, di mana, dalam keadaan apa
+
+- **Anggota** — membuka app 10 detik sambil berdiri di pinggir lapangan, tangan
+  berkeringat, satu tangan memegang raket, layar kena cahaya terang. Yang dicari
+  satu hal: *aku utang berapa, dan gimana bayarnya.*
+- **Pencatat** — mencatat pertandingan di sela main. Harus selesai dalam belasan
+  detik atau tidak akan dilakukan sama sekali.
+- **Bendahara** — duduk di rumah dengan laptop, menyisir siapa yang belum bayar.
+  Butuh kepadatan informasi dan ketelitian.
+- **Orang baru** — memindai QR di tembok GOR, belum tahu apa-apa. Harus paham
+  dalam sekali lihat ini apa dan harus berbuat apa.
+
+### 5.2 Prinsip
+
+1. **Satu hal dominan per layar.** Tiap layar menjawab satu pertanyaan. Angka
+   terpenting jadi elemen terbesar, bukan salah satu dari sepuluh kartu seukuran.
+2. **Terbaca sambil berdiri.** Teks minimum 13px, kontras semua teks ≥ 4.5:1.
+   Tidak ada abu-abu tipis 10–11px — kebiasaan buruk v2 yang gagal syarat AA.
+3. **Uang tidak menghakimi.** Tunggakan adalah fakta, bukan alarm. Merah **hanya**
+   untuk tindakan merusak (hapus). Warna "belum bayar" adalah netral-hangat yang
+   berarti "belum selesai", bukan "kamu salah".
+4. **Aksi utama di jangkauan jempol** — bawah layar, bukan pojok atas.
+5. **Nol tunggu yang terasa.** Tiap aksi mengubah UI seketika; jaringan menyusul.
+6. **Gerak seperlunya.** Animasi memastikan aksi diterima dan menjelaskan
+   perpindahan hierarki. Bukan hiasan. Hormati `prefers-reduced-motion`.
+7. **Nama benda yang berbeda harus terdengar berbeda.** v2 punya tab "Riwayat",
+   "Rekap", dan "Transaksi" yang bunyinya sama bagi orang awam. Jangan diulang.
+8. **Layar besar bukan layar kecil yang dilebarkan.** Di laptop, ruang dipakai
+   untuk memperlihatkan lebih banyak sekaligus, bukan memperbesar kartu.
+
+### 5.3 Bahasa visual — sport editorial
+
+**Tipografi.** Dua huruf: satu display bergrotesk tebal untuk angka dan judul,
+satu teks netral untuk isi. Angka memakai figur tabular supaya kolom rupiah rata.
+Skala tegas, bukan bertingkat halus:
+
+| Peran | Ukuran | Pemakaian |
+|---|---|---|
+| Hero | 48–64px, display, tebal | Angka utama layar (tagihanku, saldo kas) |
+| Judul | 20–24px, display | Judul bagian |
+| Isi | 15px | Teks umum |
+| Meta | 13px | Keterangan, tanggal, label — **batas terkecil** |
+
+**Warna.** Kanvas nyaris netral, satu warna aksen yang dipakai irit supaya tetap
+berarti. Peran semantik: `lunas`, `belum`, `hancur` (destruktif), `aksen`. Tiap
+token **diverifikasi kontrasnya sebelum dipakai**, di terang maupun gelap. Palet
+gelap dirancang bersamaan, bukan diturunkan belakangan.
+
+**Ruang & pemisah.** Basis 4px, ritme vertikal lega. Pemisahan lewat ruang dan
+garis tipis, bukan bayangan tebal — bayangan disimpan untuk elemen yang benar-benar
+mengambang (sheet, dialog).
+
+**Sentuh.** Aksi utama tinggi 52px; target apa pun minimum 44px, ditegakkan lewat
+komponen bukan disiplin manual.
+
+**Komponen** dibangun sendiri di atas **Melt UI** (headless, Svelte-native). Satu
+sistem tombol, satu sistem kolom isian, satu sistem kartu. v2 punya dua sistem
+yang hidup berdampingan (shadcn + Tailwind tulis tangan) sehingga ada tiga
+generasi visual dalam satu layar — jangan diulang.
+
+### 5.4 Navigasi
+
+Empat tab, kata benda yang menamai hal berbeda:
+
+| Tab | Menjawab |
+|---|---|
+| **Beranda** | Aku utang berapa, saldoku berapa, aku main kapan |
+| **Main** | Pertandingan klub — daftar, catat baru |
+| **Klub** | Anggota, siapa belum bayar, kas, statistik, pengaturan |
+| **Turnamen** | Bagan, klasemen, iuran |
+
+Isinya menyesuaikan izin: bendahara melihat pintu masuk "Tagihan & Kas" besar di
+Klub dan pintasan "N orang belum bayar" di Beranda; anggota biasa melihat versi
+baca-saja. **Jumlah dan nama tabnya tidak berubah** — supaya orang tidak bingung
+saat perannya berubah.
+
+Profil, pemilih klub, dan pengaturan ada di avatar pojok header, bukan memakan
+slot tab.
+
+### 5.5 Beranda
+
+Urutan dari atas:
+
+1. **Tagihanku** — angka hero, satu baris konteks di bawahnya ("3 main belum
+   lunas"), lalu tombol lebar **Bayar sekarang**. Kalau lunas, ruang ini berganti
+   jadi pernyataan tenang bahwa semuanya beres — bukan kartu kosong.
+2. **Deposit** — saldo dan status potong-otomatis, satu baris.
+3. **Main terakhirku** — beberapa entri ringkas, bisa diketuk untuk detail.
+4. **Berikutnya** — jadwal atau turnamen yang akan datang, kalau ada.
+5. **Pintasan pengurus** — hanya muncul kalau berizin.
+
+### 5.6 Layar besar
+
+- **768–1024px:** rail navigasi kiri, konten dua kolom.
+- **> 1024px:** sidebar tetap yang juga memunculkan tujuan sekunder (Kas, Anggota,
+  Stok, Pengaturan) karena ruangnya ada. Pola master–detail: daftar di kiri,
+  detail di kanan, tanpa pindah halaman. Dialog di tengah, bukan sheet dari bawah.
+  Daftar panjang jadi tabel padat dengan angka rata kanan. Bagan turnamen tampil
+  utuh tanpa gulir mendatar.
+
+### 5.7 Fitur v2 yang wajib ikut pindah
+
+Fungsinya ikut, tampilannya dirancang ulang. Ditulis di sini supaya tidak hilang
+saat rewrite:
+
+- **Share teks WhatsApp + kartu gambar** —
+  [`v2/lib/share.ts`](../v2/lib/share.ts) (1352 baris). Fitur yang paling sering
+  dipakai untuk menagih
+- **Filter periode bulanan** — ada di lima layar v2
+- **Nomor partai per hari** ("Partai 1/2/3") — yang membuat rincian tagihan terbaca
+- **Saran nominal iuran** yang menutup biaya kok (`suggestFee`)
+- **Beli slop** (1 slop = 12 kok) yang otomatis mengurangi kas
+- **Penyesuaian saldo kas** dengan keterangan
+- **Autocomplete nama + foto** saat mengisi pemain
+- **Turnamen multi-hari**, format skor per partai, BYE otomatis
+- **Deep-link tanggal** dari Tagihan ke Main
+- **Decode QRIS dari foto** (v2 memakai `jsQR`)
+- **Kompresi foto di klien** — [`v2/lib/image-compress.ts`](../v2/lib/image-compress.ts)
+
+---
+
+## 6. Multi-klub
+
+### 6.1 Bentuk
+
+Satu app di satu subdomain (`app.kaskok.my.id`). Pengguna bisa jadi anggota
+beberapa klub dan berpindah dari dalam app tanpa login ulang. Tautan berbagi
+memakai path `/{slug-klub}/...`.
+
+Tidak memakai subdomain per klub: butuh TLS wildcard, sesi tidak terbawa antar
+klub, dan PWA harus dipasang ulang untuk tiap klub — mahal untuk manfaat kecil.
+
+**Panjang alamat adalah batasan desain, bukan selera.** Poster QR di tembok
+mencantumkan alamat pendek yang bisa diketik manual kalau kamera bermasalah, jadi
+`kaskok.my.id/{slug}` harus muat dan enak dieja lewat suara di GOR yang ramai.
+
+### 6.2 Isolasi data — tiga lapis
+
+Satu lapis terlalu rapuh untuk data uang milik orang lain:
+
+1. **Middleware tenant** — menetapkan klub aktif dari sesi + slug, menolak lebih
+   awal kalau pengguna bukan anggota.
+2. **Query** — semua query sqlc menerima `club_id` sebagai parameter wajib.
+3. **Postgres Row-Level Security** — jaring terakhir. Kalau satu query lupa
+   memfilter, DB yang menolak, bukan pengguna yang melihat data klub lain.
+
+Suite kebocoran antar-klub (pengguna klub A menembak tiap endpoint klub B) wajib
+hijau di setiap CI.
+
+### 6.3 Halaman publik klub
+
+Opsional per klub, read-only. Mempertahankan kemudahan v2 yang tautannya bisa
+langsung dibuka dari grup WhatsApp.
+
+**Tampil:** rekap tagihan per nama, jadwal main, bagan & klasemen turnamen,
+statistik klub, dan **kas klub** (saldo, total masuk, total keluar) selama saklar
+transparansi kas nyala.
+**Tidak pernah tampil:** nomor telepon, saldo deposit perorangan, riwayat
+pembayaran perorangan, jurnal audit, pengaturan.
+
+Perhatikan bedanya: **kas klub** boleh terbuka, **titipan pemain** tidak. Total
+deposit boleh muncul sebagai satu angka gabungan di laporan tiga kantong (§9.2)
+karena itu bagian dari posisi keuangan klub, tapi saldo milik orang per orang
+tetap privat.
+
+Disajikan dari **rute dan handler terpisah yang hanya punya akses ke query
+"aman-publik"** — bukan halaman biasa yang disaring di UI. Kalau tidak dipisah di
+lapisan server, cepat atau lambat ada field pribadi yang bocor lewat.
+
+### 6.4 QR & poster tembok
+
+Tiap klub bisa membuat tautan + QR permanen yang **dicetak dan ditempel di GOR**.
+
+**Alur orang baru:**
+```
+pindai QR → halaman klub (info umum kalau halaman publik menyala)
+  → tombol besar "Gabung klub"
+  → nomor WA → OTP
+  → pilih namanya dari daftar belum-terklaim, atau daftar sebagai orang baru
+  → masuk antrean persetujuan admin
+```
+
+Orang bisa mengintip dulu sebelum memutuskan, dan **satu QR melayani semua
+keperluan** sehingga posternya tidak perlu diganti-ganti.
+
+**Generator poster** menghasilkan berkas siap cetak: nama klub, QR besar, alamat
+pendek yang bisa diketik manual, dan satu kalimat instruksi. Ukuran A4 dan A5;
+keluaran **PDF 300dpi untuk dicetak** plus **PNG untuk dibagikan ke grup WA**.
+Dirender di server (Go) supaya hasil cetaknya konsisten.
+
+**Pengendalian:** token QR bisa diputar ulang atau dicabut kalau posternya
+disalahgunakan (poster lama otomatis mati) · jumlah pindaian dihitung · masa
+berlaku opsional · pendaftaran lewat QR **selalu** masuk antrean persetujuan ·
+rate limit per IP. QR di tembok itu publik — perlakukan begitu.
+
+### 6.5 Superadmin
+
+**Boleh:** membuat, menangguhkan, menghapus klub; melihat metrik agregat (jumlah
+anggota, aktivitas, ukuran data); mengelola pengumuman sistem; memantau kesehatan
+bridge WA dan antrean notifikasi.
+
+**Tidak boleh membaca isi data klub.** Tagihan, riwayat, dan pembayaran tidak bisa
+dibuka dari panel superadmin. Kalau dukungan teknis benar-benar membutuhkannya,
+jalurnya adalah izin sementara yang diberikan admin klub, dengan jurnal audit yang
+terlihat oleh klub — bukan hak yang menempel diam-diam.
+
+Konsekuensi yang diterima sadar: sebagian masalah tidak bisa didiagnosis dari
+jauh. Ditebus dengan observability serius (§10) — itu satu-satunya alat yang
+tersisa.
+
+### 6.6 Membuat klub baru
+
+Siapa pun yang punya akun bisa membuat klub: nama, slug, zona waktu → pembuatnya
+otomatis **admin klub** dengan seluruh izin → langsung bisa mencatat main di menit
+yang sama. Tidak ada langkah yang menuntut menunjuk bendahara lebih dulu.
+
+Onboarding menyediakan jenis kok awal, harga default, dan **poster QR yang
+langsung bisa diunduh**.
+
+---
+
+## 7. Identitas, akun, dan akses
+
+### 7.1 Model identitas
+
+- **Nomor WA** = identitas terverifikasi. Satu nomor satu akun, berlaku lintas klub.
+- **Nama tampilan** — bebas diubah, boleh sama dengan orang lain.
+- **Username unik** (`@rian`) — pencarian, mention, tautan profil. Bisa diubah
+  dengan jeda (mis. 30 hari) supaya tidak jadi ajang tukar-menukar.
+- **Alias** — semua nama yang pernah dipakai orang itu di v2, per klub. Ini yang
+  membuat riwayat lama tetap menempel walau namanya berganti.
+
+### 7.2 Login: verifikasi sekali, buka harian tanpa OTP
+
+Ini menjawab keberatan "masa tiap login minta OTP" tanpa melepas syarat wajib
+verifikasi WhatsApp.
+
+**Klaim akun / perangkat baru — perlu OTP WA:**
+```
+Masukkan nomor → OTP 6 digit dikirim via WA → verifikasi
+  → sesi dibuat (90 hari, diperpanjang otomatis)
+  → tawarkan daftar passkey (Face ID / sidik jari)
+  → set PIN 6 digit sebagai cadangan
+```
+
+**Buka app sehari-hari — tanpa OTP, tanpa kirim pesan apa pun:**
+```
+Sesi masih hidup → buka langsung
+Perlu dikunci ulang → passkey, atau PIN kalau perangkatnya tak mendukung
+```
+
+**OTP WA hanya dipakai saat:** klaim akun pertama · login di perangkat baru ·
+ganti nomor · pemulihan saat passkey dan PIN sama-sama hilang.
+
+Dengan pola ini satu orang biasanya menerima **satu pesan OTP seumur pemakaian di
+satu HP**. Itu bukan cuma soal kenyamanan — volume pesan yang rendah adalah
+pertahanan utama supaya nomor WA bot tidak dibanned (§8.3).
+
+**Pengaman OTP:** disimpan ter-hash · TTL 5 menit · maksimal 5 percobaan · rate
+limit per nomor **dan** per IP · jeda naik-bertahap untuk kirim ulang.
+
+**Jalur cadangan wajib:** kalau bridge WA mati atau nomornya diblokir, admin klub
+bisa membuat kode undangan sekali pakai dari panel. Tanpa ini, satu masalah WA
+mengunci seluruh klub di luar app.
+
+### 7.3 Menempelkan nama lama v2 ke akun
+
+Migrasi membuat akun **bayangan** (`status = unclaimed`) untuk tiap nama di v2 —
+tanpa nomor, tapi seluruh riwayat dan tagihannya sudah menempel di situ. Tiga
+jalan mengklaimnya, semuanya aktif:
+
+**A. QR tembok / tautan grup** — jalur utama sehari-hari (§6.4). Tidak ada admin
+yang mau mengetik 30 nomor satu per satu.
+**B. Admin mengundang per orang** — masukkan nomor → tautan sekali pakai via WA.
+**C. Klaim mandiri** dari halaman publik klub.
+
+Semuanya bermuara ke **antrean persetujuan**. Tanpa itu, siapa pun bisa mengklaim
+nama orang lain berikut tagihannya. Permintaan dikirim ke admin seketika lewat
+push, jadi biasanya selesai dalam hitungan menit.
+
+Nama yang tak pernah diklaim tetap tampil sebagai **pemain tamu** — tidak ada
+riwayat yang hilang, dan bisa diklaim kapan saja nanti.
+
+### 7.4 Peran: opsional dan boleh berbatas waktu
+
+| Peran | Boleh |
+|---|---|
+| `admin` klub | Semua di klubnya: peran, saklar, persetujuan klaim, jurnal audit, poster QR |
+| `bendahara` | Kas, tagihan, deposit, verifikasi pembayaran, stok kok, penyesuaian saldo |
+| `pencatat` | Catat main, isi skor, tambah kok. **Tidak menyentuh uang** |
+| `verifikator` | Menyetujui/menolak laporan bayar dan permintaan klaim akun |
+| `member` | Data dirinya + data klub yang bersifat umum |
+
+**Aturan jatuh-balik:** setiap izin yang tidak ditunjuk ke siapa pun otomatis
+dipegang admin klub. **Klub berisi satu orang jalan penuh sejak menit pertama** —
+peran hanya berguna saat klub cukup besar untuk membagi tugas.
+
+**Peran berbatas waktu** (`memberships.role_expires_at`) — menggantikan delegasi
+PIN sementara v2 (1 jam s/d 30 hari) yang akan hilang kalau peran dibuat permanen.
+Contoh: menunjuk seseorang jadi `pencatat` hanya untuk hari ini; setelah lewat,
+otomatis turun jadi `member` tanpa perlu diingat siapa pun.
+
+**Tiga saklar per klub** supaya klub santai tidak terjebak birokrasi, dan klub
+yang lebih tertutup tetap terlayani:
+
+- **Siapa boleh catat main** → `semua anggota` (default klub baru) atau
+  `hanya pengurus`. Kalau `semua anggota`, member biasa boleh mencatat
+  pertandingan tapi tetap tidak bisa menyentuh uang.
+- **Wajib verifikasi pembayaran** → nyala/mati. Kalau mati, laporan bayar pemain
+  langsung masuk ledger tanpa menunggu verifikator.
+- **Transparansi kas** → nyala/mati, **default nyala**. Saat nyala, saldo kas,
+  total masuk, dan total keluar terlihat semua orang termasuk di halaman publik.
+  Saat mati, angka-angka itu hanya untuk pengurus. Ini melanjutkan sikap v2 yang
+  sengaja membuka kas demi transparansi (lihat komentar di
+  [`v2/lib/domain/summary.ts`](../v2/lib/domain/summary.ts)), tapi kini jadi
+  pilihan tiap klub — bukan keputusan platform.
+
+Implementasi: himpunan izin sebagai konstanta Go (`perm.RecordGame`,
+`perm.VerifyPayment`, …); peran memetakan ke himpunan izin; middleware
+`RequirePerm(...)` di tiap rute; resolusi izin memperhitungkan aturan jatuh-balik,
+masa berlaku peran, dan saklar klub.
+
+---
+
+## 8. Format main yang fleksibel
+
+v2 mengunci 4 pemain di seluruh kode (`pairs.a[2]`, `pairs.b[2]`, validasi tepat
+4 nama — lihat [`v2/lib/domain/game.ts`](../v2/lib/domain/game.ts) dan
+[`v2/lib/domain/types.ts`](../v2/lib/domain/types.ts)). Untuk dipakai klub lain
+itu asumsi yang mahal: sebagian klub main single, sebagian rotasi 6–8 orang di
+satu lapangan.
+
+**Model v3:**
+
+- Satu game punya `game_players` — **baris per pemain**, dengan `side` dan `slot`.
+  Jumlahnya bebas.
+- Sisi boleh 1v1 (single), 2v2 (ganda), atau lebih (rotasi).
+- Biaya kok dibagi ke **jumlah pemain sebenarnya**, bukan konstanta 4.
+- **Semantik snapshot harga v2 tidak boleh rusak** — harga tersimpan di dalam
+  game, bukan diambil ulang dari katalog saat menampilkan riwayat.
+- Nilai stok di statistik v2 memakai `pricePerPerson × 4`; di v3 pengalinya
+  mengikuti format acuan klub.
+
+**UI catat main:** default ganda 4 orang (satu tap, secepat v2), dengan pilihan
+mengubah format. Migrasi mengisi semua game lama sebagai ganda 4 orang.
+
+---
+
+## 9. Uang
+
+### 9.1 Deposit (dompet pemain)
+
+Menggantikan `player_carry` v2 — titipan cicilan yang mengambang tanpa penjelasan
+dan hanya bisa ditebak lewat heuristik "item mana yang paling pas ditutup"
+(lihat `carryTargetKey` di
+[`v2/components/kok/debt-view.tsx`](../v2/components/kok/debt-view.tsx)).
+
+**Aturan:**
+
+- **Ledger append-only** (`wallet_entries`): `topup`, `pemakaian`, `refund`,
+  `penyesuaian`. Saldo = jumlah ledger. Kolom saldo hanya cache, dengan tugas
+  rekonsiliasi berkala.
+- **Potong otomatis, bisa dimatikan per pemain.** Tagihan baru langsung dipotong
+  dari saldo selama masih cukup.
+- **Tidak boleh minus.** Saldo berhenti di nol; sisa tagihan tetap jadi tagihan
+  biasa. Tidak ada utang tersembunyi di dalam dompet.
+- **Bayar lebih otomatis masuk deposit** — inilah alasan fitur ini ada.
+- **Tarik saldo perlu persetujuan** bendahara/admin, tercatat di ledger dan audit.
+- Setiap potongan mengirim notifikasi ke pemiliknya. **Saldo tidak boleh berkurang
+  diam-diam.**
+
+### 9.2 Tiga kantong uang
+
+Deposit adalah **kewajiban klub**, bukan pemasukan — uang pemain yang sewaktu-waktu
+bisa ditarik. Kalau digabung ke kas, kas terlihat gemuk padahal sebagiannya bukan
+haknya.
+
+| Kantong | Isi |
+|---|---|
+| **Kas klub** | Uang kok yang sudah dibayar, dikurangi pengeluaran |
+| **Titipan pemain** | Total saldo deposit semua anggota — kewajiban |
+| **Iuran turnamen** | Pool terpisah per turnamen |
+
+Ini melanjutkan pemisahan kas-kok vs iuran-turnamen yang sudah benar di v2 (lihat
+komentar di [`v2/lib/domain/summary.ts`](../v2/lib/domain/summary.ts) dan
+[`v2/lib/domain/debt.ts`](../v2/lib/domain/debt.ts)) dan menambah satu kantong.
+
+Ketiganya tampil di layar keuangan **dengan satu kalimat penjelasan**. Jangan
+diulang kesalahan v2 yang memisahkan dengan benar di kode tapi tidak pernah
+menjelaskannya ke pengguna — itu sumber kebingungan terbesar di v2.
+
+### 9.3 Pembayaran dua langkah
+
+```
+Pemain lihat tagihannya → tekan "Sudah transfer"
+  → payment status=pending, notifikasi ke bendahara/verifikator
+  → disetujui → status=verified, masuk ledger, tagihan berkurang
+  → pemain dapat notifikasi "pembayaranmu sudah dicatat"
+```
+
+Kalau saklar **wajib verifikasi** dimatikan, langkah persetujuan dilewati. Admin
+tetap bisa menandai lunas langsung — jalur cepat v2 dipertahankan. Bayar lebih
+dari tagihan → sisanya masuk deposit.
+
+### 9.4 QRIS
+
+v2 mengubah QRIS statis merchant jadi dinamis lewat `@prasetya/qris`. Kadang
+berhasil, kadang ditolak atau kedaluwarsa saat dipindai — wajar, karena sebagian
+aplikasi bank memvalidasi tag QR dinamis secara berbeda dan sebagian menyimpan QR
+yang sudah pernah dipindai.
+
+v3 tidak menggantungkan pembayaran pada jalur yang tidak selalu berhasil:
+
+- **Default: QRIS statis apa adanya**, dengan nominal tercetak besar di bawahnya
+  dan tombol salin. Pemain mengetik nominalnya sendiri di aplikasi bank. Jalur ini
+  tidak pernah gagal.
+- **Opsional "isi nominal otomatis"** → QR dinamis. Selalu dibuat ulang saat
+  dialog dibuka (jangan pernah di-cache), dengan tag kedaluwarsa eksplisit.
+- Tombol **"QR-nya ditolak"** mengembalikan ke QR statis **dan mencatat
+  kejadiannya**. Setelah beberapa minggu, datanya sendiri yang memutuskan apakah
+  QR dinamis layak dipertahankan.
+- **Decode QRIS dari foto** tetap ada — ini cara admin memasukkan QRIS-nya.
+- QRIS disimpan **per klub**.
+
+---
+
+## 10. Notifikasi
+
+### 10.1 Pembagian jalur
+
+| Kejadian | Jalur | Alasan |
+|---|---|---|
+| OTP login / perangkat baru | **WA** | Belum ada akun, belum bisa berlangganan push |
+| Undangan klaim akun | **WA** | Pemain belum punya app |
+| Tagihan baru · deposit berubah · pembayaran diverifikasi · undangan turnamen · jadwal partai · ringkasan bulanan · permintaan klaim masuk | **Push** | Rutin |
+| Tunggakan lewat batas | **WA** | Jarang, penting; penunggak paling mungkin belum memasang app |
+| Push gagal / tak berlangganan > N hari | **WA** | Jaring pengaman; kalau tidak, orang itu tak pernah dapat kabar |
+
+Hasilnya satu anggota aktif menerima kira-kira **satu pesan WA seumur pemakaian**.
+Ini yang membuat pemakaian whatsmeow masuk akal — dan makin penting di multi-klub,
+karena satu nomor bot melayani semua klub sekaligus.
+
+**Pusat notifikasi di dalam app** (ikon lonceng) adalah kebenaran. Push bisa
+terlewat, ditolak izinnya, atau tidak didukung perangkat — tidak boleh ada
+kejadian penting yang hanya hidup di push.
+
+### 10.2 Web Push
+
+`Push API` + VAPID; langganan disimpan di `push_subscriptions`.
+
+- **Android/Chrome:** jalan langsung dari browser.
+- **iOS 16.4+:** hanya jalan kalau app **sudah dipasang ke Home Screen**. Ini
+  dimanfaatkan jadi langkah onboarding "Pasang app + nyalakan notifikasi" dengan
+  instruksi bergambar (Share → Tambah ke Layar Utama). Izin notifikasi diminta
+  **setelah** ada momen relevan (mis. sesudah tagihan pertama muncul), bukan saat
+  pertama membuka app.
+- Opt-in per jenis, jam tenang default 21.00–07.00 mengikuti zona klub.
+
+### 10.3 Ambang tunggakan
+
+Diatur per klub, dengan bawaan yang masuk akal supaya klub baru tidak perlu
+memikirkannya:
+
+| Setelan | Bawaan | Keterangan |
+|---|---|---|
+| Umur tagihan | **14 hari** | Dihitung sejak tagihan muncul, bukan sejak terakhir ditagih |
+| Nominal minimum | **Rp 50.000** | Di bawah ini tidak pernah memicu pesan WA |
+| Jeda antar pengingat | **7 hari** | Satu orang tidak bisa ditagih dua kali dalam seminggu |
+
+**Kedua syarat harus terpenuhi bersamaan (DAN, bukan ATAU).** Tunggakan Rp 3.000
+yang terlupa selama sebulan tidak layak menghabiskan jatah pesan WA — dan lebih
+penting lagi, tidak layak membuat orang merasa ditagih seperti debitur. Ini
+sejalan dengan prinsip §5.2 nomor 3: uang tidak menghakimi.
+
+Klub bisa mematikan pengingat WA sepenuhnya. Kalau dimatikan, pengingat tetap
+muncul sebagai notifikasi in-app dan Web Push.
+
+### 10.4 whatsmeow — biaya dan risiko
+
+Library-nya **gratis dan tidak ada biaya per pesan** — ia berbicara langsung ke
+protokol WhatsApp Web memakai nomor sendiri, seperti WhatsApp Web di laptop.
+
+Yang dibayar bukan uang, tapi risiko: **tidak resmi dan melanggar ToS WhatsApp
+Business. Nomor bisa dibanned permanen** beserta seluruh riwayat chatnya.
+
+Mitigasi yang wajib diterapkan:
+
+- Nomor **khusus bot** (sudah tersedia), jangan nomor pribadi siapa pun
+- Volume ditekan habis lewat strategi Push-utama di §10.1
+- Antrean di Postgres, jeda acak antar pesan, backoff eksponensial, **tanpa blast
+  serentak**
+- Isi pesan bervariasi, bukan templat identik berulang
+- **Kuota per klub** supaya satu klub ramai tidak menghabiskan jatah platform
+- Semua pengiriman lewat interface `Notifier` — pindah ke Meta WhatsApp Cloud API
+  nanti tidak menyentuh satu baris pun logika domain
+- Kalau nomor tetap kena banned: kode undangan admin dan PIN membuat semua orang
+  tetap bisa masuk. **Tidak ada titik kegagalan tunggal yang mengunci app.**
+
+---
+
+## 11. Offline & keandalan
+
+Bagian ini yang membedakan "app yang cepat" dari "app yang tidak pernah bikin
+kesal di GOR bersinyal jelek".
+
+**Baca offline.** Data yang sudah diambil dicermin ke IndexedDB. Buka app tanpa
+sinyal → isi terakhir langsung tampil dengan penanda "data per <waktu>", lalu
+disegarkan begitu online.
+
+**Antrean tulis (outbox).** Aksi tulis masuk outbox IndexedDB dan dikirim saat
+memungkinkan.
+
+- Setiap aksi punya **`Idempotency-Key`** yang dibuat di klien (invarian §3).
+- UI menampilkan status per aksi: menunggu · terkirim · gagal, dengan tombol coba
+  lagi. **Tidak ada aksi yang hilang diam-diam.**
+- Aksi yang tidak boleh diantre (mis. verifikasi pembayaran oleh bendahara)
+  ditandai online-only dan ditolak dengan pesan jelas saat offline.
+
+**Tabrakan perubahan.** Dua pengurus menandai lunas bersamaan, atau dua orang
+mengisi skor partai yang sama. Ditangani lewat `version` (invarian §3): server
+menolak dengan `409` beserta keadaan terbaru, dan UI menampilkan pilihan yang
+jelas.
+
+**Pembaruan app.** SPA di-embed di binary; setiap deploy mengganti aset. Service
+worker mendeteksi versi baru dan menampilkan ajakan "Versi baru tersedia — muat
+ulang". Tanpa ini orang memakai app basi berhari-hari.
+
+**Halaman offline dan error boundary** tetap ada — di mode standalone tidak ada
+address bar untuk keluar dari layar rusak. v2 sudah menanganinya dengan benar
+([`v2/app/offline/page.tsx`](../v2/app/offline/page.tsx),
+[`v2/app/error.tsx`](../v2/app/error.tsx)) — pertahankan idenya.
+
+---
+
+## 12. Operasional & keamanan
+
+Tidak ada di v2, dan berhenti jadi opsional begitu menyimpan data klub orang lain.
+
+- **Bridge WA satu proses.** `cmd/waworker` terpisah dari API — whatsmeow memegang
+  satu koneksi, dan dua instance akan bentrok. Kalau API di-scale, worker tetap
+  tunggal.
+- **Pemantauan sesi WA.** Sesi bisa putus kapan saja. Kesehatannya diperiksa
+  berkala; putus → peringatan ke superadmin + halaman status. Tanpa ini, OTP
+  berhenti terkirim tanpa ada yang tahu.
+- **Backup terjadwal + uji pemulihan.** Bukan cuma dijadwalkan — **restore diuji
+  berkala**, karena cadangan yang tak pernah diuji bukan cadangan. Ini juga
+  satu-satunya jaring pengaman cutover, mengingat tidak ada jalur pulang.
+- **Observability.** Logging terstruktur dengan request ID, metrik Prometheus,
+  pelacakan galat, endpoint health/readiness. Karena superadmin sengaja tidak boleh
+  melihat data klub, ini satu-satunya alat diagnosa yang tersisa — perlakukan
+  sebagai kebutuhan utama, bukan pelengkap.
+- **Rate limiting umum** per user dan per IP di seluruh API, bukan cuma OTP.
+- **Hapus akun & ekspor data pribadi.** Nomor telepon itu data pribadi. Aturannya:
+  transaksi keuangan **tidak dihapus** (klub butuh pembukuannya), tapi identitas
+  dianonimkan jadi "Pemain terhapus". Ekspor mengembalikan data pribadi orang itu.
+
+### 12.1 Kuota
+
+Prinsipnya: **kuota melindungi sumber daya bersama, bukan membatasi pemakaian
+wajar.** Karena itu semuanya longgar, tersimpan per klub, dan bisa dinaikkan
+superadmin tanpa deploy ulang.
+
+| Kuota | Bawaan | Bisa dinaikkan? |
+|---|---|---|
+| Ukuran foto sebelum kompresi | 8 MB | Ya |
+| Anggota per klub | 500 | Ya |
+| Klub per orang | 20 | Ya |
+| Game, turnamen, transaksi | **tanpa batas** | — |
+| Poster QR aktif per klub | 10 | Ya |
+| **Pesan WA per klub per hari** | **50** | **Tidak — batas platform** |
+
+Foto tetap dikompresi di klien seperti v2, jadi 8 MB itu batas masukan mentah dari
+kamera HP; hasil simpannya jauh lebih kecil.
+
+Kuota pesan WA sengaja tidak bisa dinaikkan klub. Nomor bot dipakai bersama semua
+klub — satu klub yang mengirim membabi buta bisa membuat nomor itu dibanned, dan
+**semua klub kehilangan OTP sekaligus**. Kalau sebuah klub benar-benar butuh lebih,
+itu percakapan dengan superadmin, bukan saklar yang bisa digeser sendiri.
+
+### 12.2 Retensi data
+
+Apa yang terjadi pada data klub setelah dihapus atau ditangguhkan. Ini soal uang
+orang banyak, jadi jangan ada penghapusan yang tidak bisa dibatalkan.
+
+| Kejadian | Perlakuan |
+|---|---|
+| Admin menghapus klub | **Soft-delete.** Klub hilang dari daftar, data utuh. Bisa dipulihkan admin atau superadmin selama **30 hari** |
+| Lewat 30 hari | Dihapus permanen. Peringatan + tawaran ekspor dikirim pada hari ke-23 |
+| Superadmin menangguhkan klub | **Tidak pernah dihapus otomatis.** Penangguhan itu tindakan sengketa, bukan pembersihan — data ditahan sampai persoalannya selesai |
+| Klub tidak aktif lama | **Tidak dihapus.** Klub yang cuma vakum semusim tetap punya riwayat uang yang sah |
+| Anggota keluar dari klub | Keanggotaan berakhir; riwayat main dan pembayarannya **tetap** di klub, karena itu bagian pembukuan klub |
+| Akun dihapus pemiliknya | Identitas dianonimkan jadi "Pemain terhapus"; transaksi keuangan tetap ada (lihat §12) |
+
+Penghapusan permanen menghapus juga foto di volume disk dan langganan push
+terkaitnya. `audit_log` penghapusan disimpan di tingkat platform, tidak ikut
+terhapus — supaya selalu bisa dijawab siapa menghapus apa dan kapan.
+- **Kebijakan privasi minimal** — apa yang disimpan, siapa yang bisa melihat,
+  berapa lama.
+- **Lingkungan dev tanpa WA.** `Notifier` palsu yang menulis OTP ke log, plus data
+  seed. Tanpa ini tidak ada yang bisa mengembangkan tanpa memakai nomor produksi.
+
+---
+
+## 13. Skema data
+
+Skema v2 menyimpan game dan turnamen sebagai **blob JSON** (lihat
+[`v2/prisma/schema.prisma`](../v2/prisma/schema.prisma)) — itu yang memaksa "muat
+semua lalu hitung di memori". v3 menormalkannya supaya "tagihan si A di klub B"
+jadi satu query berindeks.
+
+**Platform & klub**
+- `clubs` — `slug`, `name`, `timezone`, `status`, `deleted_at` (soft-delete),
+  `settings`, `quotas`.
+  `settings` memuat: saklar catat main · wajib verifikasi · halaman publik ·
+  **transparansi kas** (default nyala) · QRIS · harga default · format main
+  default · **ambang tunggakan** (hari, rupiah, jeda pengingat, pengingat WA
+  nyala/mati).
+  `quotas` memuat nilai dari §12.1 — tersimpan per klub supaya superadmin bisa
+  menaikkannya tanpa deploy ulang.
+- `club_links` — tautan/QR: `purpose`, `token`, `active`, `expires_at`,
+  `scan_count`, `created_by`
+- `memberships` — `user_id`, `club_id`, `role`, `role_expires_at`, `joined_at`
+- `platform_admins`
+- `audit_log` — ubah peran, setujui klaim, sesuaikan saldo, tarik deposit, putar
+  token QR, tindakan superadmin. **Punya UI yang bisa dilihat admin klub**
+
+**Identitas & akses**
+- `users` — `phone` (E.164, unik), `username` (unik), `display_name`, `photo_id`,
+  `status` (`unclaimed`/`active`/`disabled`)
+- `user_aliases` — nama lama v2 → user, per klub (nama sama di klub berbeda bisa
+  orang berbeda)
+- `sessions` — token ter-hash, `expires_at`, `device_label`. **Persisten di
+  Postgres** — restart tidak menendang siapa pun keluar, tidak seperti v2 yang
+  menyimpan sesi di memori proses ([`v2/lib/auth.ts`](../v2/lib/auth.ts))
+- `webauthn_credentials`, `user_pins` (argon2id), `otp_codes`
+- `invites` (per-orang dan tautan grup), `claim_requests`, `push_subscriptions`
+- `idempotency_keys` — kunci, hasil, kedaluwarsa
+
+**Permainan**
+- `games` — `club_id`, `played_at` (tanggal di zona klub), `format`, `notes`,
+  `recorded_by`, `version`
+- `game_players` — `game_id`, `user_id`, `side`, `slot`, `amount`, `paid_at`,
+  `paid_by`. **Baris per pemain**, jumlah bebas. Inilah yang membuat "tagihan
+  si A" jadi `WHERE user_id = ? AND paid_at IS NULL`, bukan pemindaian seluruh
+  tabel seperti di v2
+- `game_koks` — harga di-snapshot
+
+**Turnamen**
+- `tournaments`, `tournament_pairs`, `matches`, `match_games`, `match_koks`,
+  `match_kok_charges`, `tournament_fees`
+- `match_kok_charges` sekaligus menutup lubang **kok lepas** yang di v2 tidak
+  pernah ditagih ke siapa pun — diakui sendiri di komentar
+  [`v2/lib/domain/types.ts`](../v2/lib/domain/types.ts) sekitar `TournamentCost`:
+  kok umum turnamen memotong stok dan masuk `kokTotal` tapi tidak punya penanggung.
+  Di v3, **setiap kok wajib punya penanggung** — partai tertentu, atau dibagi rata
+  ke seluruh peserta.
+
+**Uang**
+- `payments` — `status` (`pending`/`verified`/`rejected`), `claimed_by`,
+  `verified_by`, `method`
+- `wallet_entries` — ledger deposit append-only
+- `expenses`, `kok_types`, `settings` per klub
+
+**Notifikasi & media**
+- `notifications` (antrean keluar + pusat notifikasi in-app), `notification_prefs`
+- `media` — foto pemain & QRIS disimpan di **volume disk** dengan nama ter-hash,
+  disajikan Go. v2 menyimpan data URL langsung di kolom DB; untuk banyak klub itu
+  membengkakkan database dan memperlambat setiap query. Kompresi tetap dilakukan
+  di klien seperti v2.
+
+**Zona waktu.** `played_at` disimpan sebagai tanggal di **zona klub**, bukan zona
+perangkat. Timestamp lain disimpan UTC dan ditampilkan di zona klub. Tanpa aturan
+ini, dua klub beda zona menghasilkan laporan yang tidak konsisten — dan v2 memakai
+tanggal lokal browser, jadi ini perubahan yang harus disengaja.
+
+---
+
+## 14. Fase kerja
+
+Berurutan. Tiap fase menghasilkan sesuatu yang bisa dijalankan dan diperiksa.
+
+### F0 — Fondasi
+
+Struktur repo `v3/`, database `kok_v3` terpisah di instans Postgres yang sama,
+skeleton Go (health, config, logging terstruktur, graceful shutdown), skeleton
+SvelteKit, goose, Dockerfile multi-stage (build web → embed → binary), **notifier
+palsu + data seed**, workflow CI yang **menjalankan test/lint/vet** — sesuatu yang
+CI v2 tidak lakukan sama sekali (lihat `.github/workflows/deploy-v2.yml`, hanya
+build + deploy).
+
+**Selesai kalau:** `docker compose up` menyajikan halaman kosong dari satu binary,
+dan developer bisa jalan tanpa menyentuh WhatsApp sama sekali.
+
+### F1 — Domain di Go
+
+Port logika murni dari v2 **beserta testnya lebih dulu (test-first)**:
+
+- Biaya game — kini dengan jumlah pemain variabel
+- `buildDebtSummary` + planner cicilan greedy best-fit —
+  [`v2/lib/domain/debt.ts`](../v2/lib/domain/debt.ts)
+- Pembangun bagan knockout & klasemen round robin —
+  [`v2/lib/domain/tournament.ts`](../v2/lib/domain/tournament.ts)
+- Aritmetika stok — [`v2/lib/domain/stock.ts`](../v2/lib/domain/stock.ts)
+- **Baru:** ledger dompet dan aturan potong-otomatis
+
+Ini bagian paling berharga dari v2 dan sudah punya cakupan test yang layak:
+[`v2/lib/domain/domain.test.ts`](../v2/lib/domain/domain.test.ts) (305 baris) dan
+[`v2/lib/domain/tournament.test.ts`](../v2/lib/domain/tournament.test.ts) (723
+baris).
+
+> **Terjemahkan kasus testnya ke Go dulu, baru tulis implementasinya.** Di sinilah
+> bug paling mungkin masuk, dan test v2 adalah spesifikasi yang sudah teruji di
+> produksi.
+
+Tambah **property-based test** untuk dompet: saldo tidak pernah minus, jumlah
+ledger selalu sama dengan saldo.
+
+**Selesai kalau:** `go test ./internal/domain/...` hijau dengan kasus setara v2.
+
+### F2 — Multi-tenant, store, API, realtime
+
+Skema dengan `club_id` menyeluruh + RLS, middleware tenant, idempotensi, versi
+entitas, endpoint granular, SSE bertipe, `LISTEN/NOTIFY` untuk fan-out lintas
+proses.
+
+**Selesai kalau:** dua klien terhubung dan mutasi di satu tercermin di lain
+**tanpa memuat ulang seluruh data**; suite kebocoran antar-klub hijau; kirim ganda
+dengan kunci sama tidak menghasilkan entri kedua.
+
+### F3 — Sistem desain
+
+Token (warna yang sudah diverifikasi kontrasnya, tipografi, ruang, gerak),
+komponen inti di atas Melt UI, kerangka responsif tiga breakpoint, halaman contoh
+yang memamerkan seluruh komponen.
+
+> **Sengaja jadi fase tersendiri.** Kalau menumpang di fase fitur, hasilnya jadi
+> tambal-sulam seperti v2 yang punya dua sistem komponen hidup berdampingan.
+
+**Selesai kalau:** halaman contoh menampilkan semua komponen di terang & gelap, di
+tiga breakpoint, dan setiap token teks lolos kontras 4.5:1.
+
+### F4 — Identitas & akses
+
+`cmd/waworker` + whatsmeow (pairing, penyimpanan sesi, reconnect), OTP, passkey +
+PIN, sesi persisten, resolusi izin (jatuh-balik, masa berlaku, saklar klub),
+pembuatan klub, undangan per-orang, **tautan + QR klub + generator poster**,
+klaim + persetujuan, panel superadmin.
+
+**Selesai kalau:** poster QR dicetak, dipindai HP asing, dan orang itu berhasil
+gabung sampai masuk antrean persetujuan; buka app berikutnya cukup Face ID; peran
+berbatas waktu turun sendiri saat kedaluwarsa; `pencatat` ditolak saat menyentuh
+endpoint uang.
+
+### F5 — UI inti + offline
+
+Beranda (tagihanku sebagai hero), Main, Klub. Store optimistic, cermin IndexedDB,
+**outbox tulis**, service worker + ajakan pembaruan versi, halaman offline &
+error, onboarding "pasang ke Home Screen".
+
+**Selesai kalau:** alur harian penuh berfungsi di 375px **dan** 1440px; menandai
+lunas terasa instan (nol round-trip sebelum UI berubah); mode pesawat tetap bisa
+dibaca dan aksinya mengantre lalu terkirim tanpa duplikat.
+
+### F6 — Uang
+
+Deposit (ledger, potong otomatis, tarik dengan persetujuan), alur klaim →
+verifikasi, QRIS statis/dinamis + decode dari foto + pencatatan keberhasilan,
+laporan tiga kantong, jurnal audit yang bisa dilihat admin klub.
+
+### F7 — Turnamen
+
+Bagan knockout, round robin, dialog partai, kok per partai, iuran, perbaikan kok
+lepas, saran nominal iuran. Bagan tampil utuh di desktop.
+
+### F8 — Notifikasi & berbagi
+
+Web Push (VAPID) + preferensi + jam tenang, pusat notifikasi in-app, antrean WA
+dengan rate limit dan kuota per klub, jaring pengaman WA saat push gagal. Share
+teks WhatsApp + kartu gambar.
+
+### F9 — Halaman publik & operasional
+
+Rute publik read-only dengan query terpisah, backup terjadwal + uji restore,
+metrik & pelacakan galat, rate limiting umum, kuota, hapus akun & ekspor data,
+kebijakan privasi.
+
+### F10 — Migrasi & cutover
+
+`cmd/migrate-v2` membaca DB v2 dan menulis ke skema v3 sebagai **klub pertama**.
+
+**Idempoten** (aman diulang) dan **terverifikasi**:
+
+- Total kas cocok
+- Piutang per orang cocok
+- `player_carry` v2 masuk sebagai saldo deposit awal
+- Jumlah game dan partai cocok
+- Semua game lama tercatat sebagai ganda 4 orang
+- Tidak ada nama yang gagal dipetakan ke user
+
+**Verifikasi gagal = transaksi dibatalkan**, bukan peringatan yang bisa diabaikan.
+
+Karena **tidak ada jalur pulang**, pengamannya ada di depan: latihan migrasi
+berulang di salinan produksi sampai nol selisih; cadangan DB tepat sebelum cutover
+yang **sudah diuji restore**; masa pemantauan ketat beberapa hari pertama.
+
+**Rilis:** v3 naik di subdomain baru berdampingan dengan v2 yang masih jalan.
+Setelah anggota pindah dan angkanya terbukti cocok, v2 dibekukan read-only sebagai
+arsip, dan **v1 (Express di akar repo) dimatikan**.
+
+---
+
+## 15. Risiko
+
+| Risiko | Penanganan |
+|---|---|
+| **Kebocoran data antar klub** — paling fatal di multi-tenant | Tiga lapis: middleware tenant, `club_id` wajib di tiap query, RLS. Suite kebocoran di tiap CI |
+| **Halaman publik / QR membocorkan data pribadi** | Rute + query terpisah yang secara struktur tidak punya akses ke field pribadi — bukan penyaringan di UI |
+| **QR tembok disalahgunakan** | Pendaftaran lewat QR selalu antre persetujuan; token bisa diputar/dicabut; rate limit per IP; jumlah pindaian dipantau |
+| **Kirim ganda menciptakan uang** | `Idempotency-Key` wajib; hasil disimpan dan dikembalikan apa adanya |
+| **Deposit salah hitung** | Ledger append-only sebagai kebenaran; saldo cuma cache; rekonsiliasi berkala; property-based test; larangan minus menghapus satu kelas galat |
+| **Nomor WA dibanned** — menyeret semua klub | Volume ditekan lewat Push-utama; kuota per klub; antrean berjeda; kode undangan + PIN sebagai jalur masuk kedua; `Notifier` siap pindah ke Cloud API |
+| **Sesi WA putus tanpa ketahuan** | Pemantauan berkala + peringatan ke superadmin + halaman status |
+| **Bug saat port logika uang** | Port test v2 lebih dulu sebagai spesifikasi; jalankan v2 & v3 pada data sama saat verifikasi migrasi dan bandingkan tiap angka |
+| **Cutover gagal tanpa jalur pulang** | Latihan berulang sampai nol selisih; cadangan yang sudah diuji restore; masa pemantauan ketat |
+| **Desain kembali jadi tambal-sulam** | Sistem desain jadi fase tersendiri (F3) sebelum layar mana pun dibangun |
+| **Superadmin tak bisa mendiagnosis** — konsekuensi sadar | Observability serius (§12); jalur izin sementara dari admin klub |
+| **Jumlah pemain variabel merusak perhitungan lama** | Migrasi menetapkan semua game v2 sebagai ganda 4 orang; test perbandingan angka v2 vs v3 |
+| **Lingkup membengkak** | Fase berurutan; F0–F5 sudah app berguna untuk satu klub walau sisanya tertunda |
+| **v3 tetap terasa berat** | Anggaran performa ditegakkan sejak F5, diukur bukan diasumsikan |
+
+---
+
+## 16. Verifikasi
+
+1. **Go** — `go test ./...`, `go vet ./...`, `golangci-lint run`. Domain wajib
+   punya test yang diturunkan dari test v2, plus property-based test untuk dompet.
+2. **Web** — `svelte-check`, lint, vitest untuk store, outbox, dan logika format.
+3. **Kontrak** — spesifikasi OpenAPI jadi sumber kebenaran; tipe klien di-generate
+   darinya, sehingga API dan UI tidak bisa berbeda diam-diam.
+4. **Isolasi tenant** — pengguna klub A menembak tiap endpoint klub B dan harus
+   selalu ditolak. Wajib hijau tiap CI.
+5. **Halaman publik & QR** — pemeriksaan otomatis bahwa respons publik tidak pernah
+   memuat nomor telepon, saldo deposit, atau riwayat pembayaran perorangan.
+6. **Idempotensi** — kirim aksi bayar dua kali dengan kunci sama; pastikan hanya
+   satu entri terbentuk.
+7. **Konflik** — dua klien menandai lunas item yang sama; yang kalah dapat `409`
+   dan pesan jelas, bukan penimpaan diam-diam.
+8. **E2E (Playwright)** — buat klub baru → catat main sebagai satu-satunya anggota;
+   catat main single dan rotasi; gabung lewat QR sampai disetujui (bridge WA
+   dipalsukan); login ulang dengan passkey; peran sementara kedaluwarsa; bayar
+   lebih → masuk deposit → tagihan berikutnya terpotong otomatis; klaim +
+   verifikasi bayar; buat turnamen + isi skor.
+9. **Poster** — unduh PDF A4 & A5, cetak, pindai dengan beberapa HP berbeda,
+   pastikan QR terbaca dari jarak sekitar 1,5 meter.
+10. **Offline** — mode pesawat: app tetap terbaca, aksi mengantre, terkirim saat
+    online, tidak ada duplikat.
+11. **Manual di browser** — 375×812 dan 1440×900, di kedua tema. Tidak boleh ada
+    scroll horizontal pada badan halaman di mobile.
+12. **Realtime** — dua tab, mutasi di satu, yang lain menambal tanpa memuat ulang
+    (panel network: nol permintaan data).
+13. **PWA** — build produksi, pasang ke home screen, matikan jaringan: shell +
+    data terakhir tetap tampil; uji ajakan pembaruan versi.
+14. **Notifikasi** — Web Push diuji di Android dan iOS-terpasang; jam tenang
+    dihormati; pengalihan ke WA jalan saat push gagal; kuota per klub berfungsi.
+15. **Performa** — ukuran shell, waktu tap→UI berubah untuk "tandai lunas",
+    Lighthouse mobile.
+16. **Aksesibilitas** — telusuri satu halaman penuh dengan Tab saja; rasio kontras
+    tiap token teks diverifikasi sebelum dipakai; uji keterbacaan di bawah cahaya
+    terang.
+17. **Pemulihan** — restore cadangan ke instans bersih dan pastikan app jalan.
+18. **Migrasi** — perbandingan angka v2 vs v3 nol selisih, termasuk `player_carry`
+    → saldo deposit awal, sebelum cutover.
+
+---
+
+## 17. Angka bawaan yang boleh ditinjau ulang
+
+Tidak ada lagi keputusan yang menunggu — seluruh arah sudah terkunci di §2. Yang
+tersisa hanya angka, dan angka boleh diubah tanpa membongkar rancangan. Dikumpulkan
+di sini supaya mudah ditemukan saat mau disetel:
+
+| Angka | Nilai | Rujukan |
+|---|---|---|
+| Ambang tunggakan | 14 hari · Rp 50.000 · jeda 7 hari | §10.3 |
+| Masa berlaku sesi | 90 hari, diperpanjang otomatis | §7.2 |
+| TTL OTP | 5 menit, maks 5 percobaan | §7.2 |
+| Jam tenang notifikasi | 21.00–07.00 | §10.2 |
+| Tenggang hapus klub | 30 hari, peringatan hari ke-23 | §12.2 |
+| Kuota | lihat tabel | §12.1 |
+| Anggaran performa | shell < 80KB gzip · interaksi < 100ms | §4.2 |
+
+Semuanya harus dibaca dari konfigurasi, **bukan ditulis sebagai konstanta tersebar
+di dalam kode.** Yang per-klub disimpan di `clubs.settings` / `clubs.quotas`; yang
+tingkat platform di konfigurasi server.
+
+---
+
+## 18. Backlog (di luar lingkup sekarang)
+
+- Transfer bank dengan kode unik 3 digit sebagai jalur pembayaran
+- Domain sendiri per klub
+- Meta WhatsApp Cloud API menggantikan whatsmeow
+- Skor untuk game harian — membuka win rate, streak, head-to-head
+- Impor data klub baru dari Excel/CSV
+- Ekspor CSV/JSON per klub
+- i18n (struktur disiapkan; isi hanya Bahasa Indonesia untuk sekarang)
+- Penagihan berlangganan kalau platform dipakai klub luar secara serius
