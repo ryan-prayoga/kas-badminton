@@ -83,6 +83,14 @@ type Querier interface {
 	// (bukan status 'unclaimed', itu cuma untuk akun bayangan hasil migrasi
 	// v2 yang belum pernah diverifikasi siapa pun, §7.3).
 	CreateUser(ctx context.Context, arg CreateUserParams) (User, error)
+	// Dompet deposit (PLAN.md §9.1, API.md §4 "Deposit"). Ledger append-only —
+	// SumWalletBalance (games.sql) sudah ada sejak F5 (cuma baca, F5 belum
+	// pernah menulis baris pertama). Query di sini yang menulisnya, plus
+	// kandidat potong-otomatis (§9.5 aturan B/C) dan jurnal.
+	// Satu baris ledger. Larangan minus ditegakkan DUA lapis: domain.AppendEntry
+	// (dihitung sebelum panggil ini) DAN trigger DB wallet_no_negative
+	// (DDL.sql) — baris ini gagal kalau keduanya dilewati.
+	CreateWalletEntry(ctx context.Context, arg CreateWalletEntryParams) (WalletEntry, error)
 	// session_id = sesi yang sedang aktif SAAT mendaftar (device_label & bearer
 	// token yang dipakai memanggil register/verify) — dicabut bersama sesi itu
 	// (§7.2.2, lihat auth.RevokeSession yang memanggil
@@ -186,7 +194,22 @@ type Querier interface {
 	// di Go), tapi disputed TETAP TIDAK ikut total_owed (itu SumUnpaidByPayer,
 	// WHERE-nya beda: AND disputed_at IS NULL).
 	ListUnpaidGamePlayersByPayer(ctx context.Context, arg ListUnpaidGamePlayersByPayerParams) ([]ListUnpaidGamePlayersByPayerRow, error)
+	// Kandidat potong-otomatis (§9.5 aturan B) — tagihan main yang belum lunas
+	// milik payer, lewat indeks yang sama dengan "tagihanku"
+	// (game_players_unpaid_idx sudah mengecualikan disputed_at). g.created_at
+	// ikut diambil buat orderKey planner (WalletDebtRef.CreatedAt) — pemenang
+	// "paling lama" dipakai buat memutus seri best-fit.
+	ListWalletDeductCandidates(ctx context.Context, arg ListWalletDeductCandidatesParams) ([]ListWalletDeductCandidatesRow, error)
+	// Jurnal dompet satu orang, terbaru dulu. Cursor `before` (timestamptz) —
+	// sqlc.narg supaya NULL berarti "dari awal" (halaman pertama).
+	ListWalletEntries(ctx context.Context, arg ListWalletEntriesParams) ([]WalletEntry, error)
 	ListWebauthnCredentialsByUser(ctx context.Context, userID uuid.UUID) ([]WebauthnCredential, error)
+	// Menutup baris tagihan yang tersentuh rencana potong-otomatis. Sengaja
+	// terpisah dari MarkGamePlayersPaid (games.sql) walau UPDATE-nya identik —
+	// nama beda menandai KENAPA baris ini lunas (dompet, bukan bendahara catat
+	// cash) buat pembaca kode; keduanya boleh konvergen lagi kalau kelak butuh
+	// kolom pembeda (mis. paid_via enum).
+	MarkGamePlayersDeducted(ctx context.Context, arg MarkGamePlayersDeductedParams) ([]uuid.UUID, error)
 	// Aksi massal "tandai lunas" (API.md §0 "boleh berhasil sebagian" + §4
 	// POST bills/mark-paid) — dipanggil BENDAHARA (perm.ManageMoney) yang
 	// mencatat uang cash diterima dari anggota lain, BUKAN pemain menandai

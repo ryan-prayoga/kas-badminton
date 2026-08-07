@@ -174,6 +174,9 @@ type gameDTO struct {
 	ScoreFormat *string        `json:"score_format,omitempty"`
 	WinnerSide  *string        `json:"winner_side,omitempty"`
 	Score       []gameScoreDTO `json:"score,omitempty"`
+	// Potong otomatis (§9.5 aturan B, wallet.go) — cuma terisi kalau ada
+	// payer yang deposit-nya menutup tagihan seketika ini juga.
+	WalletDeductions []walletDeductionDTO `json:"wallet_deductions,omitempty"`
 }
 
 func newGameDTO(g gen.Game) gameDTO {

@@ -96,6 +96,7 @@ func Mount(r chi.Router, s *store.Store, bus *realtime.Bus, notifier notify.Noti
 					r.Get("/", handleGetClub(s))
 					r.Get("/members", handleListMembers(s))
 					r.Get("/me/bill", handleGetMyBill(s))
+					r.Get("/me/wallet", handleGetMyWallet(s))
 
 					r.Group(func(r chi.Router) {
 						r.Use(RequireIdempotency(s))
@@ -117,8 +118,13 @@ func Mount(r chi.Router, s *store.Store, bus *realtime.Bus, notifier notify.Noti
 						// dicek manual di handler (clubs_members.go).
 						r.Patch("/members/{userId}/auto-deduct", handleUpdateAutoDeduct(s))
 
-						r.With(RequirePerm(perm.ManageMoney)).
-							Post("/bills/mark-paid", handleMarkBillsPaid(s))
+						r.Group(func(r chi.Router) {
+							r.Use(RequirePerm(perm.ManageMoney))
+							r.Post("/bills/mark-paid", handleMarkBillsPaid(s))
+							r.Get("/wallet/{userId}", handleGetWallet(s))
+							r.Post("/wallet/{userId}/topup", handleTopupWallet(s))
+							r.Post("/wallet/{userId}/withdraw", handleWithdrawWallet(s))
+						})
 					})
 
 					r.Route("/links", func(r chi.Router) {

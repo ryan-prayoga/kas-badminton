@@ -146,6 +146,7 @@ func handleCreateGame(s *store.Store) http.HandlerFunc {
 		var savedKoks []gen.GameKok
 		var savedScores []gen.GameScore
 		var billTotals map[uuid.UUID]int64
+		var walletDeductions []walletDeductionDTO
 
 		err = s.WithClub(r.Context(), clubID, func(ctx context.Context, q *gen.Queries) error {
 			// Resolusi kok: kok_type_id → snapshot dari katalog, atau
@@ -260,6 +261,22 @@ func handleCreateGame(s *store.Store) http.HandlerFunc {
 				}
 			}
 
+			// Potong otomatis (§9.5 aturan C) — SEKETIKA, di transaksi yang
+			// sama dengan pembuatan tagihan, sebelum SumUnpaidByPayer di
+			// bawah menghitung sisa tunggakan final.
+			for payerID := range billTotals {
+				ded, newBalance, err := autoDeductForPayer(ctx, q, clubID, payerID)
+				if err != nil {
+					return err
+				}
+				if len(ded) > 0 {
+					walletDeductions = append(walletDeductions, ded...)
+					if err := publishWalletUpdated(ctx, q, clubID, payerID, newBalance); err != nil {
+						return err
+					}
+				}
+			}
+
 			for payerID := range billTotals {
 				total, err := q.SumUnpaidByPayer(ctx, gen.SumUnpaidByPayerParams{ClubID: clubID, PayerID: payerID})
 				if err != nil {
@@ -309,6 +326,7 @@ func handleCreateGame(s *store.Store) http.HandlerFunc {
 		for _, sc := range savedScores {
 			dto.Score = append(dto.Score, newGameScoreDTO(sc))
 		}
+		dto.WalletDeductions = walletDeductions
 		writeJSON(w, http.StatusCreated, dto)
 	}
 }
