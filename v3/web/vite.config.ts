@@ -4,6 +4,13 @@ import tailwindcss from '@tailwindcss/vite';
 import { defineConfig } from 'vite';
 
 export default defineConfig({
+	server: {
+		// Dev lokal saja — produksi satu binary Go, tidak ada proxy (§4.1).
+		// Port Go bawaan 8300 (internal/config, PORT env di sisi server itu).
+		proxy: {
+			'/api': 'http://localhost:8300'
+		}
+	},
 	plugins: [
 		tailwindcss(),
 		sveltekit({
