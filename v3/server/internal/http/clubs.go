@@ -96,7 +96,7 @@ func handleCreateClub(s *store.Store) http.HandlerFunc {
 				Name:      req.Name,
 				Timezone:  req.Timezone,
 				Settings:  defaultSettingsJSON(),
-				Quotas:    []byte(`{}`),
+				Quotas:    defaultQuotasJSON(),
 				CreatedBy: &userID,
 			})
 			if err != nil {

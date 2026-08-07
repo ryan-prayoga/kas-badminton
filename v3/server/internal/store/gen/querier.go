@@ -35,6 +35,8 @@ type Querier interface {
 	// RLS tetap menahan meski filter aplikasinya "benar" (§6.2 lapisan
 	// ketiga).
 	CountKokTypesByClub(ctx context.Context, clubID uuid.UUID) (int64, error)
+	CountQueuedNotifications(ctx context.Context) (int64, error)
+	CountQueuedNotificationsByChannel(ctx context.Context) ([]CountQueuedNotificationsByChannelRow, error)
 	// Rate limit kirim ulang (PLAN.md §7.2) — dihitung dari SEMUA kode yang
 	// diminta di jendela waktu, bukan cuma yang masih aktif, supaya spam
 	// kirim-lalu-tunggu-kadaluwarsa tidak lolos dari hitungan.
@@ -115,10 +117,21 @@ type Querier interface {
 	GetSessionByTokenHash(ctx context.Context, tokenHash []byte) (Session, error)
 	GetUser(ctx context.Context, id uuid.UUID) (User, error)
 	GetUserByPhone(ctx context.Context, phone pgtype.Text) (User, error)
+	// Belum ada endpoint HTTP buat ini (PLAN.md tidak menyebut alur
+	// onboarding-nya — kemungkinan operator lewat psql langsung). Query ini
+	// dipakai test (f7_test.go) dan tersedia buat tooling ops nanti.
+	GrantSuperadmin(ctx context.Context, userID uuid.UUID) error
 	IncrementClubLinkScanCount(ctx context.Context, id uuid.UUID) error
 	IncrementOTPAttempts(ctx context.Context, id uuid.UUID) error
 	IncrementPinFailed(ctx context.Context, arg IncrementPinFailedParams) error
+	IsSuperadmin(ctx context.Context, userID uuid.UUID) (bool, error)
 	ListActiveClubLinks(ctx context.Context, clubID uuid.UUID) ([]ClubLink, error)
+	// Metrik agregat (§7 API.md: "jumlah anggota, aktivitas") — superadmin
+	// TIDAK boleh baca isi klub (§6.5), jadi cuma hitungan lewat
+	// club_member_count() (migrasi 00019, SECURITY DEFINER sempit), bukan
+	// subquery memberships langsung (ber-RLS, akan selalu nol tanpa
+	// app.club_id — sama masalahnya dengan 00017/00018).
+	ListClubsWithMemberCount(ctx context.Context) ([]ListClubsWithMemberCountRow, error)
 	ListGameKoksByGame(ctx context.Context, gameID uuid.UUID) ([]GameKok, error)
 	ListGamePlayersByGame(ctx context.Context, gameID uuid.UUID) ([]GamePlayer, error)
 	ListGamePlayersByGames(ctx context.Context, gameIds []uuid.UUID) ([]GamePlayer, error)
@@ -162,7 +175,11 @@ type Querier interface {
 	// Query "tagihanku" — satu index scan lewat game_players_unpaid_idx
 	// (indeks paling penting di seluruh skema, DDL.sql baris 371-379).
 	SumUnpaidByPayer(ctx context.Context, arg SumUnpaidByPayerParams) (int64, error)
+	SuspendClub(ctx context.Context, id uuid.UUID) (Club, error)
 	TouchSession(ctx context.Context, id uuid.UUID) error
+	// Replace penuh, sama pola UpdateClubSettings (clubs_settings.sql) — merge
+	// dilakukan di handler.
+	UpdateClubQuotas(ctx context.Context, arg UpdateClubQuotasParams) (Club, error)
 	// Replace penuh, bukan merge — pemanggil (handler) yang menggabungkan field
 	// lama+baru sebelum kirim, supaya "sumber kebenaran shape settings" tetap
 	// satu tempat (defaultClubSettings di clubs.go), bukan dua jalur beda logic.

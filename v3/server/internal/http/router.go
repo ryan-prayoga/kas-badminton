@@ -48,6 +48,19 @@ func Mount(r chi.Router, s *store.Store, bus *realtime.Bus, notifier notify.Noti
 
 			r.Get("/events", handleEvents(s, bus))
 
+			// Tanpa {clubId} — superadmin TIDAK boleh baca isi klub (§6.5).
+			r.Route("/admin", func(r chi.Router) {
+				r.Use(RequireSuperadmin(s))
+				r.Get("/clubs", handleAdminListClubs(s))
+				r.Get("/wa/health", handleAdminWaHealth(notifier))
+				r.Get("/notifications/queue-depth", handleAdminQueueDepth(s))
+				r.Group(func(r chi.Router) {
+					r.Use(RequireIdempotency(s))
+					r.Post("/clubs/{id}/suspend", handleAdminSuspendClub(s))
+					r.Post("/clubs/{id}/quotas", handleAdminUpdateQuotas(s))
+				})
+			})
+
 			r.Group(func(r chi.Router) {
 				r.Use(RequireIdempotency(s))
 				r.Post("/clubs", handleCreateClub(s))

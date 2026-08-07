@@ -25,6 +25,16 @@ type Notifier interface {
 	Send(ctx context.Context, msg Message) error
 }
 
+// HealthChecker adalah interface OPSIONAL — Notifier boleh
+// mengimplementasikannya supaya GET /admin/wa/health (API.md §7) bisa
+// melapor status sungguhan. cmd/waworker (F4 bagian 6) akan
+// mengimplementasikan ini dengan status koneksi whatsmeow sesungguhnya;
+// Fake di bawah melapor apa adanya — "tidak pernah terhubung ke WA" — bukan
+// pura-pura sehat.
+type HealthChecker interface {
+	Health(ctx context.Context) (ok bool, detail string)
+}
+
 // Fake tidak pernah mengirim apa pun ke jaringan — dia cuma menulis pesan ke
 // log. Dipakai di dev/CI supaya tidak ada yang perlu memakai nomor WA bot
 // produksi untuk mengembangkan fitur (PLAN.md §12).
@@ -44,4 +54,13 @@ func (f *Fake) Send(_ context.Context, msg Message) error {
 	return nil
 }
 
-var _ Notifier = (*Fake)(nil)
+// Health — Fake TIDAK PERNAH terhubung ke WA sungguhan, jadi selalu jujur
+// melapor begitu, bukan "ok" palsu.
+func (f *Fake) Health(_ context.Context) (bool, string) {
+	return true, "notifier palsu (dev/CI) — tidak pernah terhubung ke WA sungguhan, cuma menulis log"
+}
+
+var (
+	_ Notifier      = (*Fake)(nil)
+	_ HealthChecker = (*Fake)(nil)
+)
