@@ -100,6 +100,9 @@ func Mount(r chi.Router, s *store.Store, bus *realtime.Bus, notifier notify.Noti
 					// Akses bersyarat pada saklar transparansi_kas, dicek
 					// manual di handler — bukan RequirePerm tetap (treasury.go).
 					r.Get("/treasury", handleGetTreasury(s))
+					// QRIS statis — siapa pun anggota boleh baca (layar
+					// bayar); PUT-nya di bawah, digerbang ManageMoney.
+					r.Get("/qris", handleGetQris(s))
 
 					r.Group(func(r chi.Router) {
 						r.Use(RequireIdempotency(s))
@@ -132,6 +135,7 @@ func Mount(r chi.Router, s *store.Store, bus *realtime.Bus, notifier notify.Noti
 							r.Post("/payments/{id}/reject", handleRejectPayment(s))
 							r.Get("/expenses", handleListExpenses(s))
 							r.Post("/expenses", handleCreateExpense(s))
+							r.Put("/qris", handlePutQris(s))
 						})
 
 						// Klaim "sudah transfer" — HAK PEMAIN atas tagihannya sendiri
@@ -139,6 +143,11 @@ func Mount(r chi.Router, s *store.Store, bus *realtime.Bus, notifier notify.Noti
 						// query (payments.go), sama pola dgn sanggahan (games.go).
 						r.Post("/payments/claim", handleClaimPayment(s))
 						r.Post("/payments/claim/{id}/cancel", handleCancelPayment(s))
+
+						// QR dinamis — anggota mana pun (bukan ManageMoney):
+						// dipakai pemain sendiri saat bayar (§9.6).
+						r.Post("/qris/dynamic", handleCreateDynamicQris(s))
+						r.Post("/qris/dynamic/{id}/report-rejected", handleReportQrisDynamicRejected(s))
 					})
 
 					r.Route("/links", func(r chi.Router) {

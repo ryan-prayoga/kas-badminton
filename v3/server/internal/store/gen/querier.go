@@ -83,6 +83,7 @@ type Querier interface {
 	CreateOTP(ctx context.Context, arg CreateOTPParams) (OtpCode, error)
 	CreatePayment(ctx context.Context, arg CreatePaymentParams) (Payment, error)
 	CreatePaymentAllocation(ctx context.Context, arg CreatePaymentAllocationParams) (PaymentAllocation, error)
+	CreateQrisDynamicEvent(ctx context.Context, arg CreateQrisDynamicEventParams) (QrisDynamicEvent, error)
 	CreateSession(ctx context.Context, arg CreateSessionParams) (Session, error)
 	// Pemain tamu (§8.1) — pencatat mengetik nama yang tidak cocok anggota
 	// mana pun, sistem bikin akun bayangan langsung di klub itu. phone NULL +
@@ -281,6 +282,10 @@ type Querier interface {
 	// (pemain sendiri, verified_by tetap NULL) supaya jurnal audit membedakan
 	// "ditolak orang lain" dari "dibatalkan sendiri".
 	RejectPayment(ctx context.Context, arg RejectPaymentParams) (Payment, error)
+	// Dua kali lapor pada QR yang sama TIDAK menimpa laporan pertama
+	// (rejected_at IS NULL di WHERE) — "kejadian" dicatat sekali, sama
+	// semangat DisputeGamePlayer (games.sql).
+	ReportQrisDynamicRejected(ctx context.Context, arg ReportQrisDynamicRejectedParams) (QrisDynamicEvent, error)
 	// Klaim kunci lebih dulu (response masih NULL) sebelum handler jalan.
 	// ON CONFLICT DO NOTHING + baris kosong di hasil berarti kunci itu sudah
 	// dipegang permintaan lain (invarian §3.3) — caller cek row count.
@@ -336,6 +341,12 @@ type Querier interface {
 	SumWalletBalance(ctx context.Context, arg SumWalletBalanceParams) (int64, error)
 	SuspendClub(ctx context.Context, id uuid.UUID) (Club, error)
 	TouchSession(ctx context.Context, id uuid.UUID) error
+	// QRIS statis tersimpan per klub (clubs.merchant_qris) + jejak QR dinamis
+	// (PLAN.md §9.6, F6/4).
+	// Replace + bump version, pola sama dgn UpdateClubSettings
+	// (clubs_settings.sql) — If-Match (invarian §3.4) dicek lewat WHERE
+	// version = $3; ErrNoRows berarti konflik, ditangani pemanggil.
+	UpdateClubMerchantQris(ctx context.Context, arg UpdateClubMerchantQrisParams) (Club, error)
 	// Replace penuh, sama pola UpdateClubSettings (clubs_settings.sql) — merge
 	// dilakukan di handler.
 	UpdateClubQuotas(ctx context.Context, arg UpdateClubQuotasParams) (Club, error)

@@ -959,6 +959,16 @@ type PushSubscription struct {
 	LastOkAt  pgtype.Timestamptz `json:"last_ok_at"`
 }
 
+type QrisDynamicEvent struct {
+	ID         uuid.UUID          `json:"id"`
+	ClubID     uuid.UUID          `json:"club_id"`
+	Amount     int64              `json:"amount"`
+	CreatedBy  *uuid.UUID         `json:"created_by"`
+	CreatedAt  pgtype.Timestamptz `json:"created_at"`
+	ExpiresAt  pgtype.Timestamptz `json:"expires_at"`
+	RejectedAt pgtype.Timestamptz `json:"rejected_at"`
+}
+
 type Session struct {
 	ID          uuid.UUID          `json:"id"`
 	UserID      uuid.UUID          `json:"user_id"`
