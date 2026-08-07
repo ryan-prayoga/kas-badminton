@@ -106,6 +106,8 @@ pemain, format main yang tidak lagi mengunci di 4 orang, dan desain ulang total.
 | Panduan awam | **driver.js**, dimuat malas, sekali per panduan, selalu bisa dilewati |
 | Pemain tamu | Boleh dicatat tanpa akun — jadi anggota `unclaimed` yang bisa diklaim nanti |
 | Salah catat | **Batalkan cepat** 8 detik untuk pencatat; **sanggahan** untuk yang dicatat |
+| Nada bicara | Santai, sapa "kamu", tunggakan disebut netral. Teks UI terkumpul di satu tempat |
+| Aksi massal | Ada untuk bendahara, dengan konfirmasi bernominal dan **tidak boleh diantre offline** |
 | Layar utama | **Tagihanku dulu** |
 | QRIS | Statis sebagai default; dinamis jadi jalur cepat opsional |
 | Rekening bank | Ditunda, tidak masuk lingkup sekarang |
@@ -349,6 +351,58 @@ keluhan pertama setelah rilis:
   detail di kanan, tanpa pindah halaman. Dialog di tengah, bukan sheet dari bawah.
   Daftar panjang jadi tabel padat dengan angka rata kanan. Bagan turnamen tampil
   utuh tanpa gulir mendatar.
+
+**Aksi massal untuk bendahara.** Menandai lunas satu per satu masuk akal di klub
+sepuluh orang, tidak di klub tiga ratus. Daftar tagihan punya mode pilih-banyak:
+centang beberapa orang, satu tindakan untuk semuanya, satu entri ringkas di
+jurnal audit alih-alih tiga puluh baris terpisah.
+
+Karena ini mengubah uang banyak orang sekaligus, pengamannya lebih ketat dari
+aksi biasa: **konfirmasi yang menyebutkan jumlah orang dan total rupiah**, dan
+jendela "Batalkan" (§9.4) yang membatalkan seluruh kumpulan, bukan satu per satu.
+Aksi massal **tidak boleh** diantre offline — terlalu besar akibatnya untuk
+dikirim membabi buta saat sinyal kembali.
+
+Tersedia di layar besar dan di HP. Bendahara memang lebih sering di laptop, tapi
+tidak boleh dipaksa mencari laptop untuk pekerjaan yang wajar dilakukan sambil
+duduk di pinggir lapangan.
+
+### 5.6.1 Nada bicara & pesan galat
+
+Prinsip "uang tidak menghakimi" (§5.2 nomor 3) tidak akan terwujud sendiri lewat
+pilihan warna. Ia hidup atau mati di kalimat-kalimat kecil, dan kalimat kecil
+adalah hal pertama yang ditulis asal-asalan saat mengejar fitur.
+
+**Nada:** santai tapi tidak kekanakan, seperti bendahara klub yang enak diajak
+bicara. Sapa dengan "kamu". Bahasa Indonesia sehari-hari, bukan bahasa surat
+resmi dan bukan bahasa sistem.
+
+**Pesan galat wajib memenuhi tiga hal sekaligus:** apa yang terjadi, kenapa, dan
+apa yang bisa dilakukan sekarang.
+
+| Jangan | Pakai |
+|---|---|
+| "Terjadi kesalahan" | "Gagal menyimpan — koneksi terputus. Catatannya masih tersimpan, dikirim lagi otomatis kalau sudah online." |
+| "Unauthorized" | "Sesi kamu sudah berakhir. Masuk lagi buat lanjut." |
+| "Validation failed" | "Nominalnya belum diisi." |
+| "Anda memiliki tunggakan" | "Sisa patungan kamu Rp 47.000" |
+| "Rate limit exceeded" | "Kebanyakan percobaan. Coba lagi 5 menit lagi." |
+
+**Aturan tambahan:**
+
+- **Jangan pernah menampilkan kode galat mentah, nama tabel, atau jejak stack**
+  ke pengguna. Kalau butuh untuk dukungan, tampilkan kode pendek yang bisa
+  dicocokkan dengan log — bukan pesan aslinya.
+- **Angka selalu berformat rupiah penuh** (`Rp 47.000`), tidak pernah `47000`.
+- **Tunggakan disebut netral** — "sisa patungan", "belum lunas". Hindari "utang",
+  "menunggak", "gagal bayar". Ini teman main badminton, bukan debitur.
+- **Konfirmasi menyebutkan akibatnya secara konkret**, bukan "Apakah Anda yakin?".
+  Contoh: "Hapus main 8 Agustus? Tagihan 4 orang ikut hilang."
+- **Keadaan kosong menuntun**, bukan sekadar memberi tahu kosong: satu kalimat
+  yang menjelaskan, satu tombol yang bisa ditekan.
+- Seluruh teks antarmuka tinggal di satu tempat, tidak tersebar sebagai literal
+  di dalam komponen — supaya bisa disisir sekaligus, dan supaya i18n nanti
+  (§18) tidak berarti membongkar semuanya.
 
 ### 5.7 Gerak & kehalusan
 
@@ -799,6 +853,17 @@ Konsekuensi yang harus disadari:
 - Pencatat harus dibantu supaya tidak membuat duplikat karena salah ketik —
   autocomplete wajib memunculkan nama mirip lebih dulu sebelum menawarkan
   "buat baru".
+
+**Berlaku sama untuk turnamen.** Justru di situ tamu paling sering muncul: tarkam
+mengundang pasangan dari klub lain, dan mereka tidak akan pernah jadi anggota.
+`tournament_pairs` memakai mekanisme yang sama — nama bebas jadi anggota
+`unclaimed` di klub penyelenggara, sehingga iuran dan kok partainya tetap bisa
+ditagih dan tercatat.
+
+Satu hal yang harus dipikirkan penyelenggara, bukan disembunyikan sistem: tamu
+turnamen menumpuk di daftar anggota klub, dan sebagian tidak akan pernah kembali.
+Panel anggota perlu penyaring **"tamu turnamen"** supaya mereka bisa disembunyikan
+dari daftar sehari-hari tanpa menghapus riwayatnya.
 
 ---
 
@@ -1463,12 +1528,19 @@ arsip, dan **v1 (Express di akar repo) dimatikan**.
     tagihan dan memberi tahu pencatat.
 18. **Pemain tamu** — catat main dengan nama yang belum pernah ada, pastikan
     anggota `unclaimed` terbentuk, bisa ditagih, lalu bisa diklaim lewat QR dan
-    riwayatnya menempel.
-19. **Aksesibilitas** — telusuri satu halaman penuh dengan Tab saja; rasio kontras
+    riwayatnya menempel. Ulangi lewat pasangan turnamen dari luar klub.
+19. **Aksi massal** — tandai lunas 20 orang sekaligus; pastikan konfirmasinya
+    menyebut jumlah orang dan total rupiah, jurnal audit mencatatnya sebagai satu
+    entri, "Batalkan" mengembalikan seluruh kumpulan, dan aksinya ditolak saat
+    offline.
+20. **Nada bicara** — sisir seluruh teks antarmuka: tidak ada kode galat mentah
+    yang bocor ke pengguna, tidak ada angka tanpa format rupiah, dan tidak ada
+    kata bernada menghakimi di layar tagihan.
+21. **Aksesibilitas** — telusuri satu halaman penuh dengan Tab saja; rasio kontras
     tiap token teks diverifikasi sebelum dipakai; uji keterbacaan di bawah cahaya
     terang; overlay driver.js bisa ditelusuri keyboard dan tidak menjebak fokus.
-20. **Pemulihan** — restore cadangan ke instans bersih dan pastikan app jalan.
-21. **Migrasi** — perbandingan angka v2 vs v3 nol selisih, termasuk `player_carry`
+22. **Pemulihan** — restore cadangan ke instans bersih dan pastikan app jalan.
+23. **Migrasi** — perbandingan angka v2 vs v3 nol selisih, termasuk `player_carry`
     → saldo deposit awal, sebelum cutover. Berkas pemetaan nama duplikat sudah
     ditinjau manusia dan ikut tersimpan di repo.
 
