@@ -3,7 +3,7 @@
 	import '../app.css';
 	import favicon from '$lib/assets/favicon.svg';
 	import Toast from '$lib/components/ui/Toast.svelte';
-	import { initOutbox } from '$lib/offline/outbox';
+	import { initOutbox } from '$lib/offline/outbox.svelte';
 
 	let { children } = $props();
 
