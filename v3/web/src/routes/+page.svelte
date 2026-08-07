@@ -9,7 +9,6 @@
 	import { isLoggedIn, currentUser, clearSession } from '$lib/stores/session.svelte';
 	import { api, ApiError } from '$lib/api/client';
 	import {
-		myMemberships,
 		activeClub,
 		otherMemberships,
 		hasLoadedMemberships,
@@ -18,18 +17,14 @@
 		setActiveClub
 	} from '$lib/stores/club.svelte';
 	import { myBill, isBillLoading, loadMyBill } from '$lib/stores/bill.svelte';
-	import { createClub, setAutoDeduct } from '$lib/api/clubs';
+	import { setAutoDeduct } from '$lib/api/clubs';
 	import { listRecentGames, type GameSummary } from '$lib/api/games';
-	import { AppShell, Button, Card, Badge, Dialog, Input, toast } from '$lib/components/ui';
+	import { AppShell, Button, Card, Badge, toast } from '$lib/components/ui';
+	import ClubHeaderBar from '$lib/components/ClubHeaderBar.svelte';
+	import CreateClubDialog from '$lib/components/CreateClubDialog.svelte';
 	import { rupiah, tanggalPendek } from '$lib/format';
 
-	let switcherOpen = $state(false);
 	let createOpen = $state(false);
-	let newClubName = $state('');
-	let newClubSlug = $state('');
-	let slugTouched = $state(false);
-	let creating = $state(false);
-	let createError = $state('');
 	let recentGames = $state<GameSummary[]>([]);
 	let togglingAutoDeduct = $state(false);
 	// Gagal muat profil (§0 galat) HARUS beda dari "memang belum punya
@@ -42,19 +37,6 @@
 	onMount(() => {
 		if (!isLoggedIn()) return;
 		void boot();
-	});
-
-	function slugify(name: string): string {
-		return name
-			.toLowerCase()
-			.trim()
-			.replace(/[^a-z0-9]+/g, '-')
-			.replace(/^-+|-+$/g, '')
-			.slice(0, 40);
-	}
-
-	$effect(() => {
-		if (!slugTouched) newClubSlug = slugify(newClubName);
 	});
 
 	async function boot() {
@@ -84,27 +66,7 @@
 
 	async function pickClub(clubId: string) {
 		setActiveClub(clubId);
-		switcherOpen = false;
 		await loadClubData(clubId);
-	}
-
-	async function submitCreateClub() {
-		createError = '';
-		creating = true;
-		try {
-			const club = await createClub({ slug: newClubSlug, name: newClubName.trim() });
-			createOpen = false;
-			newClubName = '';
-			newClubSlug = '';
-			slugTouched = false;
-			await loadMe();
-			await pickClub(club.id);
-			toast(`${club.name} dibuat — kamu admin di sini.`, { tone: 'lunas' });
-		} catch (e) {
-			createError = e instanceof ApiError ? e.message : 'Gagal bikin klub.';
-		} finally {
-			creating = false;
-		}
 	}
 
 	async function toggleAutoDeduct() {
@@ -188,18 +150,7 @@
 	{@const others = otherMemberships()}
 
 	{#snippet clubHeader()}
-		<div class="club-row">
-			<button class="club-btn" onclick={() => (switcherOpen = true)}>
-				<span class="dot display">{club!.club_name.slice(0, 2).toUpperCase()}</span>
-				<span class="club-txt">
-					<span class="nm">{club!.club_name}</span>
-					{#if others.length > 0}
-						<span class="cv">ketuk buat ganti klub</span>
-					{/if}
-				</span>
-			</button>
-			<div class="avatar">{(currentUser()?.display_name ?? '?').slice(0, 1).toUpperCase()}</div>
-		</div>
+		<ClubHeaderBar onSwitch={pickClub} onCreateClub={() => (createOpen = true)} />
 	{/snippet}
 
 	<AppShell current="/" header={clubHeader}>
@@ -278,62 +229,9 @@
 			{/if}
 		</div>
 	</AppShell>
-
-	<Dialog bind:open={switcherOpen} title="Ganti klub">
-		{#snippet children()}
-			<div class="switch-list">
-				{#each myMemberships() as m (m.club_id)}
-					<button
-						class="switch-row"
-						aria-current={m.club_id === club!.club_id ? 'true' : undefined}
-						onclick={() => pickClub(m.club_id)}
-					>
-						<span class="dot display sm">{m.club_name.slice(0, 2).toUpperCase()}</span>
-						<span>{m.club_name}</span>
-					</button>
-				{/each}
-			</div>
-		{/snippet}
-		{#snippet footer()}
-			<Button
-				variant="secondary"
-				fullWidth
-				onclick={() => {
-					switcherOpen = false;
-					createOpen = true;
-				}}
-			>
-				+ Buat klub baru
-			</Button>
-		{/snippet}
-	</Dialog>
 {/if}
 
-<Dialog bind:open={createOpen} title="Buat klub baru">
-	{#snippet children()}
-		<div class="field-stack">
-			<Input label="Nama klub" placeholder="mis. PB Sarjana" bind:value={newClubName} />
-			<Input
-				label="Alamat klub"
-				placeholder="pb-sarjana"
-				bind:value={newClubSlug}
-				hint="kaskok.my.id/{newClubSlug || '...'}"
-				error={createError || undefined}
-				oninput={() => (slugTouched = true)}
-			/>
-		</div>
-	{/snippet}
-	{#snippet footer()}
-		<Button variant="secondary" onclick={() => (createOpen = false)}>Batal</Button>
-		<Button
-			variant="primary"
-			disabled={creating || !newClubName.trim() || !newClubSlug}
-			onclick={submitCreateClub}
-		>
-			{creating ? 'Membuat…' : 'Buat klub'}
-		</Button>
-	{/snippet}
-</Dialog>
+<CreateClubDialog bind:open={createOpen} onCreated={(clubId) => loadClubData(clubId)} />
 
 <style>
 	.empty-page {
@@ -455,133 +353,5 @@
 	}
 	.game-row.last {
 		border-bottom: 0;
-	}
-
-	/* header klub — sama pola dgn routes/design/+page.svelte */
-	.club-row {
-		display: flex;
-		align-items: center;
-		justify-content: space-between;
-		gap: 12px;
-	}
-	.club-btn {
-		display: flex;
-		align-items: center;
-		gap: 9px;
-		min-width: 0;
-		background: none;
-		border: 0;
-		font: inherit;
-		color: inherit;
-		cursor: pointer;
-		padding: 4px;
-		margin: -4px;
-	}
-	.dot {
-		width: 30px;
-		height: 30px;
-		border-radius: 9px;
-		flex: none;
-		background: var(--accent);
-		color: #fff;
-		display: grid;
-		place-items: center;
-		font-weight: 800;
-		font-size: 13px;
-	}
-	.dot.sm {
-		width: 26px;
-		height: 26px;
-		font-size: 11.5px;
-	}
-	.club-txt {
-		display: flex;
-		flex-direction: column;
-		text-align: left;
-		min-width: 0;
-	}
-	.nm {
-		font-weight: 700;
-		font-size: 14.5px;
-	}
-	.cv {
-		color: var(--ink-faint);
-		font-size: 11px;
-	}
-	.avatar {
-		width: 34px;
-		height: 34px;
-		border-radius: 50%;
-		flex: none;
-		background: var(--surface-2);
-		border: 1px solid var(--line-2);
-		display: grid;
-		place-items: center;
-		font-weight: 700;
-		font-size: 13px;
-		color: var(--ink-soft);
-	}
-	@media (min-width: 768px) {
-		.club-txt {
-			display: none;
-		}
-		.club-btn {
-			margin: 0 auto;
-		}
-		.club-row {
-			justify-content: center;
-		}
-		.avatar {
-			display: none;
-		}
-	}
-	@media (min-width: 1024px) {
-		.club-row {
-			justify-content: space-between;
-		}
-		.avatar {
-			display: grid;
-		}
-		.club-txt {
-			display: flex;
-		}
-		.club-btn {
-			margin: 0;
-			width: 100%;
-		}
-	}
-
-	.switch-list {
-		display: flex;
-		flex-direction: column;
-		gap: 2px;
-	}
-	.switch-row {
-		display: flex;
-		align-items: center;
-		gap: 10px;
-		padding: 10px 8px;
-		border-radius: var(--radius-card);
-		background: none;
-		border: 0;
-		font: inherit;
-		font-size: 14.5px;
-		color: var(--ink);
-		cursor: pointer;
-		text-align: left;
-	}
-	.switch-row:hover {
-		background: var(--surface-2);
-	}
-	.switch-row[aria-current='true'] {
-		background: color-mix(in srgb, var(--accent) 10%, transparent);
-		color: var(--accent);
-		font-weight: 700;
-	}
-
-	.field-stack {
-		display: flex;
-		flex-direction: column;
-		gap: 14px;
 	}
 </style>
