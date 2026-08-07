@@ -23,8 +23,10 @@ type CreateUserParams struct {
 	DisplayName string      `json:"display_name"`
 }
 
-// Dipakai cuma oleh POST /api/v1/dev/login (TODO(F4): ganti alur OTP asli
-// yang membuat user lewat klaim/undangan, bukan langsung "active").
+// Dipanggil dari VerifyOTP (internal/auth/otp.go) begitu nomor terverifikasi
+// — langsung 'active' karena OTP SUDAH membuktikan pemilik nomor
+// (bukan status 'unclaimed', itu cuma untuk akun bayangan hasil migrasi
+// v2 yang belum pernah diverifikasi siapa pun, §7.3).
 func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (User, error) {
 	row := q.db.QueryRow(ctx, createUser, arg.Phone, arg.DisplayName)
 	var i User

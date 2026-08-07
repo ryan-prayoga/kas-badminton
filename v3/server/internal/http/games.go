@@ -365,9 +365,6 @@ type updateGameRequest struct {
 // alur itu.
 func handleUpdateGame(s *store.Store) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		if !requireRole(w, r, gen.ClubRoleAdmin, gen.ClubRoleBendahara, gen.ClubRolePencatat) {
-			return
-		}
 		clubID, _ := clubIDFromContext(r.Context())
 		gameID, err := uuid.Parse(chi.URLParam(r, "id"))
 		if err != nil {
@@ -422,9 +419,6 @@ func handleUpdateGame(s *store.Store) http.HandlerFunc {
 // handleDeleteGame — DELETE /clubs/{clubId}/games/{id} (soft-delete).
 func handleDeleteGame(s *store.Store) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		if !requireRole(w, r, gen.ClubRoleAdmin, gen.ClubRoleBendahara, gen.ClubRolePencatat) {
-			return
-		}
 		clubID, _ := clubIDFromContext(r.Context())
 		gameID, err := uuid.Parse(chi.URLParam(r, "id"))
 		if err != nil {

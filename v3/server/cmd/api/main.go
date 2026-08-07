@@ -43,10 +43,9 @@ func run() error {
 	logger := logging.New(cfg.Env, cfg.LogLevel)
 	logger.Info("konfigurasi dimuat", "env", cfg.Env, "port", cfg.Port)
 
-	// F0: notifier cuma dipakai buat bukti Notifier interface sudah bisa
-	// dipasang di server; F4 memanggilnya sungguhan dari alur OTP.
+	// F0: cuma Fake sampai cmd/waworker (F4 bagian 6) ada — whatsmeow
+	// sungguhan butuh pairing nomor WA nyata, tidak bisa dites di sini.
 	var notifier notify.Notifier = notify.NewFake(logger)
-	_ = notifier
 
 	// Graceful shutdown: SIGINT (Ctrl-C lokal) dan SIGTERM (docker stop /
 	// systemd) berhenti menerima koneksi baru, tunggu request berjalan
@@ -68,7 +67,7 @@ func run() error {
 	s := store.New(pool)
 	bus := realtime.NewBus(ctx, cfg.DatabaseURL, logger)
 
-	router, err := newRouter(logger, s, bus, cfg.IsDev())
+	router, err := newRouter(logger, s, bus, notifier)
 	if err != nil {
 		return err
 	}
@@ -103,7 +102,7 @@ func run() error {
 	return nil
 }
 
-func newRouter(logger *slog.Logger, s *store.Store, bus *realtime.Bus, isDev bool) (http.Handler, error) {
+func newRouter(logger *slog.Logger, s *store.Store, bus *realtime.Bus, notifier notify.Notifier) (http.Handler, error) {
 	r := chi.NewRouter()
 	r.Use(middleware.RequestID)
 	r.Use(middleware.RealIP)
@@ -111,7 +110,7 @@ func newRouter(logger *slog.Logger, s *store.Store, bus *realtime.Bus, isDev boo
 	r.Use(middleware.Recoverer)
 
 	r.Get("/healthz", healthHandler)
-	httpapi.Mount(r, s, bus, isDev)
+	httpapi.Mount(r, s, bus, notifier)
 
 	spa, err := spaHandler()
 	if err != nil {

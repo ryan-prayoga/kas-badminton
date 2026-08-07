@@ -2,13 +2,16 @@ package httpapi
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"net/http"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 
+	"github.com/ryan-prayoga/kas-badminton/v3/server/internal/perm"
 	"github.com/ryan-prayoga/kas-badminton/v3/server/internal/store"
 	"github.com/ryan-prayoga/kas-badminton/v3/server/internal/store/gen"
 )
@@ -34,6 +37,7 @@ func RequireClub(s *store.Store) func(http.Handler) http.Handler {
 			}
 
 			var membership gen.Membership
+			var club gen.Club
 			found := false
 			err = s.WithClub(r.Context(), clubID, func(ctx context.Context, q *gen.Queries) error {
 				m, err := q.GetMembership(ctx, gen.GetMembershipParams{ClubID: clubID, UserID: userID})
@@ -45,7 +49,9 @@ func RequireClub(s *store.Store) func(http.Handler) http.Handler {
 				}
 				membership = m
 				found = true
-				return nil
+
+				club, err = q.GetClub(ctx, clubID)
+				return err
 			})
 			if err != nil {
 				writeError(w, CodeValidationFailed, "Gagal memeriksa keanggotaan klub.", nil)
@@ -56,7 +62,28 @@ func RequireClub(s *store.Store) func(http.Handler) http.Handler {
 				return
 			}
 
-			next.ServeHTTP(w, r.WithContext(withClub(r.Context(), clubID, membership.Role)))
+			granted := perm.Resolve(membership.Role, roleExpiresAtPtr(membership), siapaBolehCatat(club), time.Now())
+			next.ServeHTTP(w, r.WithContext(withClub(r.Context(), clubID, membership.Role, granted)))
 		})
 	}
+}
+
+func roleExpiresAtPtr(m gen.Membership) *time.Time {
+	if !m.RoleExpiresAt.Valid {
+		return nil
+	}
+	t := m.RoleExpiresAt.Time
+	return &t
+}
+
+// siapaBolehCatat baca saklar clubs.settings.siapa_boleh_catat (PLAN.md
+// §7.4). clubs.settings SELALU diisi lengkap saat klub dibuat
+// (defaultSettingsJSON di clubs.go), jadi unmarshal parsial ke struct yang
+// sama itu aman — field yang memang tidak ada di JSON cuma kebagian nol.
+func siapaBolehCatat(c gen.Club) perm.SiapaBolehCatat {
+	var s struct {
+		SiapaBolehCatat string `json:"siapa_boleh_catat"`
+	}
+	_ = json.Unmarshal(c.Settings, &s)
+	return perm.SiapaBolehCatat(s.SiapaBolehCatat)
 }

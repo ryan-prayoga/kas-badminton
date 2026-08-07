@@ -9,6 +9,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/ryan-prayoga/kas-badminton/v3/server/internal/perm"
 	"github.com/ryan-prayoga/kas-badminton/v3/server/internal/store/gen"
 )
 
@@ -18,6 +19,7 @@ const (
 	ctxKeyUserID ctxKey = iota
 	ctxKeyClubID
 	ctxKeyRole
+	ctxKeyPerm
 )
 
 func withUserID(ctx context.Context, id uuid.UUID) context.Context {
@@ -29,9 +31,13 @@ func userIDFromContext(ctx context.Context) (uuid.UUID, bool) {
 	return v, ok
 }
 
-func withClub(ctx context.Context, clubID uuid.UUID, role gen.ClubRole) context.Context {
+// withClub ditaruh RequireClub SEKALI per request (PLAN.md §6.2 lapisan
+// pertama) sekaligus izin efektifnya sudah dihitung (perm.Resolve) — supaya
+// RequirePerm di belakangnya tinggal baca map, tidak query ulang.
+func withClub(ctx context.Context, clubID uuid.UUID, role gen.ClubRole, granted map[perm.Permission]bool) context.Context {
 	ctx = context.WithValue(ctx, ctxKeyClubID, clubID)
-	return context.WithValue(ctx, ctxKeyRole, role)
+	ctx = context.WithValue(ctx, ctxKeyRole, role)
+	return context.WithValue(ctx, ctxKeyPerm, granted)
 }
 
 func clubIDFromContext(ctx context.Context) (uuid.UUID, bool) {
@@ -41,5 +47,10 @@ func clubIDFromContext(ctx context.Context) (uuid.UUID, bool) {
 
 func roleFromContext(ctx context.Context) (gen.ClubRole, bool) {
 	v, ok := ctx.Value(ctxKeyRole).(gen.ClubRole)
+	return v, ok
+}
+
+func permFromContext(ctx context.Context) (map[perm.Permission]bool, bool) {
+	v, ok := ctx.Value(ctxKeyPerm).(map[perm.Permission]bool)
 	return v, ok
 }

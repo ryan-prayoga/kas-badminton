@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/ryan-prayoga/kas-badminton/v3/server/internal/store"
@@ -70,6 +71,49 @@ func Create(ctx context.Context, s *store.Store, userID uuid.UUID, deviceLabel s
 		return "", gen.Session{}, err
 	}
 	return raw, sess, nil
+}
+
+// ListSessions — GET /auth/sessions (§7.2.2), terbaru dulu.
+func ListSessions(ctx context.Context, s *store.Store, userID uuid.UUID) ([]gen.Session, error) {
+	var sessions []gen.Session
+	err := s.WithinTx(ctx, func(ctx context.Context, q *gen.Queries) error {
+		var err error
+		sessions, err = q.ListSessionsByUser(ctx, userID)
+		return err
+	})
+	return sessions, err
+}
+
+// ErrNotYourSession — dibalas 404 (bukan 403) supaya pemanggil tidak bisa
+// membedakan "sesi orang lain" dari "sesi tidak ada" (sama semangatnya
+// dengan RequireClub yang membalas 404 buat bukan-anggota).
+var ErrNotYourSession = errors.New("auth: sesi itu bukan milik kamu")
+
+// RevokeSession — DELETE /auth/sessions/{id} (§7.2.2). ownerID WAJIB
+// dicocokkan di sini, bukan cuma di query, supaya jelas endpointnya tidak
+// bisa dipakai mencabut sesi orang lain.
+func RevokeSession(ctx context.Context, s *store.Store, ownerID, sessionID uuid.UUID) error {
+	return s.WithinTx(ctx, func(ctx context.Context, q *gen.Queries) error {
+		sess, err := q.GetSessionByID(ctx, sessionID)
+		if err != nil {
+			if errors.Is(err, pgx.ErrNoRows) {
+				return ErrNotYourSession
+			}
+			return err
+		}
+		if sess.UserID != ownerID {
+			return ErrNotYourSession
+		}
+		return q.RevokeSession(ctx, sessionID)
+	})
+}
+
+// RevokeOtherSessions — POST /auth/sessions/revoke-others (§7.2.2):
+// "keluarkan semua kecuali ini".
+func RevokeOtherSessions(ctx context.Context, s *store.Store, userID, keepSessionID uuid.UUID) error {
+	return s.WithinTx(ctx, func(ctx context.Context, q *gen.Queries) error {
+		return q.RevokeOtherSessions(ctx, gen.RevokeOtherSessionsParams{UserID: userID, ID: keepSessionID})
+	})
 }
 
 // Validate mencari sesi dari token mentah yang dikirim klien (header

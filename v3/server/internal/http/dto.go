@@ -50,6 +50,30 @@ func tsOrZero(t pgtype.Timestamptz) time.Time {
 
 // --- DTO ---
 
+func newUserDTOFrom(u gen.User) userDTO {
+	return userDTO{
+		ID:          u.ID.String(),
+		Phone:       u.Phone.String,
+		DisplayName: u.DisplayName,
+	}
+}
+
+type sessionDTO struct {
+	ID          uuid.UUID `json:"id"`
+	DeviceLabel string    `json:"device_label"`
+	LastSeenAt  time.Time `json:"last_seen_at"`
+	CreatedAt   time.Time `json:"created_at"`
+}
+
+func newSessionDTO(s gen.Session) sessionDTO {
+	return sessionDTO{
+		ID:          s.ID,
+		DeviceLabel: s.DeviceLabel.String,
+		LastSeenAt:  tsOrZero(s.LastSeenAt),
+		CreatedAt:   tsOrZero(s.CreatedAt),
+	}
+}
+
 type clubDTO struct {
 	ID       uuid.UUID `json:"id"`
 	Slug     string    `json:"slug"`

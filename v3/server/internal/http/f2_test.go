@@ -13,7 +13,9 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"regexp"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -23,6 +25,7 @@ import (
 
 	httpapi "github.com/ryan-prayoga/kas-badminton/v3/server/internal/http"
 	"github.com/ryan-prayoga/kas-badminton/v3/server/internal/logging"
+	"github.com/ryan-prayoga/kas-badminton/v3/server/internal/notify"
 	"github.com/ryan-prayoga/kas-badminton/v3/server/internal/realtime"
 	"github.com/ryan-prayoga/kas-badminton/v3/server/internal/store"
 	"github.com/ryan-prayoga/kas-badminton/v3/server/internal/testdb"
@@ -43,7 +46,39 @@ func randPhone() string {
 }
 func randSlug() string { return fmt.Sprintf("test-%d-%d", processSalt, uniqueSuffix()) }
 
-func newTestServer(t *testing.T) *httptest.Server {
+// captureNotifier gantikan notify.Fake di test — sama-sama tidak pernah
+// mengirim apa pun ke jaringan sungguhan, tapi menyimpan pesan terakhir per
+// nomor supaya test bisa "membaca WA" (baca kode OTP) tanpa WA sungguhan.
+type captureNotifier struct {
+	mu   sync.Mutex
+	last map[string]string
+}
+
+func newCaptureNotifier() *captureNotifier {
+	return &captureNotifier{last: map[string]string{}}
+}
+
+func (c *captureNotifier) Send(_ context.Context, msg notify.Message) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.last[msg.Phone] = msg.Body
+	return nil
+}
+
+var otpCodeRe = regexp.MustCompile(`kamu: (\d{6})\.`)
+
+func (c *captureNotifier) codeFor(t *testing.T, phone string) string {
+	t.Helper()
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	m := otpCodeRe.FindStringSubmatch(c.last[phone])
+	if len(m) != 2 {
+		t.Fatalf("tidak ada kode OTP tertangkap buat %s (pesan terakhir: %q)", phone, c.last[phone])
+	}
+	return m[1]
+}
+
+func newTestServer(t *testing.T) (*httptest.Server, *captureNotifier) {
 	t.Helper()
 	pool, dsn := testdb.PoolAndDSN(t)
 	s := store.New(pool)
@@ -51,29 +86,46 @@ func newTestServer(t *testing.T) *httptest.Server {
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
 	bus := realtime.NewBus(ctx, dsn, logging.New("dev", "warn"))
+	notifier := newCaptureNotifier()
 
 	r := chi.NewRouter()
-	httpapi.Mount(r, s, bus, true) // isDev=true — dev/login perlu nyala buat test
+	httpapi.Mount(r, s, bus, notifier)
 
 	srv := httptest.NewServer(r)
 	t.Cleanup(srv.Close)
-	return srv
+	return srv, notifier
 }
 
 type loggedInUser struct {
 	token, userID string
 }
 
-func devLogin(t *testing.T, base, phone string) loggedInUser {
+// otpLogin — pengganti devLogin (F2, dev-only, sudah dihapus): jalan lewat
+// alur OTP sungguhan (/auth/otp/request → /auth/otp/verify), kodenya
+// "dibaca" dari captureNotifier alih-alih WA sungguhan (PLAN.md §14 F4).
+func otpLogin(t *testing.T, base string, notifier *captureNotifier, phone string) loggedInUser {
 	t.Helper()
-	body, _ := json.Marshal(map[string]string{"phone": phone})
-	resp, err := http.Post(base+"/api/v1/dev/login", "application/json", bytes.NewReader(body))
+
+	reqBody, _ := json.Marshal(map[string]string{"phone": phone, "purpose": "device"})
+	reqResp, err := http.Post(base+"/api/v1/auth/otp/request", "application/json", bytes.NewReader(reqBody))
 	if err != nil {
-		t.Fatalf("dev/login: %v", err)
+		t.Fatalf("otp/request: %v", err)
 	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		dumpAndFail(t, resp, "dev/login")
+	defer reqResp.Body.Close()
+	if reqResp.StatusCode != http.StatusOK {
+		dumpAndFail(t, reqResp, "otp/request")
+	}
+
+	code := notifier.codeFor(t, phone)
+
+	verifyBody, _ := json.Marshal(map[string]string{"phone": phone, "code": code})
+	verifyResp, err := http.Post(base+"/api/v1/auth/otp/verify", "application/json", bytes.NewReader(verifyBody))
+	if err != nil {
+		t.Fatalf("otp/verify: %v", err)
+	}
+	defer verifyResp.Body.Close()
+	if verifyResp.StatusCode != http.StatusOK {
+		dumpAndFail(t, verifyResp, "otp/verify")
 	}
 	var out struct {
 		SessionToken string `json:"session_token"`
@@ -81,8 +133,8 @@ func devLogin(t *testing.T, base, phone string) loggedInUser {
 			ID string `json:"id"`
 		} `json:"user"`
 	}
-	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
-		t.Fatalf("decode dev/login: %v", err)
+	if err := json.NewDecoder(verifyResp.Body).Decode(&out); err != nil {
+		t.Fatalf("decode otp/verify: %v", err)
 	}
 	return loggedInUser{token: out.SessionToken, userID: out.User.ID}
 }
@@ -184,11 +236,11 @@ func errorCode(t *testing.T, resp *http.Response) string {
 // --- suite kebocoran antar-klub (PLAN.md §6.2, §14 F2 "selesai kalau") ---
 
 func TestLeak_CrossClubEndpoints(t *testing.T) {
-	srv := newTestServer(t)
+	srv, notifier := newTestServer(t)
 	base := srv.URL
 
-	userA := devLogin(t, base, randPhone())
-	userB := devLogin(t, base, randPhone())
+	userA := otpLogin(t, base, notifier, randPhone())
+	userB := otpLogin(t, base, notifier, randPhone())
 	// userA sengaja TIDAK bikin klub sendiri — test ini membuktikan dia
 	// ditolak akses klub B, bukan menguji klub A miliknya sendiri.
 	clubB := createClub(t, base, userB.token, randSlug())
@@ -224,10 +276,10 @@ func TestLeak_CrossClubEndpoints(t *testing.T) {
 // --- idempotensi (invarian §3.3) ---
 
 func TestIdempotency_SameKeySameBody_NoDuplicateRow(t *testing.T) {
-	srv := newTestServer(t)
+	srv, notifier := newTestServer(t)
 	base := srv.URL
 
-	user := devLogin(t, base, randPhone())
+	user := otpLogin(t, base, notifier, randPhone())
 	club := createClub(t, base, user.token, randSlug())
 	key := uuid.NewString()
 	body := createGameBody(user.userID)
@@ -264,10 +316,10 @@ func TestIdempotency_SameKeySameBody_NoDuplicateRow(t *testing.T) {
 }
 
 func TestIdempotency_SameKeyDifferentBody_Conflict(t *testing.T) {
-	srv := newTestServer(t)
+	srv, notifier := newTestServer(t)
 	base := srv.URL
 
-	user := devLogin(t, base, randPhone())
+	user := otpLogin(t, base, notifier, randPhone())
 	club := createClub(t, base, user.token, randSlug())
 	key := uuid.NewString()
 
@@ -292,10 +344,10 @@ func TestIdempotency_SameKeyDifferentBody_Conflict(t *testing.T) {
 // --- konflik versi (invarian §3.4) ---
 
 func TestVersionConflict_StaleIfMatch(t *testing.T) {
-	srv := newTestServer(t)
+	srv, notifier := newTestServer(t)
 	base := srv.URL
 
-	user := devLogin(t, base, randPhone())
+	user := otpLogin(t, base, notifier, randPhone())
 	club := createClub(t, base, user.token, randSlug())
 	game := createGame(t, base, user.token, club, user.userID)
 	if game.Version != 1 {
@@ -349,12 +401,12 @@ func mustJSON(v any) []byte {
 // --- realtime SSE tanpa refetch penuh, dan tanpa bocor lintas klub ---
 
 func TestRealtime_SSE_NoCrossClubLeak(t *testing.T) {
-	srv := newTestServer(t)
+	srv, notifier := newTestServer(t)
 	base := srv.URL
 
-	userA := devLogin(t, base, randPhone())
+	userA := otpLogin(t, base, notifier, randPhone())
 	clubA := createClub(t, base, userA.token, randSlug())
-	userB := devLogin(t, base, randPhone())
+	userB := otpLogin(t, base, notifier, randPhone())
 	clubB := createClub(t, base, userB.token, randSlug())
 
 	gotA := make(chan string, 4)

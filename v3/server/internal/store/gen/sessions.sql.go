@@ -47,6 +47,27 @@ func (q *Queries) CreateSession(ctx context.Context, arg CreateSessionParams) (S
 	return i, err
 }
 
+const getSessionByID = `-- name: GetSessionByID :one
+SELECT id, user_id, token_hash, device_label, last_ip, last_seen_at, expires_at, revoked_at, created_at FROM sessions WHERE id = $1
+`
+
+func (q *Queries) GetSessionByID(ctx context.Context, id uuid.UUID) (Session, error) {
+	row := q.db.QueryRow(ctx, getSessionByID, id)
+	var i Session
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.TokenHash,
+		&i.DeviceLabel,
+		&i.LastIp,
+		&i.LastSeenAt,
+		&i.ExpiresAt,
+		&i.RevokedAt,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
 const getSessionByTokenHash = `-- name: GetSessionByTokenHash :one
 SELECT id, user_id, token_hash, device_label, last_ip, last_seen_at, expires_at, revoked_at, created_at FROM sessions
 WHERE token_hash = $1 AND revoked_at IS NULL AND expires_at > now()
@@ -67,6 +88,68 @@ func (q *Queries) GetSessionByTokenHash(ctx context.Context, tokenHash []byte) (
 		&i.CreatedAt,
 	)
 	return i, err
+}
+
+const listSessionsByUser = `-- name: ListSessionsByUser :many
+SELECT id, user_id, token_hash, device_label, last_ip, last_seen_at, expires_at, revoked_at, created_at FROM sessions
+WHERE user_id = $1 AND revoked_at IS NULL AND expires_at > now()
+ORDER BY last_seen_at DESC
+`
+
+// Daftar perangkat aktif (PLAN.md §7.2.2) — terbaru dulu.
+func (q *Queries) ListSessionsByUser(ctx context.Context, userID uuid.UUID) ([]Session, error) {
+	rows, err := q.db.Query(ctx, listSessionsByUser, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []Session{}
+	for rows.Next() {
+		var i Session
+		if err := rows.Scan(
+			&i.ID,
+			&i.UserID,
+			&i.TokenHash,
+			&i.DeviceLabel,
+			&i.LastIp,
+			&i.LastSeenAt,
+			&i.ExpiresAt,
+			&i.RevokedAt,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const revokeOtherSessions = `-- name: RevokeOtherSessions :exec
+UPDATE sessions SET revoked_at = now()
+WHERE user_id = $1 AND id != $2 AND revoked_at IS NULL
+`
+
+type RevokeOtherSessionsParams struct {
+	UserID uuid.UUID `json:"user_id"`
+	ID     uuid.UUID `json:"id"`
+}
+
+// "Keluarkan semua kecuali ini" (§7.2.2).
+func (q *Queries) RevokeOtherSessions(ctx context.Context, arg RevokeOtherSessionsParams) error {
+	_, err := q.db.Exec(ctx, revokeOtherSessions, arg.UserID, arg.ID)
+	return err
+}
+
+const revokeSession = `-- name: RevokeSession :exec
+UPDATE sessions SET revoked_at = now() WHERE id = $1 AND revoked_at IS NULL
+`
+
+func (q *Queries) RevokeSession(ctx context.Context, id uuid.UUID) error {
+	_, err := q.db.Exec(ctx, revokeSession, id)
+	return err
 }
 
 const touchSession = `-- name: TouchSession :exec

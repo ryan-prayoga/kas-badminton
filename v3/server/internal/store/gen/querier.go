@@ -13,11 +13,16 @@ import (
 
 type Querier interface {
 	CompleteIdempotencyKey(ctx context.Context, arg CompleteIdempotencyKeyParams) error
+	ConsumeOTP(ctx context.Context, id uuid.UUID) error
 	// Dipakai internal/store/tenant_test.go — sengaja query dengan club_id
 	// eksplisit yang BEDA dari SET LOCAL app.club_id aktif, buat membuktikan
 	// RLS tetap menahan meski filter aplikasinya "benar" (§6.2 lapisan
 	// ketiga).
 	CountKokTypesByClub(ctx context.Context, clubID uuid.UUID) (int64, error)
+	// Rate limit kirim ulang (PLAN.md §7.2) — dihitung dari SEMUA kode yang
+	// diminta di jendela waktu, bukan cuma yang masih aktif, supaya spam
+	// kirim-lalu-tunggu-kadaluwarsa tidak lolos dari hitungan.
+	CountRecentOTP(ctx context.Context, arg CountRecentOTPParams) (int64, error)
 	// id dikirim eksplisit (bukan DEFAULT gen_random_uuid()) supaya pemanggil
 	// tahu club_id SEBELUM transaksi mulai — dipakai buat SET LOCAL
 	// app.club_id di store.WithClub yang sama, jadi insert clubs + membership
@@ -33,9 +38,12 @@ type Querier interface {
 	// Dipakai cmd/seed buat data contoh (CRUD katalog sendiri di luar F2).
 	CreateKokType(ctx context.Context, arg CreateKokTypeParams) (KokType, error)
 	CreateMembership(ctx context.Context, arg CreateMembershipParams) (Membership, error)
+	CreateOTP(ctx context.Context, arg CreateOTPParams) (OtpCode, error)
 	CreateSession(ctx context.Context, arg CreateSessionParams) (Session, error)
-	// Dipakai cuma oleh POST /api/v1/dev/login (TODO(F4): ganti alur OTP asli
-	// yang membuat user lewat klaim/undangan, bukan langsung "active").
+	// Dipanggil dari VerifyOTP (internal/auth/otp.go) begitu nomor terverifikasi
+	// — langsung 'active' karena OTP SUDAH membuktikan pemilik nomor
+	// (bukan status 'unclaimed', itu cuma untuk akun bayangan hasil migrasi
+	// v2 yang belum pernah diverifikasi siapa pun, §7.3).
 	CreateUser(ctx context.Context, arg CreateUserParams) (User, error)
 	// Tanpa club_id di WHERE — clubs tidak ber-RLS (tabel dirinya sendiri
 	// bukan milik klub). Caller (RequireClub) sudah memverifikasi keanggotaan
@@ -50,13 +58,23 @@ type Querier interface {
 	// kok_type_id tidak dikirim, klien boleh kirim type_name+price_per_person
 	// ad-hoc (kolom kok_type_id di game_koks memang nullable).
 	GetKokType(ctx context.Context, arg GetKokTypeParams) (KokType, error)
+	// Kode terbaru yang belum kedaluwarsa & belum dipakai buat nomor itu — TANPA
+	// filter purpose, karena POST /auth/otp/verify (API.md §1) cuma menerima
+	// {phone, code}. purpose disimpan buat audit/log kirimnya, bukan dicocokkan
+	// lagi saat verifikasi. Kalau user minta ulang, kode sebelumnya otomatis
+	// kalah dipakai (created_at DESC LIMIT 1) — cuma satu kode aktif per nomor.
+	GetLatestActiveOTP(ctx context.Context, phone string) (OtpCode, error)
 	// Dipanggil di dalam WithClub (SET LOCAL app.club_id sudah aktif), jadi
 	// RLS membatasi baris ke klub itu sendiri — filter user_id di sini adalah
 	// lapisan aplikasi (kedua), RLS adalah lapisan ketiga (§6.2).
 	GetMembership(ctx context.Context, arg GetMembershipParams) (Membership, error)
+	GetPin(ctx context.Context, userID uuid.UUID) (UserPin, error)
+	GetSessionByID(ctx context.Context, id uuid.UUID) (Session, error)
 	GetSessionByTokenHash(ctx context.Context, tokenHash []byte) (Session, error)
 	GetUser(ctx context.Context, id uuid.UUID) (User, error)
 	GetUserByPhone(ctx context.Context, phone pgtype.Text) (User, error)
+	IncrementOTPAttempts(ctx context.Context, id uuid.UUID) error
+	IncrementPinFailed(ctx context.Context, arg IncrementPinFailedParams) error
 	ListGameKoksByGame(ctx context.Context, gameID uuid.UUID) ([]GameKok, error)
 	ListGamePlayersByGame(ctx context.Context, gameID uuid.UUID) ([]GamePlayer, error)
 	ListGamePlayersByGames(ctx context.Context, gameIds []uuid.UUID) ([]GamePlayer, error)
@@ -64,6 +82,8 @@ type Querier interface {
 	// paginasi cursor, bukan offset). sqlc.narg(before) NULL = dari yang
 	// terbaru.
 	ListGamesByClub(ctx context.Context, arg ListGamesByClubParams) ([]Game, error)
+	// Daftar perangkat aktif (PLAN.md §7.2.2) — terbaru dulu.
+	ListSessionsByUser(ctx context.Context, userID uuid.UUID) ([]Session, error)
 	// Dipanggil internal/realtime.Bus.Publish di DALAM transaksi tenant yang
 	// sama (WithClub/WithinTx) — Postgres menahan NOTIFY sampai COMMIT, jadi
 	// subscriber SSE tidak pernah melihat event sebelum datanya benar-benar
@@ -73,6 +93,10 @@ type Querier interface {
 	// ON CONFLICT DO NOTHING + baris kosong di hasil berarti kunci itu sudah
 	// dipegang permintaan lain (invarian §3.3) — caller cek row count.
 	ReserveIdempotencyKey(ctx context.Context, arg ReserveIdempotencyKeyParams) (IdempotencyKey, error)
+	ResetPinFailed(ctx context.Context, userID uuid.UUID) error
+	// "Keluarkan semua kecuali ini" (§7.2.2).
+	RevokeOtherSessions(ctx context.Context, arg RevokeOtherSessionsParams) error
+	RevokeSession(ctx context.Context, id uuid.UUID) error
 	SoftDeleteGame(ctx context.Context, arg SoftDeleteGameParams) (Game, error)
 	// Query "tagihanku" — satu index scan lewat game_players_unpaid_idx
 	// (indeks paling penting di seluruh skema, DDL.sql baris 371-379).
@@ -81,6 +105,7 @@ type Querier interface {
 	// Versioning (invarian §3.4): 0 baris kalau version klien sudah basi —
 	// caller lalu fetch entitas terbaru dan balas 409 version_conflict.
 	UpdateGame(ctx context.Context, arg UpdateGameParams) (Game, error)
+	UpsertPin(ctx context.Context, arg UpsertPinParams) error
 }
 
 var _ Querier = (*Queries)(nil)
