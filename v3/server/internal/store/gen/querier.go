@@ -12,6 +12,11 @@ import (
 )
 
 type Querier interface {
+	// SKIP LOCKED — aman kalau suatu hari ada lebih dari satu waworker
+	// berjalan singkat saat deploy (rolling), walau §12 tetap "satu proses"
+	// normalnya. FOR UPDATE mengunci baris yang diklaim sampai transaksi
+	// commit, cegah dua worker kirim pesan yang sama dua kali.
+	ClaimQueuedWaMessages(ctx context.Context, limit int32) ([]WaOutbox, error)
 	// Sama alasannya dengan ClubIDForJoinToken (club_links.sql) — dibungkus
 	// supaya NULL jadi nol baris, bukan baris ber-NULL yang lolos Scan diam-diam.
 	ClubIDForInviteToken(ctx context.Context, pToken string) (uuid.UUID, error)
@@ -83,6 +88,7 @@ type Querier interface {
 	// Dipakai bareng RevokeOtherSessions (§7.2.2 "keluarkan semua kecuali ini")
 	// — kredensial passkey milik sesi-sesi yang ikut tercabut, ikut tercabut.
 	DeleteWebauthnCredentialsByUserExceptSession(ctx context.Context, arg DeleteWebauthnCredentialsByUserExceptSessionParams) error
+	EnqueueWaMessage(ctx context.Context, arg EnqueueWaMessageParams) (WaOutbox, error)
 	GetClaimRequest(ctx context.Context, arg GetClaimRequestParams) (ClaimRequest, error)
 	// Tanpa club_id di WHERE — clubs tidak ber-RLS (tabel dirinya sendiri
 	// bukan milik klub). Caller (RequireClub) sudah memverifikasi keanggotaan
@@ -117,6 +123,7 @@ type Querier interface {
 	GetSessionByTokenHash(ctx context.Context, tokenHash []byte) (Session, error)
 	GetUser(ctx context.Context, id uuid.UUID) (User, error)
 	GetUserByPhone(ctx context.Context, phone pgtype.Text) (User, error)
+	GetWaHeartbeat(ctx context.Context) (WaWorkerHeartbeat, error)
 	// Belum ada endpoint HTTP buat ini (PLAN.md tidak menyebut alur
 	// onboarding-nya — kemungkinan operator lewat psql langsung). Query ini
 	// dipakai test (f7_test.go) dan tersedia buat tooling ops nanti.
@@ -147,6 +154,8 @@ type Querier interface {
 	// Daftar perangkat aktif (PLAN.md §7.2.2) — terbaru dulu.
 	ListSessionsByUser(ctx context.Context, userID uuid.UUID) ([]Session, error)
 	ListWebauthnCredentialsByUser(ctx context.Context, userID uuid.UUID) ([]WebauthnCredential, error)
+	MarkWaMessageFailed(ctx context.Context, arg MarkWaMessageFailedParams) error
+	MarkWaMessageSent(ctx context.Context, id uuid.UUID) error
 	// Dipanggil internal/realtime.Bus.Publish di DALAM transaksi tenant yang
 	// sama (WithClub/WithinTx) — Postgres menahan NOTIFY sampai COMMIT, jadi
 	// subscriber SSE tidak pernah melihat event sebelum datanya benar-benar
@@ -197,6 +206,7 @@ type Querier interface {
 	// authenticator (dua device beda pakai kredensial "sama" tanpa saling tahu).
 	UpdateWebauthnCredentialSignCount(ctx context.Context, arg UpdateWebauthnCredentialSignCountParams) error
 	UpsertPin(ctx context.Context, arg UpsertPinParams) error
+	UpsertWaHeartbeat(ctx context.Context, arg UpsertWaHeartbeatParams) error
 }
 
 var _ Querier = (*Queries)(nil)

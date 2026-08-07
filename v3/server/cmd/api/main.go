@@ -45,10 +45,6 @@ func run() error {
 	logger := logging.New(cfg.Env, cfg.LogLevel)
 	logger.Info("konfigurasi dimuat", "env", cfg.Env, "port", cfg.Port)
 
-	// F0: cuma Fake sampai cmd/waworker (F4 bagian 6) ada — whatsmeow
-	// sungguhan butuh pairing nomor WA nyata, tidak bisa dites di sini.
-	var notifier notify.Notifier = notify.NewFake(logger)
-
 	wa, err := auth.NewWebAuthn(cfg)
 	if err != nil {
 		return err
@@ -74,6 +70,18 @@ func run() error {
 
 	s := store.New(pool)
 	bus := realtime.NewBus(ctx, cfg.DatabaseURL, logger)
+
+	// dev/CI: Fake, cuma menulis log — tidak ada yang perlu memakai nomor
+	// WA produksi buat mengembangkan fitur (§12 "Lingkungan dev tanpa WA").
+	// prod: Outbox, titip ke wa_outbox buat cmd/waworker (proses TERPISAH,
+	// satu-satunya pemegang koneksi whatsmeow — §12 "Bridge WA satu
+	// proses", F4 bagian 6).
+	var notifier notify.Notifier
+	if cfg.IsDev() {
+		notifier = notify.NewFake(logger)
+	} else {
+		notifier = notify.NewOutbox(s)
+	}
 
 	router, err := newRouter(logger, s, bus, notifier, wa, challenges)
 	if err != nil {

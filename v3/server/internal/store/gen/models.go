@@ -1047,6 +1047,24 @@ type UserPin struct {
 	UpdatedAt   pgtype.Timestamptz `json:"updated_at"`
 }
 
+type WaOutbox struct {
+	ID        uuid.UUID          `json:"id"`
+	Phone     string             `json:"phone"`
+	Body      string             `json:"body"`
+	Status    string             `json:"status"`
+	Attempts  int32              `json:"attempts"`
+	Error     pgtype.Text        `json:"error"`
+	CreatedAt pgtype.Timestamptz `json:"created_at"`
+	SentAt    pgtype.Timestamptz `json:"sent_at"`
+}
+
+type WaWorkerHeartbeat struct {
+	ID        bool               `json:"id"`
+	Connected bool               `json:"connected"`
+	Detail    pgtype.Text        `json:"detail"`
+	UpdatedAt pgtype.Timestamptz `json:"updated_at"`
+}
+
 type WalletEntry struct {
 	ID        uuid.UUID          `json:"id"`
 	ClubID    uuid.UUID          `json:"club_id"`

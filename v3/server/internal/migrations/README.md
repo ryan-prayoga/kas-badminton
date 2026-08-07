@@ -39,6 +39,7 @@ mengikuti section-nya sendiri, F2 — PLAN.md §14):
 | 00017 | `club_id_for_join_token()` — resolusi token publik `/join/{token}` sebelum club_id diketahui (F4/3, SECURITY DEFINER sempit, bukan pelonggaran RLS) |
 | 00018 | `club_id_for_invite_token()` — sama alasannya, buat token undangan per-orang (`invites`) |
 | 00019 | `club_member_count()` — jumlah anggota per klub buat GET /admin/clubs (F4/5), SECURITY DEFINER sempit (cuma count, bukan baris) supaya tetap sesuai §6.5 |
+| 00020 | `wa_outbox`, `wa_worker_heartbeat` — titipan pesan WA dari cmd/api ke cmd/waworker (F4/6, §12 "Bridge WA satu proses"); BUKAN tabel `notifications` F8, lihat komentar di berkas migrasinya |
 
 Jalankan migrasi sebagai role `kok_migrate` (BYPASSRLS), aplikasi jalan
 sebagai `kok_app` — kalau aplikasi memakai pemilik tabel, RLS terlewati
