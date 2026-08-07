@@ -94,6 +94,7 @@ pemain, format main yang tidak lagi mengunci di 4 orang, dan desain ulang total.
 | Frontend | **SvelteKit 5** (SPA statis, di-embed ke binary Go) |
 | Database | **PostgreSQL** (instans sama dengan v2, database terpisah `kok_v3`) |
 | Akses DB | **sqlc + pgx**, tanpa ORM. Migrasi skema pakai **goose** |
+| Dependensi Go inti | **chi** (router) · **go-webauthn** · **webpush-go** · **go-qrcode + gg + go-pdf/fpdf** (poster, satu kanvas → PDF & PNG). Rinci di §4.4 |
 | Multi-klub | **Ya sejak awal**, dengan **superadmin** tingkat sistem |
 | Domain | **`kaskok.my.id`**; app di `app.kaskok.my.id`, tautan klub `/{slug}` |
 | Superadmin | Kelola klub + metrik, **tanpa akses isi data klub** |
@@ -231,6 +232,54 @@ berikutnya harus jadi soal menambah mesin, bukan membongkar rancangan.
 Postgres `LISTEN/NOTIFY` → fan-out ke pelanggan SSE. Tanpa Redis, aman lintas
 proses. Pola v2 di [`v2/lib/realtime.ts`](../v2/lib/realtime.ts) sudah benar —
 tiru strukturnya, ganti payloadnya jadi bertipe.
+
+**Tidak butuh paket tambahan.** `http.ResponseWriter` + `http.Flusher` bawaan
+`net/http` sudah cukup — pola yang sama dengan
+[`v2/app/api/events/route.ts`](../v2/app/api/events/route.ts), cuma pindah
+bahasa.
+
+### 4.4 Dependensi Go yang dikunci
+
+Empat keputusan yang kalau ditinggal terbuka, tiap orang yang mengeksekusi
+`internal/http`, `internal/auth`, `internal/poster`, dan `internal/push`
+(§4) akan memilih paket berbeda — dan sebagian pilihan yang wajar kelihatannya
+justru melanggar batasan lain di dokumen ini (satu binary, tanpa proses
+eksternal, arm64). Dikunci di sini supaya itu tidak terjadi.
+
+| Kebutuhan | Paket | Kenapa |
+|---|---|---|
+| Router HTTP | [`go-chi/chi`](https://github.com/go-chi/chi) | `net/http.Handler` murni, bukan framework — cocok dengan sikap "tanpa ORM, tanpa sihir" yang sudah dipegang di `internal/store`. Dipilih **di atas** `net/http.ServeMux` bawaan Go 1.24 karena stack middleware di sini (auth → tenant → RBAC → idempotensi, §0 `API.md`) harus diterapkan **selektif per grup rute** — rute publik (`GET /join/{token}`) melewati auth+tenant, rute superadmin melewati tenant sepenuhnya. `chi` memberi `r.Route`/`r.Use`/`r.With` untuk itu tanpa kode pipa bikinan sendiri. Mengingat berapa banyak ketelitian yang sudah dituntut dari middleware tenant (§6.2, jebakan `SET LOCAL` di pool koneksi), urutan middleware harus rutin dan teruji — bukan hasil rakitan tangan. |
+| Passkey / WebAuthn | [`go-webauthn/webauthn`](https://github.com/go-webauthn/webauthn) | Praktis satu-satunya pustaka server WebAuthn Go yang matang dan dipelihara aktif. Bukan pilihan di antara banyak opsi — ini keputusan "pakai yang benar", bukan "pilih yang disukai". |
+| Web Push (VAPID) | [`SherClockHolmes/webpush-go`](https://github.com/SherClockHolmes/webpush-go) | Murni Go, mengurus enkripsi `aes128gcm` + tanda tangan VAPID sesuai standar Web Push. Satu tugas, tanpa ikatan framework — sejalan dengan `internal/notify` yang cuma butuh "kirim satu payload ke satu endpoint". |
+| Poster QR (PDF + PNG) | [`skip2/go-qrcode`](https://github.com/skip2/go-qrcode) (buat kode QR) + [`fogleman/gg`](https://github.com/fogleman/gg) (tata letak & teks) + [`go-pdf/fpdf`](https://github.com/go-pdf/fpdf) (bungkus jadi PDF) | Lihat penjelasan di bawah — ini bukan satu pilihan tunggal, tapi satu **strategi**. |
+
+**Strategi poster butuh penjelasan, bukan cuma nama paket.** §6.4 mewajibkan
+keluaran PDF 300dpi *dan* PNG dari poster yang sama. Godaan wajarnya adalah
+menulis dua jalur render: satu ke PDF, satu ke gambar — dan begitu ada dua
+jalur, keduanya cepat atau lambat akan berbeda tata letak tanpa ada yang
+sadar sampai poster tercetak salah.
+
+Yang dipakai di sini: **satu fungsi Go menggambar layout poster sekali**, ke
+kanvas raster beresolusi cetak (300dpi) memakai `gg` — nama klub, kode QR dari
+`go-qrcode`, alamat pendek, satu kalimat instruksi, memakai font yang sama
+dengan web (Archivo/Hanken Grotesk, di-`embed` sebagai `.ttf` lewat `go:embed`
+supaya poster dan app terasa satu identitas). Kanvas itu:
+
+- **diekspor langsung jadi PNG** untuk dibagikan ke grup WA, dan
+- **ditempelkan utuh sebagai satu gambar penuh-halaman ke dalam PDF** lewat
+  `fpdf.ImageOptions` untuk versi cetak.
+
+Hasilnya PDF dan PNG **selalu identik piksel demi piksel** karena satu-satunya
+kode tata letak yang ada cuma satu. Ditolak sengaja: render HTML→PDF lewat
+Chrome headless (`chromedp`/`wkhtmltopdf`) — itu berarti proses eksternal dan
+biner Chrome ikut naik ke image Docker, melanggar tujuan "satu binary" di §4.1
+dan menambah berat image arm64 yang sudah dijaga kecil di
+[`Dockerfile`](../v2/Dockerfile) v2.
+
+**Argon2id untuk hash PIN** (skema `user_pins.pin_hash`, §13) memakai
+`golang.org/x/crypto/argon2` — bagian ekstensi resmi tim Go, bukan pustaka
+pihak ketiga, konsisten dengan `hashPin`/`verifyPinHash` yang sudah dipakai
+untuk operator di [`v2/lib/auth.ts`](../v2/lib/auth.ts).
 
 ---
 
@@ -1453,12 +1502,13 @@ Berurutan. Tiap fase menghasilkan sesuatu yang bisa dijalankan dan diperiksa.
 
 ### F0 — Fondasi
 
-Struktur repo `v3/`, database `kok_v3` terpisah di instans Postgres yang sama,
-skeleton Go (health, config, logging terstruktur, graceful shutdown), skeleton
-SvelteKit, goose, Dockerfile multi-stage (build web → embed → binary), **notifier
-palsu + data seed**, workflow CI yang **menjalankan test/lint/vet** — sesuatu yang
-CI v2 tidak lakukan sama sekali (lihat `.github/workflows/deploy-v2.yml`, hanya
-build + deploy).
+Struktur repo `v3/`, database `kok_v3` terpisah di instans Postgres yang sama
+(`DDL.sql` dijalankan sebagai migrasi goose pertama), skeleton Go (health,
+config, logging terstruktur, graceful shutdown) dengan **dependensi terkunci
+di §4.4 sudah masuk `go.mod`**, skeleton SvelteKit, Dockerfile multi-stage
+(build web → embed → binary), **notifier palsu + data seed**, workflow CI yang
+**menjalankan test/lint/vet** — sesuatu yang CI v2 tidak lakukan sama sekali
+(lihat `.github/workflows/deploy-v2.yml`, hanya build + deploy).
 
 **Selesai kalau:** `docker compose up` menyajikan halaman kosong dari satu binary,
 dan developer bisa jalan tanpa menyentuh WhatsApp sama sekali.
