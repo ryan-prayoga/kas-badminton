@@ -10,15 +10,21 @@ Status: **rencana, belum ada kode.** Dokumen ini adalah spesifikasi kerja.
 ## 0. Cara memakai dokumen ini
 
 Dokumen ini ditulis untuk dieksekusi oleh orang atau model yang **belum pernah
-melihat percakapan perancangannya**. Semua keputusan sudah diambil dan tidak perlu
-ditanyakan ulang; yang belum diputuskan ditandai eksplisit di §14.
+melihat percakapan perancangannya**. Seluruh arah sudah diputuskan dan tidak perlu
+ditanyakan ulang. Yang tersisa hanya angka bawaan yang boleh disetel — dikumpulkan
+di §17.
 
 Urutan membaca kalau baru pertama kali:
 
 1. **§1 Latar** — kenapa v3 ada, dan apa yang salah dengan v2
 2. **§2 Keputusan terkunci** — jangan diubah tanpa alasan baru
 3. **§3 Invarian** — aturan yang tidak boleh dilanggar di baris kode mana pun
-4. **§12 Fase kerja** — urutan pengerjaan, mulai dari F0
+4. **§14 Fase kerja** — urutan pengerjaan, mulai dari F0
+
+**Lingkup MVP: F0–F5.** Sampai situ sudah jadi app yang berguna untuk satu klub
+(identitas, catat main, tagihan, offline). F6–F10 melengkapi dan membuka
+multi-klub secara penuh. Kalau pengerjaan harus berhenti di tengah, berhenti di
+batas fase, jangan di tengah fase.
 
 Aturan penting saat mengeksekusi:
 
@@ -91,7 +97,9 @@ pemain, format main yang tidak lagi mengunci di 4 orang, dan desain ulang total.
 | Klaim akun lama | QR/tautan grup, undangan admin per-orang, dan klaim mandiri — semua lewat persetujuan |
 | Peran | **Opsional**, boleh **berbatas waktu**; izin tak ditunjuk jatuh ke admin klub |
 | Format main | **Fleksibel** — single, ganda, atau rotasi. Bukan kunci 4 orang |
-| Deposit | **Potong otomatis** (bisa dimatikan per pemain), **tidak boleh minus** |
+| Deposit | **Terpisah per klub.** Potong otomatis (bisa dimatikan per pemain), **tidak boleh minus** |
+| Lingkup angka di Beranda | **Klub yang sedang aktif**, bukan gabungan lintas klub |
+| Target skala | **~10 klub, ~300 orang** — tanpa keputusan yang mengunci di skala itu |
 | Offline | **Baca offline + antrean tulis** |
 | Arah visual | **Sport editorial** — hierarki ekstrem, angka sebagai elemen terbesar |
 | Layar utama | **Tagihanku dulu** |
@@ -177,6 +185,14 @@ Bukan karena Go. Karena lima hal berikut:
 | SSE cuma mengirim `"update"` → klien refresh penuh | Event bertipe `{kind, id, payload}` → store menambal tanpa refetch |
 | Navigasi = round-trip RSC | Navigasi client-side, nol request |
 | Buka app dingin = layar kosong sampai DB menjawab | Cermin IndexedDB; isi terakhir langsung tampil, lalu disegarkan |
+
+**Target skala:** sekitar **10 klub dan 300 orang**. Angka ini bukan pembatas
+ambisi, tapi penentu apa yang boleh dianggap cukup. Pada skala ini satu VPS
+santai, dan tidak perlu cache berlapis, sharding, atau antrean pekerjaan yang
+rumit. **Yang tetap tidak boleh** adalah keputusan yang mengunci di skala kecil:
+menghitung agregat di memori dari seluruh tabel, daftar tanpa paginasi, atau query
+tanpa indeks — persis kesalahan yang membuat v2 terasa berat. Naik ke skala
+berikutnya harus jadi soal menambah mesin, bukan membongkar rancangan.
 
 **Anggaran performa, ditegakkan sejak F5 dan diukur bukan diasumsikan:**
 
@@ -282,10 +298,33 @@ Urutan dari atas:
 1. **Tagihanku** — angka hero, satu baris konteks di bawahnya ("3 main belum
    lunas"), lalu tombol lebar **Bayar sekarang**. Kalau lunas, ruang ini berganti
    jadi pernyataan tenang bahwa semuanya beres — bukan kartu kosong.
-2. **Deposit** — saldo dan status potong-otomatis, satu baris.
+
+   **Lingkupnya klub yang sedang aktif**, bukan gabungan semua klub. Nama klub
+   selalu terlihat di header, jadi angkanya tidak pernah ambigu dan tombol
+   "Bayar sekarang" jelas menuju kas mana. Klub lain yang punya tagihan muncul
+   sebagai baris kecil di bawahnya — "PB Lain · Rp 30.000" — yang bisa diketuk
+   untuk berpindah. Satu angka gabungan lintas klub sengaja dihindari: ia
+   mencampur uang yang harus masuk ke kas berbeda, dan membuat tombol bayarnya
+   tidak punya tujuan yang jelas.
+2. **Deposit** — saldo di klub ini dan status potong-otomatis, satu baris.
 3. **Main terakhirku** — beberapa entri ringkas, bisa diketuk untuk detail.
 4. **Berikutnya** — jadwal atau turnamen yang akan datang, kalau ada.
 5. **Pintasan pengurus** — hanya muncul kalau berizin.
+
+### 5.5.1 Alur yang sering terlupa tapi sering terjadi
+
+Tiga alur ini bukan kasus tepi. Kalau tidak dirancang layarnya, ketiganya jadi
+keluhan pertama setelah rilis:
+
+- **Ganti HP.** Paling sering terjadi dari semua alur akun. Harus ada satu layar
+  yang memandu berurutan: verifikasi nomor → daftarkan passkey baru → set PIN →
+  keluarkan perangkat lama. Bukan tiga pengaturan terpisah yang harus ditemukan
+  sendiri.
+- **Menunggu pembayaran dicek** (§9.3) — status yang jujur, bukan angka yang tak
+  berubah.
+- **Ikut lebih dari satu klub.** Berpindah klub harus jelas terasa berpindah
+  konteks — nama klub selalu terlihat di header, dan angka di layar tidak pernah
+  ambigu milik klub mana.
 
 ### 5.6 Layar besar
 
@@ -342,8 +381,27 @@ Satu lapis terlalu rapuh untuk data uang milik orang lain:
 3. **Postgres Row-Level Security** — jaring terakhir. Kalau satu query lupa
    memfilter, DB yang menolak, bukan pengguna yang melihat data klub lain.
 
+**RLS di atas connection pool punya jebakan yang harus ditangani eksplisit.**
+Kebijakan RLS membaca `current_setting('app.club_id')`. Nilai itu disetel per
+koneksi, sementara pgx memakai ulang koneksi untuk permintaan yang berbeda — kalau
+satu jalur lupa menyetel atau lupa membersihkan, permintaan berikutnya mewarisi
+`club_id` milik orang lain. Ironisnya lapisan yang dimaksudkan sebagai pengaman
+justru bisa jadi sumber kebocoran.
+
+Aturannya:
+
+- **Semua akses DB lewat satu pembungkus** yang membuka transaksi, menjalankan
+  `SET LOCAL app.club_id = $1`, lalu memanggil query. `SET LOCAL` otomatis hilang
+  saat transaksi selesai — tidak ada yang tertinggal di koneksi.
+- **Tidak ada query yang boleh dijalankan di luar pembungkus itu.** Ditegakkan
+  dengan linter khusus atau tinjauan, bukan niat baik.
+- Koneksi memakai **role aplikasi yang tunduk RLS**, bukan pemilik tabel.
+  Pemilik tabel melewati RLS diam-diam, dan itu menghapus seluruh manfaatnya.
+- Migrasi goose memakai role terpisah yang memang boleh melewati RLS.
+
 Suite kebocoran antar-klub (pengguna klub A menembak tiap endpoint klub B) wajib
-hijau di setiap CI.
+hijau di setiap CI, dan **harus mencakup kasus koneksi dipakai ulang**: dua
+permintaan berbeda klub berurutan di pool yang sama.
 
 ### 6.3 Halaman publik klub
 
@@ -403,8 +461,15 @@ jalurnya adalah izin sementara yang diberikan admin klub, dengan jurnal audit ya
 terlihat oleh klub — bukan hak yang menempel diam-diam.
 
 Konsekuensi yang diterima sadar: sebagian masalah tidak bisa didiagnosis dari
-jauh. Ditebus dengan observability serius (§10) — itu satu-satunya alat yang
+jauh. Ditebus dengan observability serius (§12) — itu satu-satunya alat yang
 tersisa.
+
+**Batas ini adalah kebijakan, bukan jaminan teknis.** Siapa pun yang memegang
+akses server atau menjalankan restore cadangan (§12) secara teknis bisa membaca
+semua data. Larangan di panel superadmin menghilangkan akses yang gampang dan
+tidak tercatat — bukan akses yang mungkin. Jangan menjanjikan lebih dari itu ke
+klub; janjikan yang benar: tidak ada jalan biasa untuk mengintip, dan setiap
+jalan luar biasa meninggalkan jejak.
 
 ### 6.6 Membuat klub baru
 
@@ -443,16 +508,23 @@ Masukkan nomor → OTP 6 digit dikirim via WA → verifikasi
 
 **Buka app sehari-hari — tanpa OTP, tanpa kirim pesan apa pun:**
 ```
-Sesi masih hidup → buka langsung
-Perlu dikunci ulang → passkey, atau PIN kalau perangkatnya tak mendukung
+Sesi masih hidup dan app dibuka < 7 hari lalu → langsung masuk
+Sesi hidup tapi app lama tak dibuka, atau tab dibuka ulang setelah HP terkunci
+  → minta kunci: passkey ATAU PIN
+Sesi mati (> 90 hari) → OTP lagi
 ```
+
+**Passkey dan PIN setara, bukan utama-cadangan.** WebAuthn di PWA standalone iOS
+punya riwayat berubah-ubah antar versi; kalau passkey diperlakukan sebagai jalur
+utama dan gagal, orang terkunci. Keduanya didaftarkan saat klaim akun, keduanya
+selalu ditawarkan, dan pengguna memilih mana yang muncul duluan.
 
 **OTP WA hanya dipakai saat:** klaim akun pertama · login di perangkat baru ·
 ganti nomor · pemulihan saat passkey dan PIN sama-sama hilang.
 
 Dengan pola ini satu orang biasanya menerima **satu pesan OTP seumur pemakaian di
 satu HP**. Itu bukan cuma soal kenyamanan — volume pesan yang rendah adalah
-pertahanan utama supaya nomor WA bot tidak dibanned (§8.3).
+pertahanan utama supaya nomor WA bot tidak dibanned (§10.4).
 
 **Pengaman OTP:** disimpan ter-hash · TTL 5 menit · maksimal 5 percobaan · rate
 limit per nomor **dan** per IP · jeda naik-bertahap untuk kirim ulang.
@@ -460,6 +532,28 @@ limit per nomor **dan** per IP · jeda naik-bertahap untuk kirim ulang.
 **Jalur cadangan wajib:** kalau bridge WA mati atau nomornya diblokir, admin klub
 bisa membuat kode undangan sekali pakai dari panel. Tanpa ini, satu masalah WA
 mengunci seluruh klub di luar app.
+
+### 7.2.1 Kalau nomornya sendiri yang hilang
+
+Kasus yang gampang terlupa: nomor hangus, kartu dicuri, atau ganti nomor tanpa
+akses ke yang lama. Semua jalur pemulihan di atas mengirim OTP **ke nomor itu**,
+jadi tanpa jalan keluar khusus orangnya terkunci selamanya — berikut seluruh
+riwayat dan saldo depositnya.
+
+**Jalurnya:** admin klub bisa memindahkan akun anggota ke nomor baru.
+
+- Hanya `admin` klub, tidak bisa didelegasikan ke peran lain
+- Wajib mengisi alasan; tercatat di `audit_log` dan **terlihat oleh anggota klub**
+- Nomor lama dilepas, nomor baru diverifikasi OTP seperti perangkat baru
+- Semua sesi, passkey, dan PIN lama **dicabut** — perangkat lama otomatis keluar
+- Anggota yang bersangkutan diberi tahu lewat push di perangkat yang masih hidup
+
+Ini jelas jalur yang bisa disalahgunakan admin nakal. Karena itu tidak
+disembunyikan: pemindahan nomor tampil di jurnal audit yang bisa dibaca seluruh
+anggota klub, bukan cuma pengurus.
+
+Kalau seluruh klubnya tidak punya admin yang bisa dihubungi, superadmin bisa
+melakukannya — tapi itu jalur luar biasa yang juga tercatat.
 
 ### 7.3 Menempelkan nama lama v2 ke akun
 
@@ -553,11 +647,21 @@ dan hanya bisa ditebak lewat heuristik "item mana yang paling pas ditutup"
 (lihat `carryTargetKey` di
 [`v2/components/kok/debt-view.tsx`](../v2/components/kok/debt-view.tsx)).
 
+**Dompet terpisah per klub.** Saldo yang dititipkan di PB Sarjana hanya bisa
+dipakai di PB Sarjana. Ini bukan pembatasan yang dibuat-buat — uangnya memang
+dipegang klub itu, dan klub lain tidak punya hak atasnya. Dompet global akan
+memaksa platform jadi perantara keuangan antar klub (saldo dipakai di klub B,
+uang fisiknya ada di klub A), masalah yang jauh lebih besar daripada manfaatnya.
+
+Konsekuensi yang diterima: orang yang ikut dua klub punya dua saldo dan top-up
+dua kali. Karena itu `wallet_entries` **wajib punya `club_id`**, dan layar deposit
+selalu menyebut nama klubnya.
+
 **Aturan:**
 
-- **Ledger append-only** (`wallet_entries`): `topup`, `pemakaian`, `refund`,
-  `penyesuaian`. Saldo = jumlah ledger. Kolom saldo hanya cache, dengan tugas
-  rekonsiliasi berkala.
+- **Ledger append-only** (`wallet_entries`): `club_id`, `user_id`, jenis
+  (`topup`, `pemakaian`, `refund`, `penyesuaian`), nominal. Saldo = jumlah ledger
+  **per klub**. Kolom saldo hanya cache, dengan tugas rekonsiliasi berkala.
 - **Potong otomatis, bisa dimatikan per pemain.** Tagihan baru langsung dipotong
   dari saldo selama masih cukup.
 - **Tidak boleh minus.** Saldo berhenti di nol; sisa tagihan tetap jadi tagihan
@@ -600,6 +704,17 @@ Kalau saklar **wajib verifikasi** dimatikan, langkah persetujuan dilewati. Admin
 tetap bisa menandai lunas langsung — jalur cepat v2 dipertahankan. Bayar lebih
 dari tagihan → sisanya masuk deposit.
 
+**Status menunggu harus jujur di UI.** Kalau bendahara tidak membuka app selama
+tiga hari, tagihan orang itu tetap terlihat belum lunas padahal uangnya sudah
+masuk — dan orang itu akan merasa laporannya diabaikan. Karena itu tagihan yang
+sudah diklaim **tidak boleh** tampil sama seperti tagihan yang belum dibayar:
+tampilkan "Menunggu dicek bendahara · dilaporkan 2 hari lalu", dengan cara
+membatalkan laporan kalau ternyata salah kirim.
+
+Klaim yang menganggur lebih dari **3 hari** memicu pengingat ke bendahara dan
+verifikator. Beban menunggu harus jatuh ke pengurus, bukan ke orang yang sudah
+membayar.
+
 ### 9.4 QRIS
 
 v2 mengubah QRIS statis merchant jadi dinamis lewat `@prasetya/qris`. Kadang
@@ -632,7 +747,7 @@ v3 tidak menggantungkan pembayaran pada jalur yang tidak selalu berhasil:
 | Undangan klaim akun | **WA** | Pemain belum punya app |
 | Tagihan baru · deposit berubah · pembayaran diverifikasi · undangan turnamen · jadwal partai · ringkasan bulanan · permintaan klaim masuk | **Push** | Rutin |
 | Tunggakan lewat batas | **WA** | Jarang, penting; penunggak paling mungkin belum memasang app |
-| Push gagal / tak berlangganan > N hari | **WA** | Jaring pengaman; kalau tidak, orang itu tak pernah dapat kabar |
+| Push gagal / tak berlangganan > **14 hari** | **WA** | Jaring pengaman; kalau tidak, orang itu tak pernah dapat kabar |
 
 Hasilnya satu anggota aktif menerima kira-kira **satu pesan WA seumur pemakaian**.
 Ini yang membuat pemakaian whatsmeow masuk akal — dan makin penting di multi-klub,
@@ -751,6 +866,14 @@ Tidak ada di v2, dan berhenti jadi opsional begitu menyimpan data klub orang lai
 - **Hapus akun & ekspor data pribadi.** Nomor telepon itu data pribadi. Aturannya:
   transaksi keuangan **tidak dihapus** (klub butuh pembukuannya), tapi identitas
   dianonimkan jadi "Pemain terhapus". Ekspor mengembalikan data pribadi orang itu.
+- **Kebijakan privasi minimal** — apa yang disimpan, siapa yang bisa melihat,
+  berapa lama.
+- **Lingkungan dev tanpa WA.** `Notifier` palsu yang menulis OTP ke log, plus data
+  seed. Tanpa ini tidak ada yang bisa mengembangkan tanpa memakai nomor produksi.
+- **Halaman publik tidak boleh diindeks.** Nama anggota — termasuk pemain tamu yang
+  belum pernah mengklaim akunnya — tampil di halaman publik klub. Wajib
+  `noindex, nofollow` dan `robots.txt` yang menutup seluruh path publik klub.
+  Orang mendaftar ke klub badminton, bukan ke hasil pencarian Google atas namanya.
 
 ### 12.1 Kuota
 
@@ -765,15 +888,23 @@ superadmin tanpa deploy ulang.
 | Klub per orang | 20 | Ya |
 | Game, turnamen, transaksi | **tanpa batas** | — |
 | Poster QR aktif per klub | 10 | Ya |
-| **Pesan WA per klub per hari** | **50** | **Tidak — batas platform** |
+| **Pesan WA per klub per hari** | **50** | **Hanya superadmin, per permintaan** |
 
 Foto tetap dikompresi di klien seperti v2, jadi 8 MB itu batas masukan mentah dari
 kamera HP; hasil simpannya jauh lebih kecil.
 
-Kuota pesan WA sengaja tidak bisa dinaikkan klub. Nomor bot dipakai bersama semua
-klub — satu klub yang mengirim membabi buta bisa membuat nomor itu dibanned, dan
-**semua klub kehilangan OTP sekaligus**. Kalau sebuah klub benar-benar butuh lebih,
-itu percakapan dengan superadmin, bukan saklar yang bisa digeser sendiri.
+Kuota pesan WA **tidak punya saklar yang bisa digeser klub sendiri** — beda dari
+kuota lain yang boleh dinaikkan begitu diminta. Nomor bot dipakai bersama semua
+klub; satu klub yang mengirim membabi buta bisa membuat nomor itu dibanned dan
+**semua klub kehilangan OTP sekaligus**. Menaikkannya adalah keputusan superadmin
+setelah melihat pola pemakaian klub itu, bukan permintaan yang otomatis dikabulkan.
+
+**Jatah onboarding.** Kuota harian 50 akan pecah tepat di saat paling penting:
+klub 30 orang yang bergabung serentak butuh 30 undangan + 30 OTP = 60 pesan dalam
+satu hari. Karena itu tiap klub punya **jatah onboarding sekali pakai sebesar 300
+pesan**, aktif 14 hari sejak klub dibuat atau sejak superadmin menyalakannya lagi.
+Jatah ini terpisah dari kuota harian dan hanya bisa dipakai untuk undangan dan OTP
+— tidak untuk pengingat tagihan.
 
 ### 12.2 Retensi data
 
@@ -787,15 +918,17 @@ orang banyak, jadi jangan ada penghapusan yang tidak bisa dibatalkan.
 | Superadmin menangguhkan klub | **Tidak pernah dihapus otomatis.** Penangguhan itu tindakan sengketa, bukan pembersihan — data ditahan sampai persoalannya selesai |
 | Klub tidak aktif lama | **Tidak dihapus.** Klub yang cuma vakum semusim tetap punya riwayat uang yang sah |
 | Anggota keluar dari klub | Keanggotaan berakhir; riwayat main dan pembayarannya **tetap** di klub, karena itu bagian pembukuan klub |
-| Akun dihapus pemiliknya | Identitas dianonimkan jadi "Pemain terhapus"; transaksi keuangan tetap ada (lihat §12) |
+| Akun dihapus pemiliknya | Identitas dianonimkan jadi "Pemain terhapus"; transaksi keuangan tetap ada (lihat butir "Hapus akun & ekspor data pribadi" di awal §12) |
 
 Penghapusan permanen menghapus juga foto di volume disk dan langganan push
 terkaitnya. `audit_log` penghapusan disimpan di tingkat platform, tidak ikut
 terhapus — supaya selalu bisa dijawab siapa menghapus apa dan kapan.
-- **Kebijakan privasi minimal** — apa yang disimpan, siapa yang bisa melihat,
-  berapa lama.
-- **Lingkungan dev tanpa WA.** `Notifier` palsu yang menulis OTP ke log, plus data
-  seed. Tanpa ini tidak ada yang bisa mengembangkan tanpa memakai nomor produksi.
+
+**Saldo deposit menahan penghapusan.** Klub yang masih memegang titipan pemain
+tidak boleh dihapus permanen begitu saja — itu uang orang lain. Sebelum tenggang
+30 hari habis, seluruh saldo harus dikembalikan atau dinolkan lewat entri ledger
+yang bisa dipertanggungjawabkan. Kalau masih ada saldo tersisa saat tenggang
+berakhir, penghapusan **ditahan** dan superadmin diberi tahu.
 
 ---
 
@@ -854,10 +987,14 @@ jadi satu query berindeks.
   ke seluruh peserta.
 
 **Uang**
-- `payments` — `status` (`pending`/`verified`/`rejected`), `claimed_by`,
-  `verified_by`, `method`
-- `wallet_entries` — ledger deposit append-only
-- `expenses`, `kok_types`, `settings` per klub
+- `payments` — `club_id`, `status` (`pending`/`verified`/`rejected`), `claimed_at`,
+  `claimed_by`, `verified_by`, `method`
+- `wallet_entries` — ledger deposit append-only, **`club_id` wajib**. Saldo
+  dihitung per (`user_id`, `club_id`), tidak pernah lintas klub (§9.1)
+- `expenses`, `kok_types` per klub
+
+Pengaturan klub tidak punya tabel sendiri — semuanya di `clubs.settings` dan
+`clubs.quotas` (lihat bagian Platform & klub di atas).
 
 **Notifikasi & media**
 - `notifications` (antrean keluar + pusat notifikasi in-app), `notification_prefs`
@@ -959,16 +1096,32 @@ error, onboarding "pasang ke Home Screen".
 lunas terasa instan (nol round-trip sebelum UI berubah); mode pesawat tetap bisa
 dibaca dan aksinya mengantre lalu terkirim tanpa duplikat.
 
+> **Tab Turnamen sengaja kosong sampai F7.** Navigasi empat tab dibangun utuh di
+> sini, tapi isinya baru datang belakangan. Jangan biarkan tampil sebagai layar
+> rusak — isi dengan keadaan kosong yang jujur ("Turnamen segera hadir"), atau
+> sembunyikan tabnya lewat feature flag sampai F7 selesai.
+
+**Batas MVP ada di sini.** Sampai F5, app sudah berguna penuh untuk satu klub.
+
 ### F6 — Uang
 
 Deposit (ledger, potong otomatis, tarik dengan persetujuan), alur klaim →
 verifikasi, QRIS statis/dinamis + decode dari foto + pencatatan keberhasilan,
 laporan tiga kantong, jurnal audit yang bisa dilihat admin klub.
 
+**Selesai kalau:** bayar lebih masuk deposit dan tagihan berikutnya terpotong
+otomatis; saldo tidak pernah bisa dibuat minus lewat jalur mana pun; total ledger
+selalu sama dengan saldo cache setelah rekonsiliasi; tiga kantong uang tampil
+dengan penjelasannya; setiap perubahan saldo memicu notifikasi ke pemiliknya.
+
 ### F7 — Turnamen
 
 Bagan knockout, round robin, dialog partai, kok per partai, iuran, perbaikan kok
 lepas, saran nominal iuran. Bagan tampil utuh di desktop.
+
+**Selesai kalau:** turnamen 8 pasangan bisa dijalankan dari pembuatan sampai juara;
+**tidak ada satu kok pun yang tidak punya penanggung** (lubang kok lepas v2
+tertutup); bagan tampil tanpa gulir mendatar di 1440px.
 
 ### F8 — Notifikasi & berbagi
 
@@ -976,11 +1129,20 @@ Web Push (VAPID) + preferensi + jam tenang, pusat notifikasi in-app, antrean WA
 dengan rate limit dan kuota per klub, jaring pengaman WA saat push gagal. Share
 teks WhatsApp + kartu gambar.
 
+**Selesai kalau:** push sampai di Android dan iOS-terpasang; jam tenang dihormati;
+kuota dan jatah onboarding berfungsi; orang yang tidak berlangganan push tetap
+dapat kabar lewat WA; kartu share terbaca rapi saat dikirim ke grup WhatsApp.
+
 ### F9 — Halaman publik & operasional
 
 Rute publik read-only dengan query terpisah, backup terjadwal + uji restore,
 metrik & pelacakan galat, rate limiting umum, kuota, hapus akun & ekspor data,
 kebijakan privasi.
+
+**Selesai kalau:** tes otomatis membuktikan respons publik tak pernah memuat nomor
+telepon, saldo, atau riwayat bayar perorangan; halaman publik ber-`noindex`;
+cadangan berhasil di-restore ke instans bersih dan app-nya jalan; klub bisa
+menghapus akunnya sendiri dan mengunduh datanya.
 
 ### F10 — Migrasi & cutover
 
@@ -1023,6 +1185,10 @@ arsip, dan **v1 (Express di akar repo) dimatikan**.
 | **Desain kembali jadi tambal-sulam** | Sistem desain jadi fase tersendiri (F3) sebelum layar mana pun dibangun |
 | **Superadmin tak bisa mendiagnosis** — konsekuensi sadar | Observability serius (§12); jalur izin sementara dari admin klub |
 | **Jumlah pemain variabel merusak perhitungan lama** | Migrasi menetapkan semua game v2 sebagai ganda 4 orang; test perbandingan angka v2 vs v3 |
+| **RLS bocor lewat koneksi yang dipakai ulang** | Semua akses DB lewat satu pembungkus transaksi ber-`SET LOCAL`; role aplikasi tunduk RLS; tes kebocoran mencakup dua permintaan beda klub berurutan di pool sama (§6.2) |
+| **Orang terkunci karena kehilangan nomor WA** | Admin klub bisa memindahkan akun ke nomor baru, wajib beralasan dan tercatat di jurnal audit yang dibaca seluruh anggota (§7.2.1) |
+| **Kuota WA pecah tepat di hari onboarding** | Jatah onboarding sekali pakai 300 pesan, terpisah dari kuota harian (§12.1) |
+| **Klub dihapus padahal masih memegang titipan pemain** | Penghapusan permanen ditahan selama saldo deposit belum nol; superadmin diberi tahu (§12.2) |
 | **Lingkup membengkak** | Fase berurutan; F0–F5 sudah app berguna untuk satu klub walau sisanya tertunda |
 | **v3 tetap terasa berat** | Anggaran performa ditegakkan sejak F5, diukur bukan diasumsikan |
 
@@ -1045,9 +1211,11 @@ arsip, dan **v1 (Express di akar repo) dimatikan**.
    dan pesan jelas, bukan penimpaan diam-diam.
 8. **E2E (Playwright)** — buat klub baru → catat main sebagai satu-satunya anggota;
    catat main single dan rotasi; gabung lewat QR sampai disetujui (bridge WA
-   dipalsukan); login ulang dengan passkey; peran sementara kedaluwarsa; bayar
-   lebih → masuk deposit → tagihan berikutnya terpotong otomatis; klaim +
-   verifikasi bayar; buat turnamen + isi skor.
+   dipalsukan); login ulang dengan passkey **dan** dengan PIN; peran sementara
+   kedaluwarsa; bayar lebih → masuk deposit → tagihan berikutnya terpotong
+   otomatis; klaim + verifikasi bayar; buat turnamen + isi skor; **ganti nomor
+   lewat admin**; **satu orang di dua klub** — pastikan saldo dan angka Beranda
+   tidak pernah tercampur antar klub.
 9. **Poster** — unduh PDF A4 & A5, cetak, pindai dengan beberapa HP berbeda,
    pastikan QR terbaca dari jarak sekitar 1,5 meter.
 10. **Offline** — mode pesawat: app tetap terbaca, aksi mengantre, terkirim saat
@@ -1081,9 +1249,12 @@ di sini supaya mudah ditemukan saat mau disetel:
 |---|---|---|
 | Ambang tunggakan | 14 hari · Rp 50.000 · jeda 7 hari | §10.3 |
 | Masa berlaku sesi | 90 hari, diperpanjang otomatis | §7.2 |
+| Jeda sebelum minta kunci ulang | 7 hari sejak app terakhir dibuka | §7.2 |
 | TTL OTP | 5 menit, maks 5 percobaan | §7.2 |
 | Jam tenang notifikasi | 21.00–07.00 | §10.2 |
+| Ambang "tak berlangganan push" → alihkan ke WA | 14 hari | §10.1 |
 | Tenggang hapus klub | 30 hari, peringatan hari ke-23 | §12.2 |
+| Jatah onboarding WA | 300 pesan, aktif 14 hari | §12.1 |
 | Kuota | lihat tabel | §12.1 |
 | Anggaran performa | shell < 80KB gzip · interaksi < 100ms | §4.2 |
 
@@ -1096,6 +1267,8 @@ tingkat platform di konfigurasi server.
 ## 18. Backlog (di luar lingkup sekarang)
 
 - Transfer bank dengan kode unik 3 digit sebagai jalur pembayaran
+- **Menggabungkan dua akun** milik orang yang sama (dua nomor berbeda) — sekarang
+  belum ada jalannya; sementara ditangani manual oleh superadmin
 - Domain sendiri per klub
 - Meta WhatsApp Cloud API menggantikan whatsmeow
 - Skor untuk game harian — membuka win rate, streak, head-to-head
