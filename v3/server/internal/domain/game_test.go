@@ -81,6 +81,39 @@ func TestEnrichGame_RingkasanBayar(t *testing.T) {
 	}
 }
 
+func TestGameWinnerSide_SingleDanRally42SatuSet(t *testing.T) {
+	w, err := GameWinnerSide(GameScoreSingle, []GameSetScore{{A: 30, B: 22}})
+	if err != nil || w != SideA {
+		t.Fatalf("got %v, %v — mau SideA, nil", w, err)
+	}
+	w, err = GameWinnerSide(GameScoreRally42, []GameSetScore{{A: 38, B: 42}})
+	if err != nil || w != SideB {
+		t.Fatalf("got %v, %v — mau SideB, nil", w, err)
+	}
+	if _, err := GameWinnerSide(GameScoreSingle, []GameSetScore{{A: 30, B: 22}, {A: 21, B: 15}}); err == nil {
+		t.Fatal("single dgn 2 set harusnya ditolak")
+	}
+}
+
+func TestGameWinnerSide_Bo3HitungSetMenang(t *testing.T) {
+	w, err := GameWinnerSide(GameScoreBo3, []GameSetScore{{A: 21, B: 15}, {A: 18, B: 21}, {A: 21, B: 19}})
+	if err != nil || w != SideA {
+		t.Fatalf("got %v, %v — mau SideA menang 2-1", w, err)
+	}
+}
+
+func TestGameWinnerSide_SeriDanNegatifDitolak(t *testing.T) {
+	if _, err := GameWinnerSide(GameScoreSingle, []GameSetScore{{A: 21, B: 21}}); err == nil {
+		t.Fatal("skor seri harusnya ditolak — badminton tidak kenal imbang")
+	}
+	if _, err := GameWinnerSide(GameScoreSingle, []GameSetScore{{A: -1, B: 5}}); err == nil {
+		t.Fatal("skor negatif harusnya ditolak")
+	}
+	if _, err := GameWinnerSide(GameScoreBo3, nil); err == nil {
+		t.Fatal("bo3 tanpa set sama sekali harusnya ditolak")
+	}
+}
+
 func TestGameMatchNumbers_UrutCreatedAtBukanInput(t *testing.T) {
 	games := []StoredGame{
 		{ID: "g1", Date: "2026-01-01", CreatedAt: "2026-01-01T09:30:00.000Z"},

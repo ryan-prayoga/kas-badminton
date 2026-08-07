@@ -5,14 +5,21 @@ import { Toaster } from 'melt/builders';
 
 export type ToastTone = 'netral' | 'lunas' | 'hancur';
 
+export type ToastAction = { label: string; onClick: () => void };
+
 export type ToastData = {
 	title?: string;
 	description: string;
 	tone?: ToastTone;
+	// Batalkan cepat (§9.4) dan sanggahan (§9.4) butuh tombol aksi langsung
+	// di toast, bukan cuma pesan — "Batalkan"/"Saya tidak ikut" harus di
+	// jangkauan jempol persis di tempat notifikasinya muncul.
+	action?: ToastAction;
 };
 
 export const toaster = new Toaster<ToastData>({ closeDelay: 4500 });
 
-export function toast(description: string, opts: Omit<ToastData, 'description'> = {}) {
-	return toaster.addToast({ data: { description, ...opts } });
+export function toast(description: string, opts: Omit<ToastData, 'description'> & { closeDelay?: number } = {}) {
+	const { closeDelay, ...data } = opts;
+	return toaster.addToast({ data: { description, ...data }, closeDelay });
 }

@@ -21,8 +21,12 @@ RETURNING *;
 -- name: CreateExpense :one
 -- Dipakai buat mencatat kelebihan pembulatan biaya sebagai kas masuk
 -- (§9.5 aturan A) — amount negatif = kas masuk (DDL.sql baris 303-304).
-INSERT INTO expenses (club_id, amount, note, recorded_by)
-VALUES ($1, $2, $3, $4)
+-- game_id (nullable, 00022) DIISI kalau baris ini lahir dari pembulatan
+-- satu game — bikin batalkan cepat (§9.4) membersihkannya lewat CASCADE
+-- pas game-nya di-hard-delete, bukan kode aplikasi menebak baris mana.
+-- Pengeluaran manual bendahara (F6) tetap NULL di sini.
+INSERT INTO expenses (club_id, amount, note, recorded_by, game_id)
+VALUES ($1, $2, $3, $4, $5)
 RETURNING *;
 
 -- name: ListGamesByClub :many
@@ -48,6 +52,9 @@ SELECT * FROM game_players WHERE game_id = ANY(sqlc.arg(game_ids)::uuid[]) ORDER
 -- name: ListGameKoksByGame :many
 SELECT * FROM game_koks WHERE game_id = $1;
 
+-- name: ListGameScoresByGame :many
+SELECT * FROM game_scores WHERE game_id = $1 ORDER BY game_no;
+
 -- name: UpdateGame :one
 -- Versioning (invarian §3.4): 0 baris kalau version klien sudah basi —
 -- caller lalu fetch entitas terbaru dan balas 409 version_conflict.
@@ -61,6 +68,16 @@ UPDATE games
 SET deleted_at = now(), updated_at = now(), version = version + 1
 WHERE id = $1 AND club_id = $2 AND deleted_at IS NULL
 RETURNING *;
+
+-- name: HardDeleteGame :execrows
+-- Batalkan cepat (§9.4) — BUKAN SoftDeleteGame di atas. Yang dibatalkan
+-- dalam jendela 8 detik benar-benar hilang (cascade ke game_players,
+-- game_koks, game_scores, dan expenses.game_id — 00010, 00022), supaya
+-- jurnal tidak penuh pasangan "catat / batal catat" untuk salah tap.
+-- Lewat jendela itu, koreksi lewat edit/hapus biasa (SoftDeleteGame).
+-- recorded_by dicek di sini juga (bukan cuma di handler) — hanya yang
+-- mencatat main ini yang boleh membatalkannya.
+DELETE FROM games WHERE id = $1 AND club_id = $2 AND recorded_by = $3;
 
 -- name: SumUnpaidByPayer :one
 -- Query "tagihanku" — satu index scan lewat game_players_unpaid_idx
@@ -92,6 +109,24 @@ SET paid_at = now()
 WHERE club_id = $1 AND id = ANY(sqlc.arg(ids)::uuid[])
   AND paid_at IS NULL AND disputed_at IS NULL
 RETURNING id;
+
+-- name: DisputeGamePlayer :one
+-- Sanggahan (§9.4) — HAK PEMAIN (user_id), bukan penanggung (payer_id).
+-- Yang berhak bilang "saya tidak ikut main" adalah orang yang namanya
+-- dicatat. disputed_at IS NULL di WHERE — sanggah dua kali tidak menimpa
+-- catatan pertama.
+UPDATE game_players
+SET disputed_at = now(), dispute_note = $4
+WHERE game_id = $1 AND club_id = $2 AND user_id = $3 AND disputed_at IS NULL
+RETURNING *;
+
+-- name: ResolveGamePlayerDispute :one
+-- Pencatat/bendahara menyelesaikan (API.md §3) — mengembalikan baris ke
+-- alur normal (kena potong otomatis & tunggakan lagi, §9.5 aturan D).
+UPDATE game_players
+SET disputed_at = NULL, dispute_note = NULL
+WHERE game_id = $1 AND club_id = $2 AND user_id = $3 AND disputed_at IS NOT NULL
+RETURNING *;
 
 -- name: SumWalletBalance :one
 -- Saldo dompet = SUM ledger append-only (DDL.sql "Saldo tidak boleh

@@ -148,6 +148,16 @@ func newGameKokDTO(k gen.GameKok) gameKokDTO {
 	}
 }
 
+type gameScoreDTO struct {
+	GameNo int16 `json:"game_no"`
+	A      int16 `json:"a"`
+	B      int16 `json:"b"`
+}
+
+func newGameScoreDTO(s gen.GameScore) gameScoreDTO {
+	return gameScoreDTO{GameNo: s.GameNo, A: s.ScoreA, B: s.ScoreB}
+}
+
 type gameDTO struct {
 	ID         uuid.UUID       `json:"id"`
 	ClubID     uuid.UUID       `json:"club_id"`
@@ -160,10 +170,14 @@ type gameDTO struct {
 	Version    int64           `json:"version"`
 	Players    []gamePlayerDTO `json:"players"`
 	Koks       []gameKokDTO    `json:"koks,omitempty"`
+	// Skor OPSIONAL (§8.3) — ketiganya kosong kalau main tidak dicatat skornya.
+	ScoreFormat *string        `json:"score_format,omitempty"`
+	WinnerSide  *string        `json:"winner_side,omitempty"`
+	Score       []gameScoreDTO `json:"score,omitempty"`
 }
 
 func newGameDTO(g gen.Game) gameDTO {
-	return gameDTO{
+	dto := gameDTO{
 		ID:         g.ID,
 		ClubID:     g.ClubID,
 		PlayedOn:   dateString(g.PlayedOn),
@@ -174,4 +188,13 @@ func newGameDTO(g gen.Game) gameDTO {
 		UpdatedAt:  tsOrZero(g.UpdatedAt),
 		Version:    g.Version,
 	}
+	if g.ScoreFormat.Valid {
+		f := string(g.ScoreFormat.ScoreFormat)
+		dto.ScoreFormat = &f
+	}
+	if g.WinnerSide.Valid {
+		w := string(g.WinnerSide.GameSide)
+		dto.WinnerSide = &w
+	}
+	return dto
 }

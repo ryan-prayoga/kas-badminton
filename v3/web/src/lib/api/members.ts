@@ -17,3 +17,10 @@ export type Member = {
 export function listMembers(clubId: string, q = ''): Promise<Member[]> {
 	return api.get<Member[]>(`/clubs/${clubId}/members`, q ? { q } : undefined);
 }
+
+// createGuestMember — pemain tamu (PLAN.md §8.1): pencatat mengetik nama
+// yang tidak cocok anggota mana pun saat mencatat main, langsung jadi
+// anggota `unclaimed` di klub itu — bisa diklaim belakangan lewat QR.
+export function createGuestMember(clubId: string, displayName: string): Promise<Member> {
+	return api.post(`/clubs/${clubId}/members/guest`, { display_name: displayName });
+}

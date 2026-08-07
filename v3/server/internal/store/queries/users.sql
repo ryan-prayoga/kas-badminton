@@ -22,6 +22,15 @@ WHERE m.club_id = $1 AND m.left_at IS NULL AND u.status = 'unclaimed'
 ORDER BY u.display_name
 LIMIT 50;
 
+-- name: CreateUnclaimedUser :one
+-- Pemain tamu (§8.1) — pencatat mengetik nama yang tidak cocok anggota
+-- mana pun, sistem bikin akun bayangan langsung di klub itu. phone NULL +
+-- status 'unclaimed' (constraint users_phone_e164, DDL.sql ~baris 128).
+-- Bisa diklaim belakangan lewat QR/tautan (SearchUnclaimedByClub di atas).
+INSERT INTO users (display_name, status)
+VALUES ($1, 'unclaimed')
+RETURNING *;
+
 -- name: CreateUser :one
 -- Dipanggil dari VerifyOTP (internal/auth/otp.go) begitu nomor terverifikasi
 -- — langsung 'active' karena OTP SUDAH membuktikan pemilik nomor

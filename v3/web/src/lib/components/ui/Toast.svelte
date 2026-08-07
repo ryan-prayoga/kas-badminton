@@ -17,6 +17,18 @@
 				<p {...t.title} class="title">{t.data.title}</p>
 			{/if}
 			<p {...t.description} class="desc">{t.data.description}</p>
+			{#if t.data.action}
+				{@const action = t.data.action}
+				<button
+					class="action"
+					onclick={() => {
+						action.onClick();
+						t.removeSelf();
+					}}
+				>
+					{action.label}
+				</button>
+			{/if}
 			<button {...t.close} class="close" aria-label="Tutup notifikasi">
 				<svg viewBox="0 0 20 20"><path d="M5 5l10 10M15 5L5 15" /></svg>
 			</button>
@@ -66,6 +78,18 @@
 	.desc {
 		font-size: 13.5px;
 		color: var(--ink-soft);
+	}
+	.action {
+		display: block;
+		margin-top: 8px;
+		background: none;
+		border: 0;
+		padding: 0;
+		font: inherit;
+		font-size: 13px;
+		font-weight: 700;
+		color: var(--accent);
+		cursor: pointer;
 	}
 	.close {
 		position: absolute;

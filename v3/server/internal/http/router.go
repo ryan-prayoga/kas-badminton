@@ -108,6 +108,11 @@ func Mount(r chi.Router, s *store.Store, bus *realtime.Bus, notifier notify.Noti
 							r.Post("/invites", handleCreateInvite(s, notifier))
 						})
 
+						// Pemain tamu (§8.1) — dibuat pencatat SAAT mencatat main,
+						// bukan cuma admin (pencatat butuh alur ini secepat mungkin,
+						// menunggu admin akan mematikan alur catat main).
+						r.With(RequirePerm(perm.RecordGame)).Post("/members/guest", handleCreateGuestMember(s))
+
 						// Diri sendiri ATAU admin — bukan RequirePerm murni,
 						// dicek manual di handler (clubs_members.go).
 						r.Patch("/members/{userId}/auto-deduct", handleUpdateAutoDeduct(s))
@@ -138,6 +143,18 @@ func Mount(r chi.Router, s *store.Store, bus *realtime.Bus, notifier notify.Noti
 							r.Post("/", handleCreateGame(s))
 							r.Patch("/{id}", handleUpdateGame(s))
 							r.Delete("/{id}", handleDeleteGame(s))
+							r.Post("/{id}/undo", handleUndoGame(s))
+						})
+
+						// Sanggahan (§9.4) — HAK PEMAIN, bukan RequirePerm:
+						// siapa pun anggota klub boleh menyanggah barisnya
+						// sendiri (dicek manual di handler); menyelesaikan
+						// dicek manual juga (pencatat ATAU bendahara, dua
+						// izin terpisah — lihat komentar handler).
+						r.Group(func(r chi.Router) {
+							r.Use(RequireIdempotency(s))
+							r.Post("/{id}/players/{playerId}/dispute", handleDisputeGamePlayer(s))
+							r.Post("/{id}/players/{playerId}/resolve-dispute", handleResolveGamePlayerDispute(s))
 						})
 					})
 				})

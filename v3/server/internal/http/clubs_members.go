@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -72,6 +73,58 @@ func handleListMembers(s *store.Store) http.HandlerFunc {
 			dtos = append(dtos, newMemberDTO(m))
 		}
 		writeJSON(w, http.StatusOK, dtos)
+	}
+}
+
+type createGuestMemberRequest struct {
+	DisplayName string `json:"display_name"`
+}
+
+// handleCreateGuestMember — POST /clubs/{clubId}/members/guest (PLAN.md
+// §8.1 "pemain tamu"). Pencatat mengetik nama yang tidak cocok anggota mana
+// pun saat mencatat main; ini bikin akun bayangan `unclaimed` LANGSUNG jadi
+// anggota klub, supaya dia bisa ditagih & punya riwayat persis anggota
+// biasa. Diklaim belakangan lewat QR/tautan (join.go, SearchUnclaimedByClub).
+func handleCreateGuestMember(s *store.Store) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		clubID, _ := clubIDFromContext(r.Context())
+		var req createGuestMemberRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			writeError(w, CodeValidationFailed, "Body permintaan tidak valid.", nil)
+			return
+		}
+		name := strings.TrimSpace(req.DisplayName)
+		if name == "" {
+			writeError(w, CodeValidationFailed, "Nama pemain tamu wajib diisi.", nil)
+			return
+		}
+
+		var dto memberDTO
+		err := s.WithClub(r.Context(), clubID, func(ctx context.Context, q *gen.Queries) error {
+			u, err := q.CreateUnclaimedUser(ctx, name)
+			if err != nil {
+				return err
+			}
+			m, err := q.CreateMembership(ctx, gen.CreateMembershipParams{
+				ClubID: clubID, UserID: u.ID, Role: gen.ClubRoleMember,
+			})
+			if err != nil {
+				return err
+			}
+			dto = memberDTO{
+				UserID:      u.ID,
+				DisplayName: u.DisplayName,
+				Status:      string(u.Status),
+				Role:        string(m.Role),
+				AutoDeduct:  m.AutoDeduct,
+			}
+			return nil
+		})
+		if err != nil {
+			writeError(w, CodeValidationFailed, "Gagal membuat pemain tamu.", nil)
+			return
+		}
+		writeJSON(w, http.StatusCreated, dto)
 	}
 }
 

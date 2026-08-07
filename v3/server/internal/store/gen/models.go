@@ -726,6 +726,7 @@ type Expense struct {
 	Note       pgtype.Text        `json:"note"`
 	RecordedBy *uuid.UUID         `json:"recorded_by"`
 	CreatedAt  pgtype.Timestamptz `json:"created_at"`
+	GameID     *uuid.UUID         `json:"game_id"`
 }
 
 type Game struct {

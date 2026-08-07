@@ -13,9 +13,9 @@ import (
 )
 
 const createExpense = `-- name: CreateExpense :one
-INSERT INTO expenses (club_id, amount, note, recorded_by)
-VALUES ($1, $2, $3, $4)
-RETURNING id, club_id, amount, kok_type_id, type_name, slops, note, recorded_by, created_at
+INSERT INTO expenses (club_id, amount, note, recorded_by, game_id)
+VALUES ($1, $2, $3, $4, $5)
+RETURNING id, club_id, amount, kok_type_id, type_name, slops, note, recorded_by, created_at, game_id
 `
 
 type CreateExpenseParams struct {
@@ -23,16 +23,22 @@ type CreateExpenseParams struct {
 	Amount     int64       `json:"amount"`
 	Note       pgtype.Text `json:"note"`
 	RecordedBy *uuid.UUID  `json:"recorded_by"`
+	GameID     *uuid.UUID  `json:"game_id"`
 }
 
 // Dipakai buat mencatat kelebihan pembulatan biaya sebagai kas masuk
 // (§9.5 aturan A) — amount negatif = kas masuk (DDL.sql baris 303-304).
+// game_id (nullable, 00022) DIISI kalau baris ini lahir dari pembulatan
+// satu game — bikin batalkan cepat (§9.4) membersihkannya lewat CASCADE
+// pas game-nya di-hard-delete, bukan kode aplikasi menebak baris mana.
+// Pengeluaran manual bendahara (F6) tetap NULL di sini.
 func (q *Queries) CreateExpense(ctx context.Context, arg CreateExpenseParams) (Expense, error) {
 	row := q.db.QueryRow(ctx, createExpense,
 		arg.ClubID,
 		arg.Amount,
 		arg.Note,
 		arg.RecordedBy,
+		arg.GameID,
 	)
 	var i Expense
 	err := row.Scan(
@@ -45,6 +51,7 @@ func (q *Queries) CreateExpense(ctx context.Context, arg CreateExpenseParams) (E
 		&i.Note,
 		&i.RecordedBy,
 		&i.CreatedAt,
+		&i.GameID,
 	)
 	return i, err
 }
@@ -205,6 +212,49 @@ func (q *Queries) CreateGameScore(ctx context.Context, arg CreateGameScoreParams
 	return i, err
 }
 
+const disputeGamePlayer = `-- name: DisputeGamePlayer :one
+UPDATE game_players
+SET disputed_at = now(), dispute_note = $4
+WHERE game_id = $1 AND club_id = $2 AND user_id = $3 AND disputed_at IS NULL
+RETURNING id, game_id, club_id, user_id, payer_id, side, slot, amount, paid_at, paid_by, disputed_at, dispute_note
+`
+
+type DisputeGamePlayerParams struct {
+	GameID      uuid.UUID   `json:"game_id"`
+	ClubID      uuid.UUID   `json:"club_id"`
+	UserID      uuid.UUID   `json:"user_id"`
+	DisputeNote pgtype.Text `json:"dispute_note"`
+}
+
+// Sanggahan (§9.4) — HAK PEMAIN (user_id), bukan penanggung (payer_id).
+// Yang berhak bilang "saya tidak ikut main" adalah orang yang namanya
+// dicatat. disputed_at IS NULL di WHERE — sanggah dua kali tidak menimpa
+// catatan pertama.
+func (q *Queries) DisputeGamePlayer(ctx context.Context, arg DisputeGamePlayerParams) (GamePlayer, error) {
+	row := q.db.QueryRow(ctx, disputeGamePlayer,
+		arg.GameID,
+		arg.ClubID,
+		arg.UserID,
+		arg.DisputeNote,
+	)
+	var i GamePlayer
+	err := row.Scan(
+		&i.ID,
+		&i.GameID,
+		&i.ClubID,
+		&i.UserID,
+		&i.PayerID,
+		&i.Side,
+		&i.Slot,
+		&i.Amount,
+		&i.PaidAt,
+		&i.PaidBy,
+		&i.DisputedAt,
+		&i.DisputeNote,
+	)
+	return i, err
+}
+
 const getGame = `-- name: GetGame :one
 SELECT id, club_id, played_on, format, notes, score_format, winner_side, recorded_by, recorded_by_name, created_at, updated_at, deleted_at, version FROM games WHERE id = $1 AND club_id = $2 AND deleted_at IS NULL
 `
@@ -233,6 +283,31 @@ func (q *Queries) GetGame(ctx context.Context, arg GetGameParams) (Game, error) 
 		&i.Version,
 	)
 	return i, err
+}
+
+const hardDeleteGame = `-- name: HardDeleteGame :execrows
+DELETE FROM games WHERE id = $1 AND club_id = $2 AND recorded_by = $3
+`
+
+type HardDeleteGameParams struct {
+	ID         uuid.UUID  `json:"id"`
+	ClubID     uuid.UUID  `json:"club_id"`
+	RecordedBy *uuid.UUID `json:"recorded_by"`
+}
+
+// Batalkan cepat (§9.4) — BUKAN SoftDeleteGame di atas. Yang dibatalkan
+// dalam jendela 8 detik benar-benar hilang (cascade ke game_players,
+// game_koks, game_scores, dan expenses.game_id — 00010, 00022), supaya
+// jurnal tidak penuh pasangan "catat / batal catat" untuk salah tap.
+// Lewat jendela itu, koreksi lewat edit/hapus biasa (SoftDeleteGame).
+// recorded_by dicek di sini juga (bukan cuma di handler) — hanya yang
+// mencatat main ini yang boleh membatalkannya.
+func (q *Queries) HardDeleteGame(ctx context.Context, arg HardDeleteGameParams) (int64, error) {
+	result, err := q.db.Exec(ctx, hardDeleteGame, arg.ID, arg.ClubID, arg.RecordedBy)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const listGameKoksByGame = `-- name: ListGameKoksByGame :many
@@ -330,6 +405,35 @@ func (q *Queries) ListGamePlayersByGames(ctx context.Context, gameIds []uuid.UUI
 			&i.PaidBy,
 			&i.DisputedAt,
 			&i.DisputeNote,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listGameScoresByGame = `-- name: ListGameScoresByGame :many
+SELECT game_id, game_no, score_a, score_b FROM game_scores WHERE game_id = $1 ORDER BY game_no
+`
+
+func (q *Queries) ListGameScoresByGame(ctx context.Context, gameID uuid.UUID) ([]GameScore, error) {
+	rows, err := q.db.Query(ctx, listGameScoresByGame, gameID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []GameScore{}
+	for rows.Next() {
+		var i GameScore
+		if err := rows.Scan(
+			&i.GameID,
+			&i.GameNo,
+			&i.ScoreA,
+			&i.ScoreB,
 		); err != nil {
 			return nil, err
 		}
@@ -481,6 +585,41 @@ func (q *Queries) MarkGamePlayersPaid(ctx context.Context, arg MarkGamePlayersPa
 		return nil, err
 	}
 	return items, nil
+}
+
+const resolveGamePlayerDispute = `-- name: ResolveGamePlayerDispute :one
+UPDATE game_players
+SET disputed_at = NULL, dispute_note = NULL
+WHERE game_id = $1 AND club_id = $2 AND user_id = $3 AND disputed_at IS NOT NULL
+RETURNING id, game_id, club_id, user_id, payer_id, side, slot, amount, paid_at, paid_by, disputed_at, dispute_note
+`
+
+type ResolveGamePlayerDisputeParams struct {
+	GameID uuid.UUID `json:"game_id"`
+	ClubID uuid.UUID `json:"club_id"`
+	UserID uuid.UUID `json:"user_id"`
+}
+
+// Pencatat/bendahara menyelesaikan (API.md §3) — mengembalikan baris ke
+// alur normal (kena potong otomatis & tunggakan lagi, §9.5 aturan D).
+func (q *Queries) ResolveGamePlayerDispute(ctx context.Context, arg ResolveGamePlayerDisputeParams) (GamePlayer, error) {
+	row := q.db.QueryRow(ctx, resolveGamePlayerDispute, arg.GameID, arg.ClubID, arg.UserID)
+	var i GamePlayer
+	err := row.Scan(
+		&i.ID,
+		&i.GameID,
+		&i.ClubID,
+		&i.UserID,
+		&i.PayerID,
+		&i.Side,
+		&i.Slot,
+		&i.Amount,
+		&i.PaidAt,
+		&i.PaidBy,
+		&i.DisputedAt,
+		&i.DisputeNote,
+	)
+	return i, err
 }
 
 const softDeleteGame = `-- name: SoftDeleteGame :one

@@ -12,6 +12,34 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const createUnclaimedUser = `-- name: CreateUnclaimedUser :one
+INSERT INTO users (display_name, status)
+VALUES ($1, 'unclaimed')
+RETURNING id, phone, username, display_name, photo_id, status, username_changed_at, created_at, updated_at, version
+`
+
+// Pemain tamu (§8.1) — pencatat mengetik nama yang tidak cocok anggota
+// mana pun, sistem bikin akun bayangan langsung di klub itu. phone NULL +
+// status 'unclaimed' (constraint users_phone_e164, DDL.sql ~baris 128).
+// Bisa diklaim belakangan lewat QR/tautan (SearchUnclaimedByClub di atas).
+func (q *Queries) CreateUnclaimedUser(ctx context.Context, displayName string) (User, error) {
+	row := q.db.QueryRow(ctx, createUnclaimedUser, displayName)
+	var i User
+	err := row.Scan(
+		&i.ID,
+		&i.Phone,
+		&i.Username,
+		&i.DisplayName,
+		&i.PhotoID,
+		&i.Status,
+		&i.UsernameChangedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.Version,
+	)
+	return i, err
+}
+
 const createUser = `-- name: CreateUser :one
 INSERT INTO users (phone, display_name, status)
 VALUES ($1, $2, 'active')

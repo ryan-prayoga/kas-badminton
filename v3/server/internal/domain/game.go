@@ -2,6 +2,65 @@
 // jumlah pemain bebas (PLAN.md §8) dan pembagian biaya dibulatkan (§9.5 A).
 package domain
 
+import "fmt"
+
+// GameScoreFormat — skor main harian OPSIONAL (§8.3). Beda dari
+// tournament.ScoreFormat (cuma single/bo3) karena main harian punya format
+// tambahan "rally42" (tarkam, pindah tempat di 21) yang tidak dipakai
+// turnamen — lihat DDL.sql tipe score_format yang mencakup ketiganya.
+type GameScoreFormat string
+
+const (
+	GameScoreSingle  GameScoreFormat = "single"
+	GameScoreBo3     GameScoreFormat = "bo3"
+	GameScoreRally42 GameScoreFormat = "rally42"
+)
+
+// GameSetScore — satu game/set di dalam MatchScore (nama beda dari
+// tournament.GameScore biar tidak diimpor silang, tapi bentuknya identik —
+// "berbagi satu model skor" §8.3).
+type GameSetScore struct{ A, B int }
+
+// GameWinnerSide menghitung sisi menang dari skor opsional main harian.
+// single & rally42 selalu tepat satu set (game_scores CHECK game_no
+// BETWEEN 1 AND 3, tapi keduanya cuma pernah punya satu baris — lihat
+// DDL.sql §8.3); bo3 1-3 set, menang lewat jumlah set yang dimenangkan.
+// Badminton tidak kenal seri — set dengan skor sama ditolak sebagai input
+// tidak valid, bukan ditebak.
+func GameWinnerSide(format GameScoreFormat, sets []GameSetScore) (Side, error) {
+	switch format {
+	case GameScoreSingle, GameScoreRally42:
+		if len(sets) != 1 {
+			return "", fmt.Errorf("format %s harus tepat satu set skor", format)
+		}
+	case GameScoreBo3:
+		if len(sets) < 1 || len(sets) > 3 {
+			return "", fmt.Errorf("format bo3 butuh 1-3 set skor")
+		}
+	default:
+		return "", fmt.Errorf("format skor %q tidak dikenal", format)
+	}
+
+	setsWonA, setsWonB := 0, 0
+	for _, s := range sets {
+		if s.A < 0 || s.B < 0 {
+			return "", fmt.Errorf("skor tidak boleh negatif")
+		}
+		if s.A == s.B {
+			return "", fmt.Errorf("skor %d-%d seri — badminton tidak kenal hasil imbang", s.A, s.B)
+		}
+		if s.A > s.B {
+			setsWonA++
+		} else {
+			setsWonB++
+		}
+	}
+	if setsWonA > setsWonB {
+		return SideA, nil
+	}
+	return SideB, nil
+}
+
 // GameCostOf menghitung biaya satu game dari kok yang dipakai dan jumlah
 // pemain sebenarnya. Tanpa kok atau tanpa pemain → nol, bukan divide-by-zero.
 func GameCostOf(koks []Kok, playerCount int) GameCost {

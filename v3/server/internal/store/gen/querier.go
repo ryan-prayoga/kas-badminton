@@ -58,6 +58,10 @@ type Querier interface {
 	CreateClubLink(ctx context.Context, arg CreateClubLinkParams) (ClubLink, error)
 	// Dipakai buat mencatat kelebihan pembulatan biaya sebagai kas masuk
 	// (§9.5 aturan A) — amount negatif = kas masuk (DDL.sql baris 303-304).
+	// game_id (nullable, 00022) DIISI kalau baris ini lahir dari pembulatan
+	// satu game — bikin batalkan cepat (§9.4) membersihkannya lewat CASCADE
+	// pas game-nya di-hard-delete, bukan kode aplikasi menebak baris mana.
+	// Pengeluaran manual bendahara (F6) tetap NULL di sini.
 	CreateExpense(ctx context.Context, arg CreateExpenseParams) (Expense, error)
 	CreateGame(ctx context.Context, arg CreateGameParams) (Game, error)
 	CreateGameKok(ctx context.Context, arg CreateGameKokParams) (GameKok, error)
@@ -69,6 +73,11 @@ type Querier interface {
 	CreateMembership(ctx context.Context, arg CreateMembershipParams) (Membership, error)
 	CreateOTP(ctx context.Context, arg CreateOTPParams) (OtpCode, error)
 	CreateSession(ctx context.Context, arg CreateSessionParams) (Session, error)
+	// Pemain tamu (§8.1) — pencatat mengetik nama yang tidak cocok anggota
+	// mana pun, sistem bikin akun bayangan langsung di klub itu. phone NULL +
+	// status 'unclaimed' (constraint users_phone_e164, DDL.sql ~baris 128).
+	// Bisa diklaim belakangan lewat QR/tautan (SearchUnclaimedByClub di atas).
+	CreateUnclaimedUser(ctx context.Context, displayName string) (User, error)
 	// Dipanggil dari VerifyOTP (internal/auth/otp.go) begitu nomor terverifikasi
 	// — langsung 'active' karena OTP SUDAH membuktikan pemilik nomor
 	// (bukan status 'unclaimed', itu cuma untuk akun bayangan hasil migrasi
@@ -88,6 +97,11 @@ type Querier interface {
 	// Dipakai bareng RevokeOtherSessions (§7.2.2 "keluarkan semua kecuali ini")
 	// — kredensial passkey milik sesi-sesi yang ikut tercabut, ikut tercabut.
 	DeleteWebauthnCredentialsByUserExceptSession(ctx context.Context, arg DeleteWebauthnCredentialsByUserExceptSessionParams) error
+	// Sanggahan (§9.4) — HAK PEMAIN (user_id), bukan penanggung (payer_id).
+	// Yang berhak bilang "saya tidak ikut main" adalah orang yang namanya
+	// dicatat. disputed_at IS NULL di WHERE — sanggah dua kali tidak menimpa
+	// catatan pertama.
+	DisputeGamePlayer(ctx context.Context, arg DisputeGamePlayerParams) (GamePlayer, error)
 	EnqueueWaMessage(ctx context.Context, arg EnqueueWaMessageParams) (WaOutbox, error)
 	GetClaimRequest(ctx context.Context, arg GetClaimRequestParams) (ClaimRequest, error)
 	// Tanpa club_id di WHERE — clubs tidak ber-RLS (tabel dirinya sendiri
@@ -128,6 +142,14 @@ type Querier interface {
 	// onboarding-nya — kemungkinan operator lewat psql langsung). Query ini
 	// dipakai test (f7_test.go) dan tersedia buat tooling ops nanti.
 	GrantSuperadmin(ctx context.Context, userID uuid.UUID) error
+	// Batalkan cepat (§9.4) — BUKAN SoftDeleteGame di atas. Yang dibatalkan
+	// dalam jendela 8 detik benar-benar hilang (cascade ke game_players,
+	// game_koks, game_scores, dan expenses.game_id — 00010, 00022), supaya
+	// jurnal tidak penuh pasangan "catat / batal catat" untuk salah tap.
+	// Lewat jendela itu, koreksi lewat edit/hapus biasa (SoftDeleteGame).
+	// recorded_by dicek di sini juga (bukan cuma di handler) — hanya yang
+	// mencatat main ini yang boleh membatalkannya.
+	HardDeleteGame(ctx context.Context, arg HardDeleteGameParams) (int64, error)
 	IncrementClubLinkScanCount(ctx context.Context, id uuid.UUID) error
 	IncrementOTPAttempts(ctx context.Context, id uuid.UUID) error
 	IncrementPinFailed(ctx context.Context, arg IncrementPinFailedParams) error
@@ -142,6 +164,7 @@ type Querier interface {
 	ListGameKoksByGame(ctx context.Context, gameID uuid.UUID) ([]GameKok, error)
 	ListGamePlayersByGame(ctx context.Context, gameID uuid.UUID) ([]GamePlayer, error)
 	ListGamePlayersByGames(ctx context.Context, gameIds []uuid.UUID) ([]GamePlayer, error)
+	ListGameScoresByGame(ctx context.Context, gameID uuid.UUID) ([]GameScore, error)
 	// Cursor per tanggal (§4.2 "daftar main dimuat per bulan"; API.md §0
 	// paginasi cursor, bukan offset). sqlc.narg(before) NULL = dari yang
 	// terbaru.
@@ -183,6 +206,9 @@ type Querier interface {
 	// dipegang permintaan lain (invarian §3.3) — caller cek row count.
 	ReserveIdempotencyKey(ctx context.Context, arg ReserveIdempotencyKeyParams) (IdempotencyKey, error)
 	ResetPinFailed(ctx context.Context, userID uuid.UUID) error
+	// Pencatat/bendahara menyelesaikan (API.md §3) — mengembalikan baris ke
+	// alur normal (kena potong otomatis & tunggakan lagi, §9.5 aturan D).
+	ResolveGamePlayerDispute(ctx context.Context, arg ResolveGamePlayerDisputeParams) (GamePlayer, error)
 	// Pemindahan nomor (§7.2.1): "Semua sesi, passkey, dan PIN lama dicabut —
 	// perangkat lama otomatis keluar".
 	RevokeAllSessionsByUser(ctx context.Context, userID uuid.UUID) error
