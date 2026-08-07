@@ -27,6 +27,7 @@ Urutan membaca kalau baru pertama kali:
 |---|---|---|
 | [`DDL.sql`](DDL.sql) | Skema lengkap: 35 tabel, 89 indeks, RLS, trigger saldo | **Sudah diuji jalan** di Postgres 16 |
 | [`mockup/index.html`](mockup/index.html) | Referensi visual "sport editorial" — Beranda & Tagihan, HP + desktop, terang + gelap | Acuan rasa, bukan kode produksi |
+| [`API.md`](API.md) | Kontrak endpoint per domain, konvensi idempotensi/versi/error/paginasi, bentuk event SSE | Daftar + kontrak; belum jadi `openapi.yaml` mesin-baca |
 
 `DDL.sql` bukan sketsa. Ia sudah dijalankan di database bersih dan tiga perilaku
 kritisnya diverifikasi: saldo minus **ditolak database** (bukan cuma ditolak kode),
@@ -1498,6 +1499,12 @@ proses.
 jangan dijalankan sebagai satu migrasi raksasa. Jalankan migrasi sebagai
 `kok_migrate`, aplikasi sebagai `kok_app`: kalau aplikasi memakai pemilik tabel,
 RLS terlewati diam-diam dan lapisan pengaman ketiga hilang tanpa ada yang sadar.
+
+**Permukaan API mengikuti [`API.md`](API.md)** — konvensi idempotensi, versi,
+bentuk galat, paginasi, dan daftar endpoint per domain sudah ditetapkan di
+situ. Jangan merancang ulang konvensinya per endpoint; kalau bentuknya ternyata
+tidak cocok saat implementasi, perbarui `API.md` di commit yang sama supaya
+kontraknya tidak diam-diam menyimpang dari kode.
 
 **Selesai kalau:** dua klien terhubung dan mutasi di satu tercermin di lain
 **tanpa memuat ulang seluruh data**; suite kebocoran antar-klub hijau; kirim ganda
