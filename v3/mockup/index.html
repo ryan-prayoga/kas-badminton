@@ -1,0 +1,631 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Kok Badminton v3 — referensi visual</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@600;700;800&family=Hanken+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+/* ==========================================================================
+   REFERENSI VISUAL — bukan kode produksi.
+   Tujuannya satu: memberi wujud pada "sport editorial" (PLAN.md §5.3) supaya
+   pengeksekusi tidak menebak. Tata letak, skala tipografi, dan peran warna di
+   sini adalah acuan; markupnya nanti ditulis ulang di Svelte + Melt UI.
+   ========================================================================== */
+
+:root {
+  color-scheme: light;
+  --bg:        #f4f5f7;
+  --surface:   #ffffff;
+  --surface-2: #eef0f4;
+  --ink:       #10141c;
+  --ink-soft:  #4a5464;   /* 7.7:1 di atas surface */
+  /* Diuji terhadap DUA latar, bukan cuma surface: #6b7688 lolos di surface
+     (4.59) tapi GAGAL di bg (4.21). Nilai di bawah lolos keduanya. */
+  --ink-faint: #626c7d;   /* 5.30:1 di surface · 4.86:1 di bg */
+  --line:      #e2e5ea;
+  --line-2:    #cfd4dc;
+  --accent:    #1447e6;   /* dipakai IRIT — hanya aksi utama & keadaan aktif */
+  --accent-deep:#0e35b0;
+  --lunas:     #0a7d55;
+  --belum:     #9a5b00;   /* netral-hangat: "belum selesai", bukan "kamu salah" */
+  --hancur:    #c02626;   /* HANYA tindakan merusak */
+  --radius:    14px;
+  --radius-lg: 20px;
+
+  --t-tap:  110ms cubic-bezier(0.2, 0, 0.2, 1);
+  --t-state:180ms cubic-bezier(0.2, 0, 0.2, 1);
+  --t-panel:260ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+[data-theme="dark"] {
+  color-scheme: dark;
+  --bg:        #0b0e14;
+  --surface:   #141922;
+  --surface-2: #1c222d;
+  --ink:       #f0f2f6;
+  --ink-soft:  #aab3c2;
+  --ink-faint: #8a94a6;
+  --line:      #242b37;
+  --line-2:    #333c4b;
+  --accent:    #5b8cff;
+  --accent-deep:#3f6fe0;
+  --lunas:     #34c98a;
+  --belum:     #e0a44a;
+  --hancur:    #f06565;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  background: var(--bg);
+  color: var(--ink);
+  font-family: "Hanken Grotesk", system-ui, sans-serif;
+  font-size: 15px;               /* isi — PLAN.md §5.3 */
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+
+.display { font-family: Archivo, system-ui, sans-serif; letter-spacing: -0.02em; }
+.tabular { font-variant-numeric: tabular-nums; }
+
+:where(a, button, [tabindex]):focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 8px;
+}
+
+/* ---------- kerangka halaman referensi ---------- */
+.page { max-width: 1220px; margin: 0 auto; padding: 32px 20px 80px; }
+.page > header { display: flex; flex-wrap: wrap; gap: 16px; align-items: baseline; justify-content: space-between; margin-bottom: 8px; }
+h1.title { font-size: 26px; font-weight: 800; }
+.sub { color: var(--ink-soft); font-size: 14px; max-width: 62ch; margin-top: 6px; }
+.controls { display: flex; gap: 8px; }
+.ctl {
+  border: 1px solid var(--line-2); background: var(--surface); color: var(--ink);
+  font: inherit; font-size: 13px; font-weight: 600;
+  padding: 8px 14px; border-radius: 999px; cursor: pointer;
+  transition: background var(--t-tap), border-color var(--t-tap);
+}
+.ctl:hover { border-color: var(--accent); color: var(--accent); }
+.ctl[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: #fff; }
+
+.note {
+  border-left: 3px solid var(--accent); background: var(--surface);
+  padding: 12px 16px; border-radius: 0 var(--radius) var(--radius) 0;
+  font-size: 13.5px; color: var(--ink-soft); margin: 28px 0 14px;
+}
+.note b { color: var(--ink); }
+
+.frames { display: flex; flex-wrap: wrap; gap: 28px; align-items: flex-start; }
+.frame-label { font-size: 12px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--ink-faint); margin-bottom: 10px; }
+
+/* ---------- bingkai HP ---------- */
+.phone {
+  width: 375px; height: 760px; flex: none;
+  background: var(--bg);
+  border: 1px solid var(--line-2); border-radius: 30px;
+  overflow: hidden; position: relative;
+  display: flex; flex-direction: column;
+}
+.phone .scroll { flex: 1; overflow-y: auto; padding: 14px 14px 96px; }
+.phone .scroll::-webkit-scrollbar { width: 0; }
+
+/* ---------- komponen bersama ---------- */
+.appbar {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 14px 16px 10px; gap: 12px;
+}
+.club {
+  display: flex; align-items: center; gap: 9px; min-width: 0;
+  background: none; border: 0; font: inherit; color: inherit; cursor: pointer; padding: 4px; margin: -4px;
+}
+.club .dot {
+  width: 30px; height: 30px; border-radius: 9px; flex: none;
+  background: var(--accent); color: #fff;
+  display: grid; place-items: center; font-weight: 800; font-size: 13px;
+  font-family: Archivo, sans-serif;
+}
+.club .nm { font-weight: 700; font-size: 14.5px; }
+.club .cv { color: var(--ink-faint); font-size: 11px; }
+.avatar {
+  width: 34px; height: 34px; border-radius: 50%; flex: none;
+  background: var(--surface-2); border: 1px solid var(--line-2);
+  display: grid; place-items: center; font-weight: 700; font-size: 13px; color: var(--ink-soft);
+}
+
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius-lg); }
+
+/* HERO — satu hal dominan per layar (PLAN.md §5.2 nomor 1) */
+.hero { padding: 22px 20px 20px; margin-bottom: 12px; }
+.hero .eyebrow {
+  font-size: 12px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase;
+  color: var(--ink-faint);
+}
+.hero .amount {
+  font-family: Archivo, sans-serif; font-weight: 800;
+  font-size: 52px; line-height: 1.02; letter-spacing: -0.035em;
+  margin: 8px 0 2px;
+}
+.hero .ctx { color: var(--ink-soft); font-size: 14px; }
+.hero.done .amount { font-size: 30px; color: var(--lunas); }
+
+.btn-primary {
+  display: block; width: 100%; margin-top: 16px;
+  height: 52px; border: 0; border-radius: var(--radius);
+  background: var(--accent); color: #fff;
+  font: inherit; font-weight: 700; font-size: 15.5px; cursor: pointer;
+  transition: transform var(--t-tap), background var(--t-tap);
+}
+.btn-primary:hover { background: var(--accent-deep); }
+.btn-primary:active { transform: scale(0.985); }
+
+.otherclub {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  width: 100%; margin-top: 10px; padding: 11px 14px;
+  background: none; border: 1px dashed var(--line-2); border-radius: var(--radius);
+  font: inherit; color: var(--ink-soft); font-size: 13.5px; cursor: pointer;
+  transition: border-color var(--t-tap), color var(--t-tap);
+}
+.otherclub:hover { border-color: var(--accent); color: var(--accent); }
+
+.strip {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 13px 16px; margin-bottom: 12px; gap: 12px;
+}
+.strip .k { font-size: 13px; color: var(--ink-soft); }
+.strip .v { font-family: Archivo, sans-serif; font-weight: 700; font-size: 17px; }
+.pill {
+  font-size: 11px; font-weight: 700; padding: 3px 9px; border-radius: 999px;
+  background: color-mix(in srgb, var(--lunas) 13%, transparent); color: var(--lunas);
+}
+
+.sec { display: flex; align-items: baseline; justify-content: space-between; margin: 20px 4px 10px; }
+.sec h2 { font-family: Archivo, sans-serif; font-size: 20px; font-weight: 700; }
+.sec a { font-size: 13px; color: var(--accent); text-decoration: none; font-weight: 600; }
+
+/* baris main */
+.match { padding: 13px 16px; border-bottom: 1px solid var(--line); }
+.match:last-child { border-bottom: 0; }
+.match .top { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
+.match .when { font-size: 12.5px; color: var(--ink-faint); }
+.match .amt { font-family: Archivo, sans-serif; font-weight: 700; font-size: 15px; }
+.match .who { margin-top: 5px; font-size: 14px; color: var(--ink-soft); }
+.match .who b { color: var(--ink); font-weight: 600; }
+.score {
+  display: inline-flex; align-items: center; gap: 6px; margin-top: 7px;
+  font-family: Archivo, sans-serif; font-size: 12.5px; font-weight: 700;
+  background: var(--surface-2); border-radius: 8px; padding: 3px 9px;
+}
+.score .w { color: var(--lunas); }
+.tag {
+  display: inline-block; margin-top: 7px; font-size: 11.5px; font-weight: 600;
+  padding: 3px 8px; border-radius: 7px;
+  background: color-mix(in srgb, var(--accent) 11%, transparent); color: var(--accent);
+}
+.tag.wait { background: color-mix(in srgb, var(--belum) 14%, transparent); color: var(--belum); }
+
+/* ---------- tagihan (daftar bendahara) ---------- */
+.row {
+  display: flex; align-items: center; gap: 12px;
+  padding: 13px 16px; border-bottom: 1px solid var(--line);
+}
+.row:last-child { border-bottom: 0; }
+.row .nm { flex: 1; min-width: 0; }
+.row .nm b { display: block; font-weight: 600; font-size: 14.5px; }
+.row .nm span { font-size: 12.5px; color: var(--ink-faint); }
+.row .money { font-family: Archivo, sans-serif; font-weight: 700; font-size: 15px; text-align: right; }
+.row .money.owe { color: var(--belum); }
+.row .money.ok  { color: var(--lunas); }
+.check {
+  width: 22px; height: 22px; border-radius: 7px; flex: none;
+  border: 1.5px solid var(--line-2); background: var(--surface);
+  display: grid; place-items: center; cursor: pointer;
+  transition: background var(--t-state), border-color var(--t-state);
+}
+.check[aria-checked="true"] { background: var(--accent); border-color: var(--accent); }
+.check svg { width: 13px; height: 13px; stroke: #fff; stroke-width: 3; fill: none; opacity: 0; transition: opacity var(--t-state); }
+.check[aria-checked="true"] svg { opacity: 1; }
+
+.bulkbar {
+  position: sticky; bottom: 0; margin-top: 10px;
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  padding: 12px 14px; border-radius: var(--radius);
+  background: var(--ink); color: var(--bg); font-size: 13.5px; font-weight: 600;
+}
+.bulkbar button {
+  border: 0; border-radius: 9px; padding: 9px 14px; cursor: pointer;
+  font: inherit; font-weight: 700; background: var(--accent); color: #fff;
+}
+
+/* ---------- bottom nav ---------- */
+.nav {
+  position: absolute; inset: auto 0 0 0;
+  display: flex; padding: 6px 8px 12px;
+  background: var(--surface); border-top: 1px solid var(--line);
+  /* sengaja TANPA backdrop-filter — sumber jank di Safari mobile (PLAN.md §5.7) */
+}
+.nav button {
+  flex: 1; background: none; border: 0; cursor: pointer; font: inherit;
+  display: flex; flex-direction: column; align-items: center; gap: 3px;
+  padding: 8px 2px; color: var(--ink-faint); font-size: 11px; font-weight: 600;
+  transition: color var(--t-tap);
+}
+.nav button[aria-current="page"] { color: var(--accent); font-weight: 700; }
+.nav svg { width: 21px; height: 21px; stroke: currentColor; fill: none; stroke-width: 1.9; }
+
+/* ---------- desktop ---------- */
+.desk {
+  flex: 1 1 620px; min-width: 0; height: 760px;
+  border: 1px solid var(--line-2); border-radius: 16px; overflow: hidden;
+  display: grid; grid-template-columns: 196px 1fr; background: var(--bg);
+}
+.side { border-right: 1px solid var(--line); padding: 16px 12px; background: var(--surface); }
+.side .club { margin-bottom: 18px; }
+.side nav { display: flex; flex-direction: column; gap: 2px; }
+.side nav button {
+  display: flex; align-items: center; gap: 10px; width: 100%;
+  background: none; border: 0; font: inherit; font-size: 14px; font-weight: 600;
+  color: var(--ink-soft); padding: 9px 10px; border-radius: 9px; cursor: pointer; text-align: left;
+  transition: background var(--t-tap), color var(--t-tap);
+}
+.side nav button:hover { background: var(--surface-2); color: var(--ink); }
+.side nav button[aria-current="page"] { background: color-mix(in srgb, var(--accent) 12%, transparent); color: var(--accent); }
+.side nav svg { width: 18px; height: 18px; stroke: currentColor; fill: none; stroke-width: 1.9; }
+.side .grp { font-size: 11px; font-weight: 700; letter-spacing: .09em; text-transform: uppercase; color: var(--ink-faint); margin: 18px 10px 6px; }
+
+.deskmain { display: grid; grid-template-columns: 1fr 300px; overflow: hidden; }
+.list { overflow-y: auto; padding: 18px; }
+.detail { border-left: 1px solid var(--line); background: var(--surface); padding: 18px; overflow-y: auto; }
+
+table.tbl { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+table.tbl th {
+  text-align: left; font-size: 11px; letter-spacing: .07em; text-transform: uppercase;
+  color: var(--ink-faint); font-weight: 700; padding: 0 10px 8px; border-bottom: 1px solid var(--line);
+}
+table.tbl th.r, table.tbl td.r { text-align: right; }
+table.tbl td { padding: 10px; border-bottom: 1px solid var(--line); }
+table.tbl tbody tr { cursor: pointer; transition: background var(--t-tap); }
+table.tbl tbody tr:hover { background: var(--surface-2); }
+table.tbl tbody tr[aria-selected="true"] { background: color-mix(in srgb, var(--accent) 9%, transparent); }
+.mono { font-family: Archivo, sans-serif; font-weight: 700; font-variant-numeric: tabular-nums; }
+
+.kv { display: flex; justify-content: space-between; gap: 10px; padding: 9px 0; border-bottom: 1px solid var(--line); font-size: 13.5px; }
+.kv:last-of-type { border-bottom: 0; }
+.kv .k { color: var(--ink-soft); }
+.kv .v { font-weight: 600; }
+
+@media (prefers-reduced-motion: reduce) {
+  * { transition-duration: 1ms !important; animation-duration: 1ms !important; }
+}
+</style>
+</head>
+<body>
+<div class="page">
+
+  <header>
+    <div>
+      <h1 class="title display">Kok Badminton v3 — referensi visual</h1>
+      <p class="sub">
+        Wujud dari arah <b>sport editorial</b> (PLAN.md §5.3): satu angka dominan per layar,
+        aksen dipakai irit, tanpa <code>backdrop-blur</code>, target sentuh besar.
+        Ini acuan rasa dan hierarki — bukan kode produksi.
+      </p>
+    </div>
+    <div class="controls">
+      <button class="ctl" id="theme">Mode gelap</button>
+    </div>
+  </header>
+
+  <div class="note">
+    <b>Beranda — "Tagihanku dulu" (§5.5).</b>
+    Angka hero menjawab pertanyaan yang dibawa orang saat membuka app, dalam satu detik.
+    Lingkupnya <b>klub yang sedang aktif</b>; klub lain jadi baris kecil yang bisa diketuk (§5.5).
+    Kartu kanan menunjukkan keadaan lunas — ruangnya berganti jadi pernyataan tenang, bukan kartu kosong.
+  </div>
+
+  <div class="frames">
+
+    <!-- ============ HP: BERANDA ============ -->
+    <div>
+      <div class="frame-label">Beranda · 375px</div>
+      <div class="phone">
+        <div class="appbar">
+          <button class="club">
+            <span class="dot">PS</span>
+            <span style="text-align:left">
+              <span class="nm" style="display:block">PB Sarjana</span>
+              <span class="cv">ketuk buat ganti klub</span>
+            </span>
+          </button>
+          <div class="avatar">R</div>
+        </div>
+
+        <div class="scroll">
+          <div class="card hero">
+            <div class="eyebrow">Sisa patungan kamu</div>
+            <div class="amount tabular">Rp 47.000</div>
+            <div class="ctx">3 main belum lunas · paling lama 12 hari</div>
+            <button class="btn-primary">Bayar sekarang</button>
+            <button class="otherclub">
+              <span>PB Merdeka · Rp 30.000</span>
+              <span aria-hidden="true">›</span>
+            </button>
+          </div>
+
+          <div class="card strip">
+            <div>
+              <div class="k">Deposit kamu di klub ini</div>
+              <div class="v tabular">Rp 12.000</div>
+            </div>
+            <span class="pill">Potong otomatis</span>
+          </div>
+
+          <div class="sec"><h2 class="display">Main terakhir</h2><a href="#">Semua</a></div>
+
+          <div class="card">
+            <div class="match">
+              <div class="top">
+                <span class="when">Sabtu, 8 Agu · Partai 2</span>
+                <span class="amt tabular">Rp 15.000</span>
+              </div>
+              <div class="who"><b>Kamu</b> &amp; Dimas <span style="color:var(--ink-faint)">lawan</span> Bagas &amp; Fikri</div>
+              <div class="score"><span class="w">42</span> — <span>38</span> <span style="color:var(--ink-faint);font-weight:600">rally 42</span></div>
+            </div>
+            <div class="match">
+              <div class="top">
+                <span class="when">Kamis, 6 Agu · Partai 1</span>
+                <span class="amt tabular">Rp 16.000</span>
+              </div>
+              <div class="who"><b>Kamu</b> &amp; Bagas <span style="color:var(--ink-faint)">lawan</span> Dimas &amp; Rizal</div>
+              <span class="tag wait">Menunggu dicek bendahara · 2 hari</span>
+            </div>
+            <div class="match">
+              <div class="top">
+                <span class="when">Selasa, 2 Agu · Partai 3</span>
+                <span class="amt tabular" style="color:var(--ink-faint)">Dibayarin</span>
+              </div>
+              <div class="who"><b>Kamu</b> &amp; Fikri <span style="color:var(--ink-faint)">lawan</span> Rizal &amp; Dimas</div>
+              <span class="tag">Ditanggung Bagas — kalah taruhan kok</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="nav">
+          <button aria-current="page">
+            <svg viewBox="0 0 24 24"><path d="M4 11l8-7 8 7v8a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z"/></svg>
+            Beranda
+          </button>
+          <button>
+            <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M12 4v16M4 12h16"/></svg>
+            Main
+          </button>
+          <button>
+            <svg viewBox="0 0 24 24"><rect x="3" y="6" width="18" height="13" rx="2"/><path d="M3 10h18"/></svg>
+            Klub
+          </button>
+          <button>
+            <svg viewBox="0 0 24 24"><path d="M8 21h8M12 17v4M6 4h12v5a6 6 0 0 1-12 0z"/></svg>
+            Turnamen
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ============ HP: TAGIHAN + AKSI MASSAL ============ -->
+    <div>
+      <div class="frame-label">Klub › Tagihan · aksi massal</div>
+      <div class="phone">
+        <div class="appbar">
+          <button class="club">
+            <span class="dot">PS</span>
+            <span style="text-align:left">
+              <span class="nm" style="display:block">Tagihan klub</span>
+              <span class="cv">7 orang belum lunas</span>
+            </span>
+          </button>
+          <div class="avatar">R</div>
+        </div>
+
+        <div class="scroll">
+          <div class="card hero" style="padding:18px 20px">
+            <div class="eyebrow">Belum terkumpul</div>
+            <div class="amount tabular" style="font-size:42px">Rp 312.400</div>
+            <div class="ctx">dari 7 orang · 2 menunggu dicek</div>
+          </div>
+
+          <div class="card" style="margin-top:12px">
+            <div class="row">
+              <div class="check" role="checkbox" aria-checked="true"><svg viewBox="0 0 24 24"><path d="M4 12l6 6L20 6"/></svg></div>
+              <div class="nm"><b>Bagas</b><span>4 main · terlama 18 hari</span></div>
+              <div class="money owe tabular">Rp 68.000</div>
+            </div>
+            <div class="row">
+              <div class="check" role="checkbox" aria-checked="true"><svg viewBox="0 0 24 24"><path d="M4 12l6 6L20 6"/></svg></div>
+              <div class="nm"><b>Dimas</b><span>3 main · terlama 12 hari</span></div>
+              <div class="money owe tabular">Rp 51.000</div>
+            </div>
+            <div class="row">
+              <div class="check" role="checkbox" aria-checked="false"><svg viewBox="0 0 24 24"><path d="M4 12l6 6L20 6"/></svg></div>
+              <div class="nm"><b>Fikri</b><span>menunggu dicek · 2 hari</span></div>
+              <div class="money tabular" style="color:var(--belum)">Rp 34.000</div>
+            </div>
+            <div class="row">
+              <div class="check" role="checkbox" aria-checked="false"><svg viewBox="0 0 24 24"><path d="M4 12l6 6L20 6"/></svg></div>
+              <div class="nm"><b>Rizal</b><span>disanggah — "tidak ikut 6 Agu"</span></div>
+              <div class="money tabular" style="color:var(--ink-faint)">Ditahan</div>
+            </div>
+            <div class="row">
+              <div class="check" role="checkbox" aria-checked="false"><svg viewBox="0 0 24 24"><path d="M4 12l6 6L20 6"/></svg></div>
+              <div class="nm"><b>Sandi</b><span>lunas 8 Agu · deposit</span></div>
+              <div class="money ok tabular">Lunas</div>
+            </div>
+          </div>
+
+          <div class="bulkbar">
+            <span>2 orang · Rp 119.000</span>
+            <button>Tandai lunas</button>
+          </div>
+        </div>
+
+        <div class="nav">
+          <button><svg viewBox="0 0 24 24"><path d="M4 11l8-7 8 7v8a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z"/></svg>Beranda</button>
+          <button><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M12 4v16M4 12h16"/></svg>Main</button>
+          <button aria-current="page"><svg viewBox="0 0 24 24"><rect x="3" y="6" width="18" height="13" rx="2"/><path d="M3 10h18"/></svg>Klub</button>
+          <button><svg viewBox="0 0 24 24"><path d="M8 21h8M12 17v4M6 4h12v5a6 6 0 0 1-12 0z"/></svg>Turnamen</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="note">
+    <b>Layar besar bukan layar kecil yang dilebarkan (§5.2 nomor 8).</b>
+    Ruang dipakai untuk memperlihatkan lebih banyak sekaligus: sidebar memunculkan tujuan sekunder,
+    daftar jadi tabel padat dengan angka rata kanan, dan detail muncul berdampingan tanpa pindah halaman.
+    Perhatikan baris <b>Rizal</b> — tagihan yang disanggah ditahan, tidak ikut aksi massal (§9.5 aturan D).
+  </div>
+
+  <div class="frames">
+    <div style="flex:1 1 100%">
+      <div class="frame-label">Klub › Tagihan · ≥1024px (master–detail)</div>
+      <div class="desk">
+        <aside class="side">
+          <button class="club">
+            <span class="dot">PS</span>
+            <span style="text-align:left">
+              <span class="nm" style="display:block">PB Sarjana</span>
+              <span class="cv">Bendahara</span>
+            </span>
+          </button>
+          <nav>
+            <button><svg viewBox="0 0 24 24"><path d="M4 11l8-7 8 7v8a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z"/></svg>Beranda</button>
+            <button><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M12 4v16M4 12h16"/></svg>Main</button>
+            <button aria-current="page"><svg viewBox="0 0 24 24"><rect x="3" y="6" width="18" height="13" rx="2"/><path d="M3 10h18"/></svg>Klub</button>
+            <button><svg viewBox="0 0 24 24"><path d="M8 21h8M12 17v4M6 4h12v5a6 6 0 0 1-12 0z"/></svg>Turnamen</button>
+          </nav>
+          <div class="grp">Pengurus</div>
+          <nav>
+            <button><svg viewBox="0 0 24 24"><path d="M3 12h18M3 6h18M3 18h18"/></svg>Tagihan</button>
+            <button><svg viewBox="0 0 24 24"><rect x="3" y="7" width="18" height="12" rx="2"/><path d="M16 7V5H8v2"/></svg>Kas</button>
+            <button><svg viewBox="0 0 24 24"><circle cx="9" cy="8" r="3"/><path d="M3 20a6 6 0 0 1 12 0M17 11h4M19 9v4"/></svg>Anggota</button>
+            <button><svg viewBox="0 0 24 24"><path d="M4 7h16v12H4zM8 7V4h8v3"/></svg>Stok kok</button>
+          </nav>
+        </aside>
+
+        <div class="deskmain">
+          <div class="list">
+            <div class="sec" style="margin-top:0">
+              <h2 class="display">Belum lunas · Rp 312.400</h2>
+              <a href="#">Bagikan rekap</a>
+            </div>
+            <table class="tbl">
+              <thead>
+                <tr><th style="width:24px"></th><th>Nama</th><th>Keterangan</th><th class="r">Nominal</th></tr>
+              </thead>
+              <tbody>
+                <tr aria-selected="true">
+                  <td><div class="check" role="checkbox" aria-checked="true"><svg viewBox="0 0 24 24"><path d="M4 12l6 6L20 6"/></svg></div></td>
+                  <td><b>Bagas</b></td><td style="color:var(--ink-faint)">4 main · terlama 18 hari</td>
+                  <td class="r mono" style="color:var(--belum)">Rp 68.000</td>
+                </tr>
+                <tr>
+                  <td><div class="check" role="checkbox" aria-checked="true"><svg viewBox="0 0 24 24"><path d="M4 12l6 6L20 6"/></svg></div></td>
+                  <td><b>Dimas</b></td><td style="color:var(--ink-faint)">3 main · terlama 12 hari</td>
+                  <td class="r mono" style="color:var(--belum)">Rp 51.000</td>
+                </tr>
+                <tr>
+                  <td><div class="check" role="checkbox" aria-checked="false"><svg viewBox="0 0 24 24"><path d="M4 12l6 6L20 6"/></svg></div></td>
+                  <td><b>Fikri</b></td><td style="color:var(--ink-faint)">menunggu dicek · 2 hari</td>
+                  <td class="r mono" style="color:var(--belum)">Rp 34.000</td>
+                </tr>
+                <tr>
+                  <td></td>
+                  <td><b>Rizal</b></td><td style="color:var(--ink-faint)">disanggah — "tidak ikut 6 Agu"</td>
+                  <td class="r mono" style="color:var(--ink-faint)">Ditahan</td>
+                </tr>
+                <tr>
+                  <td><div class="check" role="checkbox" aria-checked="false"><svg viewBox="0 0 24 24"><path d="M4 12l6 6L20 6"/></svg></div></td>
+                  <td><b>Sandi</b></td><td style="color:var(--ink-faint)">lunas 8 Agu · lewat deposit</td>
+                  <td class="r mono" style="color:var(--lunas)">Lunas</td>
+                </tr>
+              </tbody>
+            </table>
+
+            <div class="bulkbar" style="position:static;margin-top:16px">
+              <span>2 orang dipilih · Rp 119.000</span>
+              <button>Tandai lunas</button>
+            </div>
+          </div>
+
+          <aside class="detail">
+            <div class="sec" style="margin:0 0 12px"><h2 class="display" style="font-size:18px">Bagas</h2></div>
+            <div class="kv"><span class="k">Sisa patungan</span><span class="v mono" style="color:var(--belum)">Rp 68.000</span></div>
+            <div class="kv"><span class="k">Deposit</span><span class="v mono">Rp 0</span></div>
+            <div class="kv"><span class="k">Terlama</span><span class="v">18 hari · 21 Jul</span></div>
+            <div class="kv"><span class="k">Menang–kalah</span><span class="v">12–7</span></div>
+
+            <div class="sec" style="margin:18px 0 8px"><h2 class="display" style="font-size:14px">Rincian</h2></div>
+            <div class="kv"><span class="k">21 Jul · Partai 1</span><span class="v mono">Rp 17.000</span></div>
+            <div class="kv"><span class="k">28 Jul · Partai 2</span><span class="v mono">Rp 17.000</span></div>
+            <div class="kv"><span class="k">2 Agu · Partai 3</span><span class="v mono">Rp 17.000</span></div>
+            <div class="kv"><span class="k">6 Agu · Partai 1</span><span class="v mono">Rp 17.000</span></div>
+
+            <button class="btn-primary" style="margin-top:18px">Tandai lunas</button>
+            <button class="otherclub" style="margin-top:8px;justify-content:center">Tagih lewat WhatsApp</button>
+          </aside>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="note" style="border-color:var(--belum)">
+    <b>Yang sengaja TIDAK ada di sini:</b> gradien, bayangan tebal, kartu berwarna-warni,
+    ikon berwarna, dan <code>backdrop-blur</code>. Warna aksen cuma muncul di aksi utama dan tab aktif —
+    begitu dipakai di mana-mana, ia berhenti berarti apa pun. Semua teks di sini ≥13px
+    dengan kontras ≥4.5:1 di kedua tema (§5.2 nomor 2).
+  </div>
+
+</div>
+
+<script>
+  const root = document.documentElement;
+  const btn = document.getElementById('theme');
+
+  // Tema awal: ikut stempel data-theme dari luar (sebagian peramban/panel
+  // menyetelnya sendiri), lalu jatuh ke preferensi sistem.
+  if (!root.getAttribute('data-theme')) {
+    root.setAttribute('data-theme',
+      matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+  }
+  const syncLabel = () => {
+    const dark = root.getAttribute('data-theme') === 'dark';
+    btn.textContent = dark ? 'Mode terang' : 'Mode gelap';
+    btn.setAttribute('aria-pressed', String(dark));
+  };
+  syncLabel();
+
+  btn.addEventListener('click', () => {
+    const dark = root.getAttribute('data-theme') === 'dark';
+    root.setAttribute('data-theme', dark ? 'light' : 'dark');
+    syncLabel();
+  });
+
+  // Bingkai HP punya kontainer gulir sendiri. Peramban suka memulihkan posisi
+  // gulir saat berkas dimuat ulang, dan itu menyembunyikan angka hero —
+  // justru hal yang paling ingin diperlihatkan halaman ini.
+  const resetFrames = () => document.querySelectorAll('.phone .scroll, .list, .detail')
+    .forEach(el => { el.scrollTop = 0; });
+  if ('scrollRestoration' in history) history.scrollRestoration = 'manual';
+  resetFrames();
+  window.addEventListener('load', resetFrames);
+  window.addEventListener('pageshow', resetFrames);
+  // checkbox demo — hanya untuk memperlihatkan transisi keadaan 180ms
+  document.querySelectorAll('.check').forEach(c => {
+    c.tabIndex = 0;
+    c.addEventListener('click', () => c.setAttribute('aria-checked', c.getAttribute('aria-checked') === 'true' ? 'false' : 'true'));
+  });
+</script>
+</body>
+</html>

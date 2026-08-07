@@ -21,6 +21,19 @@ Urutan membaca kalau baru pertama kali:
 3. **§3 Invarian** — aturan yang tidak boleh dilanggar di baris kode mana pun
 4. **§14 Fase kerja** — urutan pengerjaan, mulai dari F0
 
+### Berkas pendamping
+
+| Berkas | Isi | Status |
+|---|---|---|
+| [`DDL.sql`](DDL.sql) | Skema lengkap: 35 tabel, 89 indeks, RLS, trigger saldo | **Sudah diuji jalan** di Postgres 16 |
+| [`mockup/index.html`](mockup/index.html) | Referensi visual "sport editorial" — Beranda & Tagihan, HP + desktop, terang + gelap | Acuan rasa, bukan kode produksi |
+
+`DDL.sql` bukan sketsa. Ia sudah dijalankan di database bersih dan tiga perilaku
+kritisnya diverifikasi: saldo minus **ditolak database** (bukan cuma ditolak kode),
+RLS mengisolasi klub **pada koneksi yang dipakai ulang**, dan query tanpa
+`SET LOCAL app.club_id` mengembalikan **nol baris — gagal menutup, bukan
+membocorkan**.
+
 **Lingkup MVP: F0–F5.** Sampai situ sudah jadi app yang berguna untuk satu klub
 (identitas, catat main, tagihan, offline). F6–F10 melengkapi dan membuka
 multi-klub secara penuh. Kalau pengerjaan harus berhenti di tengah, berhenti di
@@ -97,7 +110,13 @@ pemain, format main yang tidak lagi mengunci di 4 orang, dan desain ulang total.
 | Klaim akun lama | QR/tautan grup, undangan admin per-orang, dan klaim mandiri — semua lewat persetujuan |
 | Peran | **Opsional**, boleh **berbatas waktu**; izin tak ditunjuk jatuh ke admin klub |
 | Format main | **Fleksibel** — single, ganda, atau rotasi. Bukan kunci 4 orang |
+| Penanggung biaya | **`payer_id` terpisah dari `user_id`** — bisa dibayarin orang lain; pencatat bebas menetapkan |
+| Skor main harian | **Opsional.** Tiga format: sampai 30, rally 21 bo3, dan **rally 42 pindah tempat di 21** (tarkam) |
+| Papan peringkat | Ada begitu skor dicatat; **saklar per klub**, default nyala |
+| Taruhan | Kok = preset penanggung. Barang (Pocari dll) = ledger terpisah, **tanpa rupiah, tak menyentuh kas** |
 | Deposit | **Terpisah per klub.** Potong otomatis (bisa dimatikan per pemain), **tidak boleh minus** |
+| Pembagian biaya | **Dibulatkan ke atas ke ratusan rupiah**; kelebihannya masuk kas, dicatat sebagai "pembulatan" |
+| Urutan potong otomatis | **Best-fit**, algoritma yang sama dengan cicilan v2; berjalan **seketika** dalam transaksi yang sama |
 | Lingkup angka di Beranda | **Klub yang sedang aktif**, bukan gabungan lintas klub |
 | Target skala | **~10 klub, ~300 orang** — tanpa keputusan yang mengunci di skala itu |
 | Offline | **Baca offline + antrean tulis** |
@@ -262,9 +281,16 @@ Skala tegas, bukan bertingkat halus:
 | Meta | 13px | Keterangan, tanggal, label — **batas terkecil** |
 
 **Warna.** Kanvas nyaris netral, satu warna aksen yang dipakai irit supaya tetap
-berarti. Peran semantik: `lunas`, `belum`, `hancur` (destruktif), `aksen`. Tiap
-token **diverifikasi kontrasnya sebelum dipakai**, di terang maupun gelap. Palet
+berarti. Peran semantik: `lunas`, `belum`, `hancur` (destruktif), `aksen`. Palet
 gelap dirancang bersamaan, bukan diturunkan belakangan.
+
+**Tiap token teks diuji terhadap DUA latar: `surface` dan `bg`.** Ini bukan
+kehati-hatian berlebihan — saat menyusun referensi visual, nilai `--ink-faint`
+pertama lolos di atas kartu (4.59:1) tapi **gagal di atas latar halaman
+(4.21:1)**, dan itu tidak akan pernah ketahuan kalau pengujiannya cuma satu latar.
+Meta 13px sering jatuh di kedua tempat. Nilai finalnya ada di
+[`mockup/index.html`](mockup/index.html), sudah diverifikasi lolos ≥4.5:1 untuk
+seluruh token di kedua tema.
 
 **Ruang & pemisah.** Basis 4px, ritme vertikal lega. Pemisahan lewat ruang dan
 garis tipis, bukan bayangan tebal — bayangan disimpan untuk elemen yang benar-benar
@@ -867,6 +893,88 @@ dari daftar sehari-hari tanpa menghapus riwayatnya.
 
 ---
 
+### 8.2 Siapa main ≠ siapa nanggung
+
+Kenyataan di lapangan: satu orang membayari pasangannya, atau mentraktir semua,
+atau yang kalah taruhan menanggung kok. v2 tidak bisa menampung ini sama sekali —
+tagihan selalu menempel ke pemainnya.
+
+**Pemisahan yang menyelesaikan semuanya sekaligus:** tiap baris pemain punya
+`user_id` (siapa yang main) **dan** `payer_id` (siapa yang menanggung). Bawaannya
+sama; ubah `payer_id` dan tagihannya pindah.
+
+| Kasus | Yang dilakukan |
+|---|---|
+| Semua bayar sendiri | Tidak ada — ini bawaannya |
+| A membayari pasangannya | `payer_id` baris B → A |
+| A mentraktir satu lapangan | `payer_id` keempat baris → A |
+| Kalah taruhan, sisi B bayar semua | `payer_id` semua baris → pemain sisi B |
+
+Konsekuensi yang harus dipatuhi di seluruh sistem:
+
+- **"Tagihanku" dihitung dari `payer_id`, bukan `user_id`.** Ini menyentuh indeks
+  utama di §13 — salah kolom di situ dan seluruh angka tagihan salah.
+- Yang ditanggung **tidak melihat tagihan**, dia melihat keterangan "dibayarin A".
+- Potong otomatis memakai dompet **penanggung**.
+- **Sanggahan tetap hak pemainnya** (`user_id`), bukan penanggung — yang berhak
+  bilang "saya tidak ikut main" adalah orang yang namanya dicatat.
+- Penanggung dapat notifikasi "kamu nanggung tagihan A", yang ditanggung dapat
+  "tagihanmu dibayarin B". Keduanya wajib; tidak boleh ada tagihan yang berpindah
+  diam-diam.
+
+**Pencatat bebas menetapkannya** saat mencatat, sama seperti dia memilih pemain —
+menunggu persetujuan akan mematikan alur yang harus selesai dalam belasan detik.
+Pengamannya sudah ada: notifikasi seketika plus tombol sanggah (§9.4).
+
+### 8.3 Skor game harian — opsional
+
+v2 hanya mencatat skor di turnamen. Main harian cuma tercatat siapa dan berapa
+kok, jadi menang-kalahnya hilang — padahal itu bahan obrolan grup yang paling
+ramai.
+
+v3 menambahkan skor sebagai **isian opsional** saat mencatat main. Boleh dilewati
+sepenuhnya; mencatat main tanpa skor harus tetap secepat v2, karena itu alur yang
+paling sering dipakai.
+
+**Tiga format**, mengikuti yang benar-benar dipakai:
+
+| Format | Aturan |
+|---|---|
+| `single` | Satu game sampai 30. Format "biasa" milik v2 |
+| `bo3` | Rally poin 21, best of 3. Standar pertandingan |
+| `rally42` | **Satu game sampai 42, pindah tempat saat 21.** Format tarkam — paling sering dipakai di main harian |
+
+`rally42` adalah tambahan v3; dua yang lain sudah ada di v2
+([`v2/lib/domain/types.ts`](../v2/lib/domain/types.ts)) dan dipakai ulang apa
+adanya supaya turnamen dan main harian berbagi satu model skor, bukan dua.
+
+**Papan peringkat klub** ikut terbuka begitu ada skor: klasemen menang-kalah,
+rentetan kemenangan, dan rekor saling berhadapan. **Ada saklar per klub**, default
+nyala — di klub yang isinya beda-beda level, papan peringkat bisa membuat sebagian
+orang malas ikut main, dan itu lebih merugikan daripada keseruan yang didapat.
+
+### 8.4 Taruhan
+
+Dua jenis, ditangani dengan cara yang sangat berbeda.
+
+**Taruhan kok** — yang kalah menanggung biaya kok. Ini **bukan mekanisme baru**:
+cukup preset dari §8.2 yang memindahkan `payer_id` semua baris ke sisi yang kalah.
+Setelah skor diisi, tombol "yang kalah bayar kok" menyelesaikannya sekali tap.
+
+**Taruhan barang** — Pocari, gorengan, apa pun. Dicatat **terpisah dan tanpa
+rupiah**: isi bebas ("2 Pocari"), siapa berutang ke siapa, status lunas atau belum.
+
+Aturan mutlak: **taruhan barang tidak pernah menyentuh kas klub, deposit, atau
+tagihan.** Ia hidup di ledger sendiri. Begitu ia dinilai rupiah dan masuk tagihan,
+uang kas klub tercampur urusan pribadi antar pemain — persis jenis pencampuran yang
+membuat pembukuan v2 membingungkan, dan di sini akibatnya lebih parah karena
+menyangkut orang lain.
+
+Sifatnya ringan: muncul di profil sebagai statistik seru, tidak pernah muncul di
+laporan keuangan, tidak pernah memicu pengingat WA, dan bisa dimatikan per klub.
+
+---
+
 ## 9. Uang
 
 ### 9.1 Deposit (dompet pemain)
@@ -967,7 +1075,82 @@ atau menjelaskan.
 Tanpa ini, satu-satunya cara membantah adalah ribut di grup WhatsApp, dan
 justru itu yang app ini seharusnya kurangi.
 
-### 9.5 QRIS
+### 9.5 Aturan uang yang mengikat
+
+Enam aturan yang menentukan angka, bukan tampilan. Tanpa ini ditulis, tiap
+pengeksekusi akan menebak sendiri — dan tebakan pada aturan uang adalah kesalahan
+paling mahal di app ini.
+
+**A. Pembagian biaya dibulatkan ke atas ke ratusan rupiah.**
+
+```
+perOrang = ceilRatusan(totalKok / jumlahPemain)
+```
+
+Contoh: kok Rp 10.000 dibagi 3 → Rp 3.333,33 → **Rp 3.400 per orang**.
+
+Dibulatkan **ke atas**, bukan ke terdekat. Ke terdekat akan menghasilkan
+Rp 3.300 dan klub nombok Rp 100 tiap game — kas disubsidi diam-diam, persis
+jenis kebocoran yang tidak akan pernah ketahuan sampai selisihnya besar.
+
+Kelebihannya (di contoh: Rp 200) masuk kas klub dan **dicatat sebagai
+"pembulatan"** di laporan, bukan menyatu tanpa keterangan. Kas yang bertambah
+tanpa penjelasan adalah cara tercepat kehilangan kepercayaan.
+
+Semua orang di satu game membayar nominal yang sama persis — tidak ada satu orang
+yang menanggung sisa receh tanpa alasan yang bisa dia mengerti.
+
+*Batas yang diterima:* kalau biaya per orang di bawah Rp 100, pembulatan ini
+melompat besar secara relatif. Di harga nyata (Rp 3.000-an per orang) itu tidak
+pernah terjadi; jangan tambah kerumitan untuk kasus yang tidak ada.
+
+**B. Potong otomatis memakai planner best-fit yang sama dengan cicilan.**
+
+Saldo dipakai untuk menutup kombinasi tagihan yang menyisakan saldo paling kecil —
+algoritma yang sama persis dengan planner cicilan v2
+([`v2/lib/domain/debt.ts`](../v2/lib/domain/debt.ts)). Satu algoritma untuk dua
+kebutuhan, bukan dua aturan yang harus dijelaskan terpisah.
+
+Konsekuensi UI yang **wajib** dipenuhi: urutan best-fit terasa acak bagi orang
+awam. Karena itu setiap potongan harus menyebut **tagihan mana saja yang tertutup**
+("Deposit menutup: 2 Agu Rp 12.000, 6 Agu Rp 15.000 — sisa saldo Rp 3.000"), bukan
+cuma memperlihatkan saldo berkurang. v2 sudah membuktikan bahwa saldo yang
+mengambang tanpa penjelasan bikin bingung — sampai butuh heuristik khusus hanya
+untuk menebak-nebak tampilannya.
+
+**C. Potong otomatis berjalan seketika, dalam transaksi yang sama.**
+
+Begitu game disimpan, tagihan dibuat dan deposit peserta dipotong di dalam satu
+transaksi. Tidak ada jendela waktu di mana tagihan terlihat belum lunas padahal
+saldonya cukup, dan tidak ada dua orang yang melihat angka berbeda.
+
+**D. Tagihan yang disanggah dikecualikan dari potong otomatis.**
+
+Sanggahan (§9.4) menahan tagihan. Selama ditahan: tidak dipotong dari deposit,
+tidak dihitung sebagai tunggakan untuk pengingat, tidak masuk aksi massal. Kalau
+tidak, uang orang terpakai untuk main yang justru dia bantah pernah ikuti — dan
+itu memaksanya menagih balik ke klub.
+
+**E. Tagihan yang sudah diklaim bayar dikunci dari potong otomatis.**
+
+Orang menekan "sudah transfer" → tagihan itu terkunci sampai verifikator
+memutuskan. Tanpa kunci ini, deposit bisa memotongnya sebelum klaimnya disetujui,
+lalu klaimnya juga masuk — tagihan yang sama terbayar dua kali. Kalau klaimnya
+ditolak, kuncinya lepas dan potong otomatis berjalan seperti biasa.
+
+**F. Izin dievaluasi ulang tiap permintaan, bukan disimpan di sesi.**
+
+Sesi hidup 90 hari; peran bisa habis besok (§7.4). Peran dan izin dibaca dari DB
+di tiap permintaan. Menyimpannya di token berarti orang yang perannya sudah
+dicabut tetap bisa menyentuh uang selama berhari-hari.
+
+**Aksi massal boleh berhasil sebagian.** Dari 20 baris, yang versinya sudah
+berubah ditolak dan sisanya tetap jalan. Hasilnya dilaporkan per baris beserta
+alasannya, dengan tombol coba lagi untuk yang gagal — bendahara tidak perlu
+mengulang dari nol. Konsekuensinya: "Batalkan" (§9.4) hanya mengembalikan baris
+yang benar-benar berhasil, dan itu harus dikatakan apa adanya di UI.
+
+### 9.6 QRIS
 
 v2 mengubah QRIS statis merchant jadi dinamis lewat `@prasetya/qris`. Kadang
 berhasil, kadang ditolak atau kedaluwarsa saat dipindai — wajar, karena sebagian
@@ -1311,6 +1494,11 @@ Skema dengan `club_id` menyeluruh + RLS, middleware tenant, idempotensi, versi
 entitas, endpoint granular, SSE bertipe, `LISTEN/NOTIFY` untuk fan-out lintas
 proses.
 
+**Titik mulainya [`DDL.sql`](DDL.sql)** — pecah jadi migrasi goose berurutan,
+jangan dijalankan sebagai satu migrasi raksasa. Jalankan migrasi sebagai
+`kok_migrate`, aplikasi sebagai `kok_app`: kalau aplikasi memakai pemilik tabel,
+RLS terlewati diam-diam dan lapisan pengaman ketiga hilang tanpa ada yang sadar.
+
 **Selesai kalau:** dua klien terhubung dan mutasi di satu tercermin di lain
 **tanpa memuat ulang seluruh data**; suite kebocoran antar-klub hijau; kirim ganda
 dengan kunci sama tidak menghasilkan entri kedua.
@@ -1320,6 +1508,10 @@ dengan kunci sama tidak menghasilkan entri kedua.
 Token (warna yang sudah diverifikasi kontrasnya, tipografi, ruang, gerak),
 komponen inti di atas Melt UI, kerangka responsif tiga breakpoint, halaman contoh
 yang memamerkan seluruh komponen.
+
+**Acuannya [`mockup/index.html`](mockup/index.html)** — skala tipografi, peran
+warna, dan hierarki di situ sudah diputuskan dan diuji. Ambil nilainya, tulis
+ulang markupnya di Svelte. Jangan memulai dari nol dan jangan menawar arahnya.
 
 > **Sengaja jadi fase tersendiri.** Kalau menumpang di fase fitur, hasilnya jadi
 > tambal-sulam seperti v2 yang punya dua sistem komponen hidup berdampingan.
@@ -1349,7 +1541,8 @@ endpoint uang.
 Beranda (tagihanku sebagai hero), Main, Klub. Store optimistic, cermin IndexedDB,
 **outbox tulis**, service worker + ajakan pembaruan versi, halaman offline &
 error, pencarian orang, layar "belum punya klub", batalkan cepat, pemain tamu,
-panduan driver.js (perkenalan + "pasang ke Home Screen").
+**penanggung biaya (§8.2)**, **skor opsional (§8.3)**, panduan driver.js
+(perkenalan + "pasang ke Home Screen").
 
 **Selesai kalau:** alur harian penuh berfungsi di 375px **dan** 1440px; menandai
 lunas terasa instan (nol round-trip sebelum UI berubah); mode pesawat tetap bisa
@@ -1373,14 +1566,20 @@ otomatis; saldo tidak pernah bisa dibuat minus lewat jalur mana pun; total ledge
 selalu sama dengan saldo cache setelah rekonsiliasi; tiga kantong uang tampil
 dengan penjelasannya; setiap perubahan saldo memicu notifikasi ke pemiliknya.
 
-### F7 — Turnamen
+### F7 — Turnamen & keseruan
 
 Bagan knockout, round robin, dialog partai, kok per partai, iuran, perbaikan kok
 lepas, saran nominal iuran. Bagan tampil utuh di desktop.
 
+Plus yang lahir dari skor main harian (§8.3): **papan peringkat klub** (klasemen,
+rentetan menang, saling berhadapan) dengan saklar per klub, dan **taruhan barang**
+(§8.4) sebagai ledger terpisah tanpa rupiah.
+
 **Selesai kalau:** turnamen 8 pasangan bisa dijalankan dari pembuatan sampai juara;
 **tidak ada satu kok pun yang tidak punya penanggung** (lubang kok lepas v2
-tertutup); bagan tampil tanpa gulir mendatar di 1440px.
+tertutup); bagan tampil tanpa gulir mendatar di 1440px; papan peringkat bisa
+dimatikan dan benar-benar hilang saat dimatikan; taruhan barang tidak pernah muncul
+di laporan keuangan mana pun.
 
 ### F8 — Notifikasi & berbagi
 
@@ -1536,11 +1735,19 @@ arsip, dan **v1 (Express di akar repo) dimatikan**.
 20. **Nada bicara** — sisir seluruh teks antarmuka: tidak ada kode galat mentah
     yang bocor ke pengguna, tidak ada angka tanpa format rupiah, dan tidak ada
     kata bernada menghakimi di layar tagihan.
-21. **Aksesibilitas** — telusuri satu halaman penuh dengan Tab saja; rasio kontras
+21. **Penanggung biaya** — catat main dengan A menanggung tagihan B; pastikan
+    "Tagihanku" milik A bertambah dan milik B tidak, potong otomatis memakai
+    dompet A, keduanya dapat notifikasi, dan **B tetap yang berhak menyanggah**.
+22. **Skor & papan peringkat** — catat main tanpa skor (harus tetap secepat v2),
+    lalu dengan skor di ketiga format termasuk `rally42`; matikan papan peringkat
+    di pengaturan klub dan pastikan benar-benar hilang, bukan cuma disembunyikan.
+23. **Taruhan barang** — pastikan tidak pernah muncul di kas, deposit, tagihan,
+    laporan tiga kantong, atau pengingat WA.
+24. **Aksesibilitas** — telusuri satu halaman penuh dengan Tab saja; rasio kontras
     tiap token teks diverifikasi sebelum dipakai; uji keterbacaan di bawah cahaya
     terang; overlay driver.js bisa ditelusuri keyboard dan tidak menjebak fokus.
-22. **Pemulihan** — restore cadangan ke instans bersih dan pastikan app jalan.
-23. **Migrasi** — perbandingan angka v2 vs v3 nol selisih, termasuk `player_carry`
+25. **Pemulihan** — restore cadangan ke instans bersih dan pastikan app jalan.
+26. **Migrasi** — perbandingan angka v2 vs v3 nol selisih, termasuk `player_carry`
     → saldo deposit awal, sebelum cutover. Berkas pemetaan nama duplikat sudah
     ditinjau manusia dan ikut tersimpan di repo.
 
@@ -1581,7 +1788,6 @@ tingkat platform di konfigurasi server.
   belum ada jalannya; sementara ditangani manual oleh superadmin
 - Domain sendiri per klub
 - Meta WhatsApp Cloud API menggantikan whatsmeow
-- Skor untuk game harian — membuka win rate, streak, head-to-head
 - Impor data klub baru dari Excel/CSV
 - Ekspor CSV/JSON per klub
 - i18n (struktur disiapkan; isi hanya Bahasa Indonesia untuk sekarang)
