@@ -16,10 +16,14 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
+	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/ryan-prayoga/kas-badminton/v3/server/internal/config"
+	httpapi "github.com/ryan-prayoga/kas-badminton/v3/server/internal/http"
 	"github.com/ryan-prayoga/kas-badminton/v3/server/internal/logging"
 	"github.com/ryan-prayoga/kas-badminton/v3/server/internal/notify"
+	"github.com/ryan-prayoga/kas-badminton/v3/server/internal/realtime"
+	"github.com/ryan-prayoga/kas-badminton/v3/server/internal/store"
 	"github.com/ryan-prayoga/kas-badminton/v3/server/internal/webassets"
 )
 
@@ -44,7 +48,27 @@ func run() error {
 	var notifier notify.Notifier = notify.NewFake(logger)
 	_ = notifier
 
-	router, err := newRouter(logger)
+	// Graceful shutdown: SIGINT (Ctrl-C lokal) dan SIGTERM (docker stop /
+	// systemd) berhenti menerima koneksi baru, tunggu request berjalan
+	// selesai, baru keluar. ctx yang sama menghentikan goroutine LISTEN
+	// realtime.Bus.
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+
+	pool, err := pgxpool.New(ctx, cfg.DatabaseURL)
+	if err != nil {
+		return err
+	}
+	defer pool.Close()
+	if err := pool.Ping(ctx); err != nil {
+		return err
+	}
+	logger.Info("koneksi database ok")
+
+	s := store.New(pool)
+	bus := realtime.NewBus(ctx, cfg.DatabaseURL, logger)
+
+	router, err := newRouter(logger, s, bus, cfg.IsDev())
 	if err != nil {
 		return err
 	}
@@ -54,12 +78,6 @@ func run() error {
 		Handler:           router,
 		ReadHeaderTimeout: 5 * time.Second,
 	}
-
-	// Graceful shutdown: SIGINT (Ctrl-C lokal) dan SIGTERM (docker stop /
-	// systemd) berhenti menerima koneksi baru, tunggu request berjalan
-	// selesai, baru keluar.
-	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
-	defer stop()
 
 	serveErr := make(chan error, 1)
 	go func() {
@@ -85,7 +103,7 @@ func run() error {
 	return nil
 }
 
-func newRouter(logger *slog.Logger) (http.Handler, error) {
+func newRouter(logger *slog.Logger, s *store.Store, bus *realtime.Bus, isDev bool) (http.Handler, error) {
 	r := chi.NewRouter()
 	r.Use(middleware.RequestID)
 	r.Use(middleware.RealIP)
@@ -93,6 +111,7 @@ func newRouter(logger *slog.Logger) (http.Handler, error) {
 	r.Use(middleware.Recoverer)
 
 	r.Get("/healthz", healthHandler)
+	httpapi.Mount(r, s, bus, isDev)
 
 	spa, err := spaHandler()
 	if err != nil {

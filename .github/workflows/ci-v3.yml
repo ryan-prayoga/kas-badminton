@@ -17,6 +17,33 @@ jobs:
     defaults:
       run:
         working-directory: v3/server
+    # kok_migrate/kok_app dibuat via deploy/db-init/01-roles.sh (langkah
+    # "Bootstrap role" di bawah) — bukan lewat POSTGRES_USER service ini,
+    # supaya prosedurnya identik dengan dev (docker-compose) dan produksi.
+    # POSTGRES_USER di sini cuma admin bootstrap, sama seperti kok_owner
+    # di compose (PLAN.md §6.2: aplikasi TIDAK BOLEH memakai pemilik tabel).
+    env:
+      PGHOST: localhost
+      PGPORT: 5432
+      PGPASSWORD: postgres_ci
+      POSTGRES_USER: postgres
+      POSTGRES_DB: kok_v3
+      KOK_MIGRATE_PASSWORD: kok_migrate_ci
+      KOK_APP_PASSWORD: kok_app_ci
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres_ci
+          POSTGRES_DB: kok_v3
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
     steps:
       - name: Checkout
         uses: actions/checkout@v7
@@ -39,7 +66,24 @@ jobs:
       - name: go vet
         run: go vet ./...
 
+      # Bootstrap role + migrasi: langkah yang sama persis dengan dev
+      # (docker-compose) — lihat v3/deploy/db-init/01-roles.sh dan
+      # v3/server/internal/migrations/README.md. Role dibuat SEBELUM
+      # migrasi 00002_roles.sql jalan (yang jadi no-op idempoten di sini).
+      - name: Bootstrap role kok_app/kok_migrate
+        run: ../deploy/db-init/01-roles.sh
+
+      - name: Migrasi skema (role kok_migrate)
+        env:
+          MIGRATE_DATABASE_URL: postgresql://kok_migrate:${{ env.KOK_MIGRATE_PASSWORD }}@localhost:5432/kok_v3?sslmode=disable
+        run: go run ./cmd/migrate
+
+      # Suite kebocoran antar-klub, idempotensi, versi, dan realtime SSE
+      # (internal/http, internal/store, PLAN.md §14 F2 "selesai kalau")
+      # butuh Postgres sungguhan — TEST_DATABASE_URL memicunya, bukan skip.
       - name: go test
+        env:
+          TEST_DATABASE_URL: postgresql://kok_app:${{ env.KOK_APP_PASSWORD }}@localhost:5432/kok_v3?sslmode=disable
         run: go test ./... -race -count=1
 
       - name: go build

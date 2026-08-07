@@ -3,20 +3,41 @@ services:
     image: postgres:16
     restart: unless-stopped
     environment:
-      - POSTGRES_USER=kok_app
-      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-kok_dev_only}
+      # kok_owner cuma buat init container (superuser DB) — BUKAN role
+      # aplikasi. Nama "kok_app"/"kok_migrate" dipakai role tunduk-RLS yang
+      # dibuat db-init/01-roles.sh; kalau POSTGRES_USER dipakai nama itu,
+      # role itu jadi pemilik tabel dan RLS terlewati diam-diam (§6.2).
+      - POSTGRES_USER=kok_owner
+      - POSTGRES_PASSWORD=${POSTGRES_OWNER_PASSWORD:-kok_owner_dev_only}
       - POSTGRES_DB=kok_v3
+      - KOK_MIGRATE_PASSWORD=${KOK_MIGRATE_PASSWORD:-kok_migrate_dev_only}
+      - KOK_APP_PASSWORD=${KOK_APP_PASSWORD:-kok_app_dev_only}
     ports:
-      # dipetakan ke host cuma buat dev lokal (jalanin goose/psql dari luar
+      # dipetakan ke host cuma buat dev lokal (psql/goose dari luar
       # container); prod tidak perlu expose ini.
       - "127.0.0.1:5434:5432"
     volumes:
       - kok_v3_pgdata:/var/lib/postgresql/data
+      - ./db-init:/docker-entrypoint-initdb.d:ro
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U kok_app -d kok_v3"]
+      test: ["CMD-SHELL", "pg_isready -U kok_owner -d kok_v3"]
       interval: 2s
       timeout: 3s
       retries: 15
+
+  # One-off: `docker compose --profile tools run --rm migrate`. Jalan
+  # sebagai kok_migrate (BYPASSRLS) — bukan role aplikasi.
+  migrate:
+    profiles: ["tools"]
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+      target: migrate
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      - MIGRATE_DATABASE_URL=postgresql://kok_migrate:${KOK_MIGRATE_PASSWORD:-kok_migrate_dev_only}@db:5432/kok_v3
 
   api:
     build:
@@ -27,7 +48,7 @@ services:
       db:
         condition: service_healthy
     environment:
-      - DATABASE_URL=postgresql://kok_app:${POSTGRES_PASSWORD:-kok_dev_only}@db:5432/kok_v3
+      - DATABASE_URL=postgresql://kok_app:${KOK_APP_PASSWORD:-kok_app_dev_only}@db:5432/kok_v3
       - PORT=8300
       - ENV=${ENV:-dev}
       - LOG_LEVEL=${LOG_LEVEL:-info}

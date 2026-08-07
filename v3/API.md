@@ -357,7 +357,8 @@ Satu koneksi per klien, bukan per klub — pelanggan mendengarkan semua klub
 yang dia ikuti sekaligus, filter di klien.
 
 ```
-GET /api/v1/events   (Server-Sent Events, header Last-Event-ID buat resume)
+GET /api/v1/events?club_id=<uuid>&club_id=<uuid>...
+  (Server-Sent Events, header Last-Event-ID buat resume)
 
 event: game.created
 data: {"club_id":"...","id":"...","played_on":"2026-08-08"}
@@ -380,7 +381,20 @@ Jenis event minimum yang harus ada di F2: `game.created`, `game.updated`,
 `game.deleted`, `bill.updated`, `payment.claimed`, `payment.verified`,
 `wallet.updated`, `dispute.opened`, `dispute.resolved`, `claim.requested`,
 `session.revoked` *(padanan `event: session` di v2, dipertahankan karena
-terbukti perlu untuk logout instan lintas tab)*.
+terbukti perlu untuk logout instan lintas tab)*. **Dipicu nyata di F2**
+cuma `game.created/updated/deleted` dan `bill.updated` — sisanya
+didaftarkan sebagai tipe (`internal/realtime/events.go`) dan nyala saat
+F4/F6 membangun endpoint aslinya (payments/wallet/klaim/sesi ada di luar
+lingkup F2, lihat PLAN.md §14).
+
+**`club_id` di query wajib di F2** — belum ada `GET /me` (§1, F4) buat
+server tahu sendiri klub mana yang diikuti pemanggil, jadi klien
+menyebutkan klub yang mau didengarkan secara eksplisit. Server tetap
+memverifikasi keanggotaan tiap `club_id` sebelum mendaftarkan langganan
+(request dengan klub yang bukan miliknya diam-diam diabaikan, bukan
+error — sama semangatnya dengan 404 di §0). Begitu `GET /me` ada, ini
+berubah jadi "auto-discover dari memberships", parameter `club_id` jadi
+opsional (override), bukan wajib.
 
 ---
 
