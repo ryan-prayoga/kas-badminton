@@ -97,6 +97,9 @@ func Mount(r chi.Router, s *store.Store, bus *realtime.Bus, notifier notify.Noti
 					r.Get("/members", handleListMembers(s))
 					r.Get("/me/bill", handleGetMyBill(s))
 					r.Get("/me/wallet", handleGetMyWallet(s))
+					// Akses bersyarat pada saklar transparansi_kas, dicek
+					// manual di handler — bukan RequirePerm tetap (treasury.go).
+					r.Get("/treasury", handleGetTreasury(s))
 
 					r.Group(func(r chi.Router) {
 						r.Use(RequireIdempotency(s))
@@ -127,6 +130,8 @@ func Mount(r chi.Router, s *store.Store, bus *realtime.Bus, notifier notify.Noti
 							r.Post("/wallet/{userId}/withdraw", handleWithdrawWallet(s))
 							r.Post("/payments/{id}/verify", handleVerifyPayment(s))
 							r.Post("/payments/{id}/reject", handleRejectPayment(s))
+							r.Get("/expenses", handleListExpenses(s))
+							r.Post("/expenses", handleCreateExpense(s))
 						})
 
 						// Klaim "sudah transfer" — HAK PEMAIN atas tagihannya sendiri

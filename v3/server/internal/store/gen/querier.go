@@ -74,6 +74,11 @@ type Querier interface {
 	CreateInvite(ctx context.Context, arg CreateInviteParams) (Invite, error)
 	// Dipakai cmd/seed buat data contoh (CRUD katalog sendiri di luar F2).
 	CreateKokType(ctx context.Context, arg CreateKokTypeParams) (KokType, error)
+	// Pengeluaran manual bendahara (API.md §4 "Catat pengeluaran / beli
+	// slop") — beda dari CreateExpense (games.sql, khusus pembulatan
+	// otomatis game_id): di sini kok_type_id/type_name/slops terisi, game_id
+	// selalu NULL.
+	CreateManualExpense(ctx context.Context, arg CreateManualExpenseParams) (Expense, error)
 	CreateMembership(ctx context.Context, arg CreateMembershipParams) (Membership, error)
 	CreateOTP(ctx context.Context, arg CreateOTPParams) (OtpCode, error)
 	CreatePayment(ctx context.Context, arg CreatePaymentParams) (Payment, error)
@@ -202,6 +207,7 @@ type Querier interface {
 	// subquery memberships langsung (ber-RLS, akan selalu nol tanpa
 	// app.club_id — sama masalahnya dengan 00017/00018).
 	ListClubsWithMemberCount(ctx context.Context) ([]ListClubsWithMemberCountRow, error)
+	ListExpenses(ctx context.Context, arg ListExpensesParams) ([]Expense, error)
 	ListGameKoksByGame(ctx context.Context, gameID uuid.UUID) ([]GameKok, error)
 	ListGamePlayersByGame(ctx context.Context, gameID uuid.UUID) ([]GamePlayer, error)
 	ListGamePlayersByGames(ctx context.Context, gameIds []uuid.UUID) ([]GamePlayer, error)
@@ -298,6 +304,25 @@ type Querier interface {
 	// bayangan hasil migrasi v2, status masih 'unclaimed'.
 	SearchUnclaimedByClub(ctx context.Context, arg SearchUnclaimedByClubParams) ([]User, error)
 	SoftDeleteGame(ctx context.Context, arg SoftDeleteGameParams) (Game, error)
+	// Titipan pemain = jumlah SEMUA saldo deposit anggota klub ini, lintas
+	// pemilik — kewajiban klub, bukan kas klub sendiri (§9.2).
+	SumClubWalletTotal(ctx context.Context, clubID uuid.UUID) (int64, error)
+	// Positif = kas keluar, negatif = kas masuk (DDL.sql) — jumlahnya
+	// langsung dikurangkan dari SumPaidKokIncome, bukan dipisah signed.
+	SumExpenses(ctx context.Context, clubID uuid.UUID) (int64, error)
+	// Tiga kantong uang (PLAN.md §9.2) — dipisah karena deposit adalah
+	// KEWAJIBAN klub (bisa ditarik pemiliknya), bukan pemasukan; iuran
+	// turnamen pool terpisah per turnamen. Menggabungkannya bikin kas
+	// terlihat gemuk padahal sebagiannya bukan hak klub.
+	// "Uang kok yang sudah dibayar" — main harian (game_players) DAN kok
+	// yang dibeli di sela partai turnamen (match_kok_charges, F7). Iuran
+	// turnamen (tournament_fees) SENGAJA tidak ikut di sini — itu kantong
+	// terpisah (SumTournamentFeesPaid).
+	SumPaidKokIncome(ctx context.Context, clubID uuid.UUID) (int64, error)
+	// Pool iuran turnamen (F7, belum ada handler yang menulis tabel ini —
+	// selalu 0 sampai F7 tiba, query disiapkan sekarang biar treasury tidak
+	// perlu diubah lagi nanti).
+	SumTournamentFeesPaid(ctx context.Context, clubID uuid.UUID) (int64, error)
 	// Query "tagihanku" — satu index scan lewat game_players_unpaid_idx
 	// (indeks paling penting di seluruh skema, DDL.sql baris 371-379). NOT
 	// EXISTS payment pending TIDAK ikut total (F6/2, §9.3): sudah diklaim
