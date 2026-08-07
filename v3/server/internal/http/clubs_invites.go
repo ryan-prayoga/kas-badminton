@@ -89,7 +89,7 @@ func handleCreateInvite(s *store.Store, notifier notify.Notifier) http.HandlerFu
 
 		_ = notifier.Send(r.Context(), notify.Message{
 			Phone: req.Phone,
-			Body:  "Kamu diundang gabung " + clubName + " di Kok Badminton. Buka: https://kaskok.my.id/join/" + token,
+			Body:  "Kamu diundang gabung " + clubName + " di Kok Badminton. Buka: " + publicBaseURL + "/join/" + token,
 		})
 
 		writeJSON(w, http.StatusCreated, inviteDTO{ID: invite.ID, Token: invite.Token, Phone: textOrNil(invite.Phone), ExpiresAt: expiresAt})

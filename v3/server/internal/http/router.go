@@ -101,6 +101,7 @@ func Mount(r chi.Router, s *store.Store, bus *realtime.Bus, notifier notify.Noti
 					r.Route("/links", func(r chi.Router) {
 						r.Use(RequirePerm(perm.ManageMembers))
 						r.Get("/", handleListClubLinks(s))
+						r.Get("/{id}/poster", handleClubLinkPoster(s))
 						r.Group(func(r chi.Router) {
 							r.Use(RequireIdempotency(s))
 							r.Post("/", handleCreateClubLink(s))

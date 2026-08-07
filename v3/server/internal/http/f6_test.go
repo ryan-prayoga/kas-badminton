@@ -6,6 +6,7 @@ package httpapi_test
 import (
 	"bytes"
 	"encoding/json"
+	"io"
 	"net/http"
 	"testing"
 
@@ -384,5 +385,56 @@ func TestInvites_CreateAndJoinViaToken(t *testing.T) {
 	defer infoResp.Body.Close()
 	if infoResp.StatusCode != http.StatusOK {
 		dumpAndFail(t, infoResp, "GET /join/{invite-token}")
+	}
+}
+
+func TestClubLinks_Poster(t *testing.T) {
+	srv, notifier := newTestServer(t)
+	base := srv.URL
+
+	admin := otpLogin(t, base, notifier, randPhone())
+	club := createClub(t, base, admin.token, randSlug())
+
+	createResp := authedRequest(t, http.MethodPost, base+"/api/v1/clubs/"+club+"/links", admin.token, map[string]string{"purpose": "poster"})
+	defer createResp.Body.Close()
+	var link struct {
+		ID string `json:"id"`
+	}
+	_ = json.NewDecoder(createResp.Body).Decode(&link)
+
+	pdfResp := authedRequest(t, http.MethodGet, base+"/api/v1/clubs/"+club+"/links/"+link.ID+"/poster", admin.token, nil)
+	defer pdfResp.Body.Close()
+	if pdfResp.StatusCode != http.StatusOK {
+		dumpAndFail(t, pdfResp, "GET poster (PDF)")
+	}
+	if ct := pdfResp.Header.Get("Content-Type"); ct != "application/pdf" {
+		t.Errorf("Content-Type poster bawaan = %q, mau application/pdf", ct)
+	}
+	pdfBody, _ := io.ReadAll(pdfResp.Body)
+	if !bytes.HasPrefix(pdfBody, []byte("%PDF-")) {
+		t.Error("body poster bawaan bukan PDF valid")
+	}
+
+	pngResp := authedRequest(t, http.MethodGet, base+"/api/v1/clubs/"+club+"/links/"+link.ID+"/poster?format=png&size=a5", admin.token, nil)
+	defer pngResp.Body.Close()
+	if pngResp.StatusCode != http.StatusOK {
+		dumpAndFail(t, pngResp, "GET poster (PNG a5)")
+	}
+	if ct := pngResp.Header.Get("Content-Type"); ct != "image/png" {
+		t.Errorf("Content-Type poster ?format=png = %q, mau image/png", ct)
+	}
+	pngBody, _ := io.ReadAll(pngResp.Body)
+	if !bytes.HasPrefix(pngBody, []byte("\x89PNG")) {
+		t.Error("body poster ?format=png bukan PNG valid")
+	}
+
+	// Member biasa (bukan admin) ditolak — poster ikut RequirePerm(ManageMembers)
+	// sama seperti endpoint /links lainnya.
+	member := otpLogin(t, base, notifier, randPhone())
+	addMembership(t, club, member.userID, gen.ClubRoleMember)
+	deniedResp := authedRequest(t, http.MethodGet, base+"/api/v1/clubs/"+club+"/links/"+link.ID+"/poster", member.token, nil)
+	defer deniedResp.Body.Close()
+	if deniedResp.StatusCode != http.StatusForbidden {
+		dumpAndFail(t, deniedResp, "member biasa unduh poster harus ditolak")
 	}
 }

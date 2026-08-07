@@ -14,9 +14,15 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 
+	"github.com/ryan-prayoga/kas-badminton/v3/server/internal/poster"
 	"github.com/ryan-prayoga/kas-badminton/v3/server/internal/store"
 	"github.com/ryan-prayoga/kas-badminton/v3/server/internal/store/gen"
 )
+
+// publicBaseURL — domain publik app (PLAN.md §2: "kaskok.my.id"). Dipakai
+// bareng poster + undangan (clubs_invites.go) supaya tidak ada dua sumber
+// kebenaran alamat.
+const publicBaseURL = "https://kaskok.my.id"
 
 // newLinkToken — 24 byte acak, pola sama auth.NewToken (token sesi) supaya
 // tidak bisa ditebak (§6.4: "QR di tembok itu publik — perlakukan begitu").
@@ -161,6 +167,72 @@ func handleRotateClubLink(s *store.Store) http.HandlerFunc {
 			return
 		}
 		writeJSON(w, http.StatusOK, newClubLinkDTO(link))
+	}
+}
+
+// handleClubLinkPoster — GET /clubs/{clubId}/links/{id}/poster?format=pdf|png&size=a4|a5
+// (§6.4), RequirePerm(ManageMembers). Berkas siap cetak dari internal/poster
+// — satu render, PDF dan PNG identik piksel demi piksel (§4.4).
+func handleClubLinkPoster(s *store.Store) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		clubID, _ := clubIDFromContext(r.Context())
+		linkID, err := uuid.Parse(chi.URLParam(r, "id"))
+		if err != nil {
+			writeError(w, CodeNotFound, "Tautan tidak ditemukan.", nil)
+			return
+		}
+
+		var link gen.ClubLink
+		var club gen.Club
+		notFound := false
+		err = s.WithClub(r.Context(), clubID, func(ctx context.Context, q *gen.Queries) error {
+			l, err := q.GetClubLink(ctx, gen.GetClubLinkParams{ID: linkID, ClubID: clubID})
+			if errors.Is(err, pgx.ErrNoRows) {
+				notFound = true
+				return nil
+			}
+			if err != nil {
+				return err
+			}
+			link = l
+			club, err = q.GetClub(ctx, clubID)
+			return err
+		})
+		if err != nil {
+			writeError(w, CodeValidationFailed, "Gagal mengambil tautan.", nil)
+			return
+		}
+		if notFound {
+			writeError(w, CodeNotFound, "Tautan tidak ditemukan.", nil)
+			return
+		}
+
+		size := poster.A4
+		if r.URL.Query().Get("size") == "a5" {
+			size = poster.A5
+		}
+
+		out, err := poster.Render(poster.Input{
+			ClubName:    club.Name,
+			ShortURL:    publicBaseURL[len("https://"):] + "/" + club.Slug,
+			Instruction: "Pindai buat gabung klub",
+			JoinURL:     publicBaseURL + "/join/" + link.Token,
+			Size:        size,
+		})
+		if err != nil {
+			writeError(w, CodeValidationFailed, "Gagal membuat poster.", nil)
+			return
+		}
+
+		if r.URL.Query().Get("format") == "png" {
+			w.Header().Set("Content-Type", "image/png")
+			w.Header().Set("Content-Disposition", `inline; filename="poster-`+club.Slug+`.png"`)
+			_, _ = w.Write(out.PNG)
+			return
+		}
+		w.Header().Set("Content-Type", "application/pdf")
+		w.Header().Set("Content-Disposition", `inline; filename="poster-`+club.Slug+`.pdf"`)
+		_, _ = w.Write(out.PDF)
 	}
 }
 
