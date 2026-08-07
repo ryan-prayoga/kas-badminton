@@ -36,6 +36,8 @@ mengikuti section-nya sendiri, F2 — PLAN.md §14):
 | 00014 | `push_subscriptions`, `notification_prefs`, `notifications`, `media` |
 | 00015 | `audit_log` |
 | 00016 | Row-Level Security: `current_club()`, policy per tabel, grant |
+| 00017 | `club_id_for_join_token()` — resolusi token publik `/join/{token}` sebelum club_id diketahui (F4/3, SECURITY DEFINER sempit, bukan pelonggaran RLS) |
+| 00018 | `club_id_for_invite_token()` — sama alasannya, buat token undangan per-orang (`invites`) |
 
 Jalankan migrasi sebagai role `kok_migrate` (BYPASSRLS), aplikasi jalan
 sebagai `kok_app` — kalau aplikasi memakai pemilik tabel, RLS terlewati

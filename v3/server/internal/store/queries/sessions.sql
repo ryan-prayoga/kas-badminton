@@ -22,6 +22,11 @@ SELECT * FROM sessions WHERE id = $1;
 -- name: RevokeSession :exec
 UPDATE sessions SET revoked_at = now() WHERE id = $1 AND revoked_at IS NULL;
 
+-- name: RevokeAllSessionsByUser :exec
+-- Pemindahan nomor (§7.2.1): "Semua sesi, passkey, dan PIN lama dicabut —
+-- perangkat lama otomatis keluar".
+UPDATE sessions SET revoked_at = now() WHERE user_id = $1 AND revoked_at IS NULL;
+
 -- name: RevokeOtherSessions :exec
 -- "Keluarkan semua kecuali ini" (§7.2.2).
 UPDATE sessions SET revoked_at = now()

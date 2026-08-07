@@ -12,7 +12,23 @@ import (
 )
 
 type Querier interface {
+	// Sama alasannya dengan ClubIDForJoinToken (club_links.sql) — dibungkus
+	// supaya NULL jadi nol baris, bukan baris ber-NULL yang lolos Scan diam-diam.
+	ClubIDForInviteToken(ctx context.Context, pToken string) (uuid.UUID, error)
+	// Lewat fungsi SECURITY DEFINER (00017) — SATU-SATUNYA cara resmi
+	// menemukan club_id dari token sebelum RLS club_links bisa dibuka
+	// (app.club_id belum ada di titik ini). Jangan query club_links langsung
+	// di luar WithClub.
+	//
+	// Dibungkus subquery + WHERE IS NOT NULL (bukan langsung `SELECT
+	// club_id_for_join_token($1)`) supaya token yang tidak ketemu menghasilkan
+	// NOL BARIS (pgx.ErrNoRows) — bukan satu baris berisi NULL. Scan NULL ke
+	// uuid.UUID TIDAK error (google/uuid.Scan(nil) sengaja no-op), jadi tanpa
+	// pembungkus ini pemanggil (resolveJoinToken) akan salah kira token
+	// ketemu dengan club_id kosong (uuid.Nil) alih-alih mencoba tabel invites.
+	ClubIDForJoinToken(ctx context.Context, pToken string) (uuid.UUID, error)
 	CompleteIdempotencyKey(ctx context.Context, arg CompleteIdempotencyKeyParams) error
+	ConsumeInvite(ctx context.Context, arg ConsumeInviteParams) error
 	ConsumeOTP(ctx context.Context, id uuid.UUID) error
 	// Dipakai internal/store/tenant_test.go — sengaja query dengan club_id
 	// eksplisit yang BEDA dari SET LOCAL app.club_id aktif, buat membuktikan
@@ -23,11 +39,16 @@ type Querier interface {
 	// diminta di jendela waktu, bukan cuma yang masih aktif, supaya spam
 	// kirim-lalu-tunggu-kadaluwarsa tidak lolos dari hitungan.
 	CountRecentOTP(ctx context.Context, arg CountRecentOTPParams) (int64, error)
+	// target_user NULL = "daftar sebagai orang baru" (§7.3). requester_id SUDAH
+	// terverifikasi OTP di titik ini (RequireAuth) — cuma belum anggota klub
+	// ini, itulah kenapa endpoint ini TIDAK di belakang RequireClub biasa.
+	CreateClaimRequest(ctx context.Context, arg CreateClaimRequestParams) (ClaimRequest, error)
 	// id dikirim eksplisit (bukan DEFAULT gen_random_uuid()) supaya pemanggil
 	// tahu club_id SEBELUM transaksi mulai — dipakai buat SET LOCAL
 	// app.club_id di store.WithClub yang sama, jadi insert clubs + membership
 	// admin pembuatnya atomik dalam satu transaksi (internal/http/clubs.go).
 	CreateClub(ctx context.Context, arg CreateClubParams) (Club, error)
+	CreateClubLink(ctx context.Context, arg CreateClubLinkParams) (ClubLink, error)
 	// Dipakai buat mencatat kelebihan pembulatan biaya sebagai kas masuk
 	// (§9.5 aturan A) — amount negatif = kas masuk (DDL.sql baris 303-304).
 	CreateExpense(ctx context.Context, arg CreateExpenseParams) (Expense, error)
@@ -35,6 +56,7 @@ type Querier interface {
 	CreateGameKok(ctx context.Context, arg CreateGameKokParams) (GameKok, error)
 	CreateGamePlayer(ctx context.Context, arg CreateGamePlayerParams) (GamePlayer, error)
 	CreateGameScore(ctx context.Context, arg CreateGameScoreParams) (GameScore, error)
+	CreateInvite(ctx context.Context, arg CreateInviteParams) (Invite, error)
 	// Dipakai cmd/seed buat data contoh (CRUD katalog sendiri di luar F2).
 	CreateKokType(ctx context.Context, arg CreateKokTypeParams) (KokType, error)
 	CreateMembership(ctx context.Context, arg CreateMembershipParams) (Membership, error)
@@ -50,17 +72,28 @@ type Querier interface {
 	// (§7.2.2, lihat auth.RevokeSession yang memanggil
 	// DeleteWebauthnCredentialsBySession).
 	CreateWebauthnCredential(ctx context.Context, arg CreateWebauthnCredentialParams) (WebauthnCredential, error)
+	DecideClaimRequest(ctx context.Context, arg DecideClaimRequestParams) (ClaimRequest, error)
+	// Pemindahan nomor (§7.2.1) — dicabut total, bukan cuma per-sesi.
+	DeleteAllWebauthnCredentialsByUser(ctx context.Context, userID uuid.UUID) error
+	// Pemindahan nomor (§7.2.1) — PIN lama ikut dicabut, wajib set ulang.
+	DeletePin(ctx context.Context, userID uuid.UUID) error
 	DeleteWebauthnCredentialsBySession(ctx context.Context, sessionID *uuid.UUID) error
 	// Dipakai bareng RevokeOtherSessions (§7.2.2 "keluarkan semua kecuali ini")
 	// — kredensial passkey milik sesi-sesi yang ikut tercabut, ikut tercabut.
 	DeleteWebauthnCredentialsByUserExceptSession(ctx context.Context, arg DeleteWebauthnCredentialsByUserExceptSessionParams) error
+	GetClaimRequest(ctx context.Context, arg GetClaimRequestParams) (ClaimRequest, error)
 	// Tanpa club_id di WHERE — clubs tidak ber-RLS (tabel dirinya sendiri
 	// bukan milik klub). Caller (RequireClub) sudah memverifikasi keanggotaan
 	// lewat GetMembership sebelum ini dipanggil.
 	GetClub(ctx context.Context, id uuid.UUID) (Club, error)
 	GetClubBySlug(ctx context.Context, slug string) (Club, error)
+	GetClubLink(ctx context.Context, arg GetClubLinkParams) (ClubLink, error)
+	// Dipakai GET/POST /join/{token} — PUBLIK, tanpa RequireClub (§6.4). Cuma
+	// token aktif & belum kedaluwarsa yang boleh dipakai.
+	GetClubLinkByToken(ctx context.Context, token string) (ClubLink, error)
 	GetGame(ctx context.Context, arg GetGameParams) (Game, error)
 	GetIdempotencyKey(ctx context.Context, key string) (IdempotencyKey, error)
+	GetInviteByToken(ctx context.Context, token string) (Invite, error)
 	// Dipakai POST games buat snapshot harga (§8 "harga & nama dikunci di
 	// dalam game, tidak pernah diambil ulang dari katalog"). CRUD katalog
 	// kok_types sendiri di luar lingkup F2 (slice sempit clubs+games) — kalau
@@ -82,8 +115,10 @@ type Querier interface {
 	GetSessionByTokenHash(ctx context.Context, tokenHash []byte) (Session, error)
 	GetUser(ctx context.Context, id uuid.UUID) (User, error)
 	GetUserByPhone(ctx context.Context, phone pgtype.Text) (User, error)
+	IncrementClubLinkScanCount(ctx context.Context, id uuid.UUID) error
 	IncrementOTPAttempts(ctx context.Context, id uuid.UUID) error
 	IncrementPinFailed(ctx context.Context, arg IncrementPinFailedParams) error
+	ListActiveClubLinks(ctx context.Context, clubID uuid.UUID) ([]ClubLink, error)
 	ListGameKoksByGame(ctx context.Context, gameID uuid.UUID) ([]GameKok, error)
 	ListGamePlayersByGame(ctx context.Context, gameID uuid.UUID) ([]GamePlayer, error)
 	ListGamePlayersByGames(ctx context.Context, gameIds []uuid.UUID) ([]GamePlayer, error)
@@ -91,6 +126,11 @@ type Querier interface {
 	// paginasi cursor, bukan offset). sqlc.narg(before) NULL = dari yang
 	// terbaru.
 	ListGamesByClub(ctx context.Context, arg ListGamesByClubParams) ([]Game, error)
+	// Pencarian nama/username (§5.4) — pg_trgm sudah aktif (00001_extensions).
+	// sqlc.narg supaya q kosong ("") berarti "semua anggota", bukan filter yang
+	// tak pernah cocok.
+	ListMembers(ctx context.Context, arg ListMembersParams) ([]ListMembersRow, error)
+	ListPendingClaimRequests(ctx context.Context, clubID uuid.UUID) ([]ClaimRequest, error)
 	// Daftar perangkat aktif (PLAN.md §7.2.2) — terbaru dulu.
 	ListSessionsByUser(ctx context.Context, userID uuid.UUID) ([]Session, error)
 	ListWebauthnCredentialsByUser(ctx context.Context, userID uuid.UUID) ([]WebauthnCredential, error)
@@ -104,17 +144,38 @@ type Querier interface {
 	// dipegang permintaan lain (invarian §3.3) — caller cek row count.
 	ReserveIdempotencyKey(ctx context.Context, arg ReserveIdempotencyKeyParams) (IdempotencyKey, error)
 	ResetPinFailed(ctx context.Context, userID uuid.UUID) error
+	// Pemindahan nomor (§7.2.1): "Semua sesi, passkey, dan PIN lama dicabut —
+	// perangkat lama otomatis keluar".
+	RevokeAllSessionsByUser(ctx context.Context, userID uuid.UUID) error
+	RevokeClubLink(ctx context.Context, arg RevokeClubLinkParams) error
 	// "Keluarkan semua kecuali ini" (§7.2.2).
 	RevokeOtherSessions(ctx context.Context, arg RevokeOtherSessionsParams) error
 	RevokeSession(ctx context.Context, id uuid.UUID) error
+	// "Token QR bisa diputar ulang... poster lama otomatis mati" (§6.4) — token
+	// lama diganti UUID baru, scan_count reset karena ini secara efektif tautan
+	// baru.
+	RotateClubLink(ctx context.Context, arg RotateClubLinkParams) (ClubLink, error)
+	// "Pilih namanya dari daftar belum-terklaim" (§6.4 alur gabung klub) — akun
+	// bayangan hasil migrasi v2, status masih 'unclaimed'.
+	SearchUnclaimedByClub(ctx context.Context, arg SearchUnclaimedByClubParams) ([]User, error)
 	SoftDeleteGame(ctx context.Context, arg SoftDeleteGameParams) (Game, error)
 	// Query "tagihanku" — satu index scan lewat game_players_unpaid_idx
 	// (indeks paling penting di seluruh skema, DDL.sql baris 371-379).
 	SumUnpaidByPayer(ctx context.Context, arg SumUnpaidByPayerParams) (int64, error)
 	TouchSession(ctx context.Context, id uuid.UUID) error
+	// Replace penuh, bukan merge — pemanggil (handler) yang menggabungkan field
+	// lama+baru sebelum kirim, supaya "sumber kebenaran shape settings" tetap
+	// satu tempat (defaultClubSettings di clubs.go), bukan dua jalur beda logic.
+	UpdateClubSettings(ctx context.Context, arg UpdateClubSettingsParams) (Club, error)
 	// Versioning (invarian §3.4): 0 baris kalau version klien sudah basi —
 	// caller lalu fetch entitas terbaru dan balas 409 version_conflict.
 	UpdateGame(ctx context.Context, arg UpdateGameParams) (Game, error)
+	UpdateMembershipAutoDeduct(ctx context.Context, arg UpdateMembershipAutoDeductParams) (Membership, error)
+	UpdateMembershipRole(ctx context.Context, arg UpdateMembershipRoleParams) (Membership, error)
+	// Pemindahan nomor oleh admin (§7.2.1) — constraint users_phone_e164 dan
+	// UNIQUE(phone) di DDL sudah menegakkan format+keunikan, error 23505 kalau
+	// nomor baru sudah dipakai user lain (ditangani di handler).
+	UpdateUserPhone(ctx context.Context, arg UpdateUserPhoneParams) (User, error)
 	// sign_count naik tiap login sukses — dipakai mendeteksi kloning
 	// authenticator (dua device beda pakai kredensial "sama" tanpa saling tahu).
 	UpdateWebauthnCredentialSignCount(ctx context.Context, arg UpdateWebauthnCredentialSignCountParams) error

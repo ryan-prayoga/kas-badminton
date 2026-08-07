@@ -16,6 +16,10 @@ SET failed = failed + 1,
     updated_at = now()
 WHERE user_id = sqlc.arg(user_id)::uuid;
 
+-- name: DeletePin :exec
+-- Pemindahan nomor (§7.2.1) — PIN lama ikut dicabut, wajib set ulang.
+DELETE FROM user_pins WHERE user_id = $1;
+
 -- name: ResetPinFailed :exec
 UPDATE user_pins SET failed = 0, locked_until = NULL, updated_at = now()
 WHERE user_id = $1;

@@ -16,6 +16,13 @@ import (
 // dasarnya (RequestID, Recoverer, dst — cmd/api/main.go).
 func Mount(r chi.Router, s *store.Store, bus *realtime.Bus, notifier notify.Notifier, wa *webauthn.WebAuthn, challenges *auth.ChallengeStore) {
 	r.Route("/api/v1", func(r chi.Router) {
+		// Publik, tanpa auth — QR tembok/tautan grup (§6.4). clubId belum
+		// diketahui, itulah gunanya token (join.go resolveJoinToken).
+		r.Route("/join/{token}", func(r chi.Router) {
+			r.Get("/", handleJoinInfo(s))
+			r.Post("/", handleJoinRequest(s, notifier))
+		})
+
 		r.Route("/auth", func(r chi.Router) {
 			// Publik — belum ada sesi sama sekali di titik ini (API.md §1).
 			r.Post("/otp/request", handleOTPRequest(s, notifier))
@@ -47,20 +54,72 @@ func Mount(r chi.Router, s *store.Store, bus *realtime.Bus, notifier notify.Noti
 			})
 
 			r.Route("/clubs/{clubId}", func(r chi.Router) {
-				r.Use(RequireClub(s))
+				// SATU r.Route buat seluruh /claim-requests di bawah — POST
+				// "/" (ajukan, §7.3: pemanggil BELUM anggota klub ini) makai
+				// RequireClubExists, GET+approve/reject makai RequireClub+
+				// VerifyClaim. Digabung di satu r.Route (bukan dua registrasi
+				// terpisah di path sama) karena chi menolak Route() dua kali
+				// di pattern yang sama.
+				r.Route("/claim-requests", func(r chi.Router) {
+					r.With(RequireClubExists(s), RequireIdempotency(s)).
+						Post("/", handleCreateClaimRequest(s))
 
-				r.Get("/", handleGetClub(s))
+					r.Group(func(r chi.Router) {
+						r.Use(RequireClub(s))
+						r.Use(RequirePerm(perm.VerifyClaim))
+						r.Get("/", handleListPendingClaims(s))
+						r.Group(func(r chi.Router) {
+							r.Use(RequireIdempotency(s))
+							r.Post("/{id}/approve", handleApproveClaim(s))
+							r.Post("/{id}/reject", handleRejectClaim(s))
+						})
+					})
+				})
 
-				r.Route("/games", func(r chi.Router) {
-					r.Get("/", handleListGames(s))
-					r.Get("/{id}", handleGetGame(s))
+				r.Group(func(r chi.Router) {
+					r.Use(RequireClub(s))
+
+					r.Get("/", handleGetClub(s))
+					r.Get("/members", handleListMembers(s))
 
 					r.Group(func(r chi.Router) {
 						r.Use(RequireIdempotency(s))
-						r.Use(RequirePerm(perm.RecordGame))
-						r.Post("/", handleCreateGame(s))
-						r.Patch("/{id}", handleUpdateGame(s))
-						r.Delete("/{id}", handleDeleteGame(s))
+
+						r.Group(func(r chi.Router) {
+							r.Use(RequirePerm(perm.ManageMembers))
+							r.Patch("/settings", handlePatchClubSettings(s))
+							r.Patch("/members/{userId}/role", handleUpdateMemberRole(s))
+							r.Post("/members/{userId}/relocate-phone", handleRelocatePhone(s))
+							r.Post("/invites", handleCreateInvite(s, notifier))
+						})
+
+						// Diri sendiri ATAU admin — bukan RequirePerm murni,
+						// dicek manual di handler (clubs_members.go).
+						r.Patch("/members/{userId}/auto-deduct", handleUpdateAutoDeduct(s))
+					})
+
+					r.Route("/links", func(r chi.Router) {
+						r.Use(RequirePerm(perm.ManageMembers))
+						r.Get("/", handleListClubLinks(s))
+						r.Group(func(r chi.Router) {
+							r.Use(RequireIdempotency(s))
+							r.Post("/", handleCreateClubLink(s))
+							r.Post("/{id}/rotate", handleRotateClubLink(s))
+							r.Delete("/{id}", handleRevokeClubLink(s))
+						})
+					})
+
+					r.Route("/games", func(r chi.Router) {
+						r.Get("/", handleListGames(s))
+						r.Get("/{id}", handleGetGame(s))
+
+						r.Group(func(r chi.Router) {
+							r.Use(RequireIdempotency(s))
+							r.Use(RequirePerm(perm.RecordGame))
+							r.Post("/", handleCreateGame(s))
+							r.Patch("/{id}", handleUpdateGame(s))
+							r.Delete("/{id}", handleDeleteGame(s))
+						})
 					})
 				})
 			})

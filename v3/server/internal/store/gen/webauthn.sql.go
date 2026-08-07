@@ -58,6 +58,16 @@ func (q *Queries) CreateWebauthnCredential(ctx context.Context, arg CreateWebaut
 	return i, err
 }
 
+const deleteAllWebauthnCredentialsByUser = `-- name: DeleteAllWebauthnCredentialsByUser :exec
+DELETE FROM webauthn_credentials WHERE user_id = $1
+`
+
+// Pemindahan nomor (§7.2.1) — dicabut total, bukan cuma per-sesi.
+func (q *Queries) DeleteAllWebauthnCredentialsByUser(ctx context.Context, userID uuid.UUID) error {
+	_, err := q.db.Exec(ctx, deleteAllWebauthnCredentialsByUser, userID)
+	return err
+}
+
 const deleteWebauthnCredentialsBySession = `-- name: DeleteWebauthnCredentialsBySession :exec
 DELETE FROM webauthn_credentials WHERE session_id = $1
 `

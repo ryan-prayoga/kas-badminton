@@ -68,6 +68,38 @@ func RequireClub(s *store.Store) func(http.Handler) http.Handler {
 	}
 }
 
+// RequireClubExists — versi ringan RequireClub buat POST
+// /clubs/{clubId}/claim-requests (§7.3): pemanggil BELUM anggota klub itu
+// (justru sedang meminta jadi anggota), jadi cek keanggotaan lewat
+// RequireClub biasa akan salah — selalu 404. Cukup pastikan klubnya
+// sungguhan ada & belum dihapus, isi context clubID TANPA role/izin (rute
+// ini tidak dipasangi RequirePerm).
+func RequireClubExists(s *store.Store) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			clubID, err := uuid.Parse(chi.URLParam(r, "clubId"))
+			if err != nil {
+				writeError(w, CodeNotFound, "Klub tidak ditemukan.", nil)
+				return
+			}
+			found := false
+			err = s.WithClub(r.Context(), clubID, func(ctx context.Context, q *gen.Queries) error {
+				_, err := q.GetClub(ctx, clubID)
+				if errors.Is(err, pgx.ErrNoRows) {
+					return nil
+				}
+				found = err == nil
+				return nil
+			})
+			if err != nil || !found {
+				writeError(w, CodeNotFound, "Klub tidak ditemukan.", nil)
+				return
+			}
+			next.ServeHTTP(w, r.WithContext(withClub(r.Context(), clubID, gen.ClubRoleMember, map[perm.Permission]bool{})))
+		})
+	}
+}
+
 func roleExpiresAtPtr(m gen.Membership) *time.Time {
 	if !m.RoleExpiresAt.Valid {
 		return nil

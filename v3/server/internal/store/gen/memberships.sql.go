@@ -9,6 +9,7 @@ import (
 	"context"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 const createMembership = `-- name: CreateMembership :one
@@ -54,6 +55,137 @@ type GetMembershipParams struct {
 // lapisan aplikasi (kedua), RLS adalah lapisan ketiga (§6.2).
 func (q *Queries) GetMembership(ctx context.Context, arg GetMembershipParams) (Membership, error) {
 	row := q.db.QueryRow(ctx, getMembership, arg.ClubID, arg.UserID)
+	var i Membership
+	err := row.Scan(
+		&i.ClubID,
+		&i.UserID,
+		&i.Role,
+		&i.RoleExpiresAt,
+		&i.IsTournamentGuest,
+		&i.AutoDeduct,
+		&i.JoinedAt,
+		&i.LeftAt,
+	)
+	return i, err
+}
+
+const listMembers = `-- name: ListMembers :many
+SELECT m.club_id, m.user_id, m.role, m.role_expires_at, m.is_tournament_guest,
+       m.auto_deduct, m.joined_at, m.left_at,
+       u.display_name, u.username, u.phone, u.status AS user_status
+FROM memberships m
+JOIN users u ON u.id = m.user_id
+WHERE m.club_id = $1 AND m.left_at IS NULL
+  AND ($2::text IS NULL OR $2 = ''
+       OR u.display_name ILIKE '%' || $2 || '%'
+       OR u.username ILIKE '%' || $2 || '%')
+ORDER BY u.display_name
+`
+
+type ListMembersParams struct {
+	ClubID uuid.UUID   `json:"club_id"`
+	Q      pgtype.Text `json:"q"`
+}
+
+type ListMembersRow struct {
+	ClubID            uuid.UUID          `json:"club_id"`
+	UserID            uuid.UUID          `json:"user_id"`
+	Role              ClubRole           `json:"role"`
+	RoleExpiresAt     pgtype.Timestamptz `json:"role_expires_at"`
+	IsTournamentGuest bool               `json:"is_tournament_guest"`
+	AutoDeduct        bool               `json:"auto_deduct"`
+	JoinedAt          pgtype.Timestamptz `json:"joined_at"`
+	LeftAt            pgtype.Timestamptz `json:"left_at"`
+	DisplayName       string             `json:"display_name"`
+	Username          pgtype.Text        `json:"username"`
+	Phone             pgtype.Text        `json:"phone"`
+	UserStatus        UserStatus         `json:"user_status"`
+}
+
+// Pencarian nama/username (§5.4) — pg_trgm sudah aktif (00001_extensions).
+// sqlc.narg supaya q kosong ("") berarti "semua anggota", bukan filter yang
+// tak pernah cocok.
+func (q *Queries) ListMembers(ctx context.Context, arg ListMembersParams) ([]ListMembersRow, error) {
+	rows, err := q.db.Query(ctx, listMembers, arg.ClubID, arg.Q)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListMembersRow{}
+	for rows.Next() {
+		var i ListMembersRow
+		if err := rows.Scan(
+			&i.ClubID,
+			&i.UserID,
+			&i.Role,
+			&i.RoleExpiresAt,
+			&i.IsTournamentGuest,
+			&i.AutoDeduct,
+			&i.JoinedAt,
+			&i.LeftAt,
+			&i.DisplayName,
+			&i.Username,
+			&i.Phone,
+			&i.UserStatus,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const updateMembershipAutoDeduct = `-- name: UpdateMembershipAutoDeduct :one
+UPDATE memberships SET auto_deduct = $3
+WHERE club_id = $1 AND user_id = $2 AND left_at IS NULL
+RETURNING club_id, user_id, role, role_expires_at, is_tournament_guest, auto_deduct, joined_at, left_at
+`
+
+type UpdateMembershipAutoDeductParams struct {
+	ClubID     uuid.UUID `json:"club_id"`
+	UserID     uuid.UUID `json:"user_id"`
+	AutoDeduct bool      `json:"auto_deduct"`
+}
+
+func (q *Queries) UpdateMembershipAutoDeduct(ctx context.Context, arg UpdateMembershipAutoDeductParams) (Membership, error) {
+	row := q.db.QueryRow(ctx, updateMembershipAutoDeduct, arg.ClubID, arg.UserID, arg.AutoDeduct)
+	var i Membership
+	err := row.Scan(
+		&i.ClubID,
+		&i.UserID,
+		&i.Role,
+		&i.RoleExpiresAt,
+		&i.IsTournamentGuest,
+		&i.AutoDeduct,
+		&i.JoinedAt,
+		&i.LeftAt,
+	)
+	return i, err
+}
+
+const updateMembershipRole = `-- name: UpdateMembershipRole :one
+UPDATE memberships SET role = $3, role_expires_at = $4
+WHERE club_id = $1 AND user_id = $2 AND left_at IS NULL
+RETURNING club_id, user_id, role, role_expires_at, is_tournament_guest, auto_deduct, joined_at, left_at
+`
+
+type UpdateMembershipRoleParams struct {
+	ClubID        uuid.UUID          `json:"club_id"`
+	UserID        uuid.UUID          `json:"user_id"`
+	Role          ClubRole           `json:"role"`
+	RoleExpiresAt pgtype.Timestamptz `json:"role_expires_at"`
+}
+
+func (q *Queries) UpdateMembershipRole(ctx context.Context, arg UpdateMembershipRoleParams) (Membership, error) {
+	row := q.db.QueryRow(ctx, updateMembershipRole,
+		arg.ClubID,
+		arg.UserID,
+		arg.Role,
+		arg.RoleExpiresAt,
+	)
 	var i Membership
 	err := row.Scan(
 		&i.ClubID,

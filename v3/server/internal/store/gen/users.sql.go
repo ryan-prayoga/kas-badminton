@@ -88,3 +88,82 @@ func (q *Queries) GetUserByPhone(ctx context.Context, phone pgtype.Text) (User, 
 	)
 	return i, err
 }
+
+const searchUnclaimedByClub = `-- name: SearchUnclaimedByClub :many
+SELECT u.id, u.phone, u.username, u.display_name, u.photo_id, u.status, u.username_changed_at, u.created_at, u.updated_at, u.version FROM users u
+JOIN memberships m ON m.user_id = u.id
+WHERE m.club_id = $1 AND m.left_at IS NULL AND u.status = 'unclaimed'
+  AND ($2::text IS NULL OR $2 = '' OR u.display_name ILIKE '%' || $2 || '%')
+ORDER BY u.display_name
+LIMIT 50
+`
+
+type SearchUnclaimedByClubParams struct {
+	ClubID uuid.UUID   `json:"club_id"`
+	Q      pgtype.Text `json:"q"`
+}
+
+// "Pilih namanya dari daftar belum-terklaim" (§6.4 alur gabung klub) — akun
+// bayangan hasil migrasi v2, status masih 'unclaimed'.
+func (q *Queries) SearchUnclaimedByClub(ctx context.Context, arg SearchUnclaimedByClubParams) ([]User, error) {
+	rows, err := q.db.Query(ctx, searchUnclaimedByClub, arg.ClubID, arg.Q)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []User{}
+	for rows.Next() {
+		var i User
+		if err := rows.Scan(
+			&i.ID,
+			&i.Phone,
+			&i.Username,
+			&i.DisplayName,
+			&i.PhotoID,
+			&i.Status,
+			&i.UsernameChangedAt,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.Version,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const updateUserPhone = `-- name: UpdateUserPhone :one
+UPDATE users SET phone = $2, updated_at = now(), version = version + 1
+WHERE id = $1
+RETURNING id, phone, username, display_name, photo_id, status, username_changed_at, created_at, updated_at, version
+`
+
+type UpdateUserPhoneParams struct {
+	ID    uuid.UUID   `json:"id"`
+	Phone pgtype.Text `json:"phone"`
+}
+
+// Pemindahan nomor oleh admin (§7.2.1) — constraint users_phone_e164 dan
+// UNIQUE(phone) di DDL sudah menegakkan format+keunikan, error 23505 kalau
+// nomor baru sudah dipakai user lain (ditangani di handler).
+func (q *Queries) UpdateUserPhone(ctx context.Context, arg UpdateUserPhoneParams) (User, error) {
+	row := q.db.QueryRow(ctx, updateUserPhone, arg.ID, arg.Phone)
+	var i User
+	err := row.Scan(
+		&i.ID,
+		&i.Phone,
+		&i.Username,
+		&i.DisplayName,
+		&i.PhotoID,
+		&i.Status,
+		&i.UsernameChangedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.Version,
+	)
+	return i, err
+}

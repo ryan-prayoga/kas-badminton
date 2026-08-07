@@ -11,6 +11,16 @@ import (
 	"github.com/google/uuid"
 )
 
+const deletePin = `-- name: DeletePin :exec
+DELETE FROM user_pins WHERE user_id = $1
+`
+
+// Pemindahan nomor (§7.2.1) — PIN lama ikut dicabut, wajib set ulang.
+func (q *Queries) DeletePin(ctx context.Context, userID uuid.UUID) error {
+	_, err := q.db.Exec(ctx, deletePin, userID)
+	return err
+}
+
 const getPin = `-- name: GetPin :one
 SELECT user_id, pin_hash, failed, locked_until, updated_at FROM user_pins WHERE user_id = $1
 `

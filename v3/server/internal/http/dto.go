@@ -1,6 +1,7 @@
 package httpapi
 
 import (
+	"encoding/json"
 	"time"
 
 	"github.com/google/uuid"
@@ -75,12 +76,13 @@ func newSessionDTO(s gen.Session) sessionDTO {
 }
 
 type clubDTO struct {
-	ID       uuid.UUID `json:"id"`
-	Slug     string    `json:"slug"`
-	Name     string    `json:"name"`
-	Timezone string    `json:"timezone"`
-	Status   string    `json:"status"`
-	Version  int64     `json:"version"`
+	ID       uuid.UUID       `json:"id"`
+	Slug     string          `json:"slug"`
+	Name     string          `json:"name"`
+	Timezone string          `json:"timezone"`
+	Status   string          `json:"status"`
+	Settings json.RawMessage `json:"settings"`
+	Version  int64           `json:"version"`
 }
 
 func newClubDTO(c gen.Club) clubDTO {
@@ -90,6 +92,7 @@ func newClubDTO(c gen.Club) clubDTO {
 		Name:     c.Name,
 		Timezone: c.Timezone,
 		Status:   string(c.Status),
+		Settings: c.Settings,
 		Version:  c.Version,
 	}
 }

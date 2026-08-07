@@ -127,6 +127,17 @@ func (q *Queries) ListSessionsByUser(ctx context.Context, userID uuid.UUID) ([]S
 	return items, nil
 }
 
+const revokeAllSessionsByUser = `-- name: RevokeAllSessionsByUser :exec
+UPDATE sessions SET revoked_at = now() WHERE user_id = $1 AND revoked_at IS NULL
+`
+
+// Pemindahan nomor (§7.2.1): "Semua sesi, passkey, dan PIN lama dicabut —
+// perangkat lama otomatis keluar".
+func (q *Queries) RevokeAllSessionsByUser(ctx context.Context, userID uuid.UUID) error {
+	_, err := q.db.Exec(ctx, revokeAllSessionsByUser, userID)
+	return err
+}
+
 const revokeOtherSessions = `-- name: RevokeOtherSessions :exec
 UPDATE sessions SET revoked_at = now()
 WHERE user_id = $1 AND id != $2 AND revoked_at IS NULL
