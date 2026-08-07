@@ -1,6 +1,7 @@
 package httpapi
 
 import (
+	"context"
 	"errors"
 	"net/http"
 
@@ -15,22 +16,29 @@ import (
 // ini sendiri), bukan semua sesi.
 func handleLogout(s *store.Store) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		userID, ok := userIDFromContext(r.Context())
+		userID, sessionID, ok := userAndSessionFromContext(r.Context())
 		if !ok {
 			writeError(w, CodeUnauthenticated, "Sesi kamu sudah berakhir. Masuk lagi buat lanjut.", nil)
 			return
 		}
-		sess, err := auth.Validate(r.Context(), s, bearerToken(r))
-		if err != nil {
-			writeError(w, CodeUnauthenticated, "Sesi kamu sudah berakhir. Masuk lagi buat lanjut.", nil)
-			return
-		}
-		if err := auth.RevokeSession(r.Context(), s, userID, sess.ID); err != nil {
+		if err := auth.RevokeSession(r.Context(), s, userID, sessionID); err != nil {
 			writeError(w, CodeValidationFailed, "Gagal keluar.", nil)
 			return
 		}
 		writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
 	}
+}
+
+// userAndSessionFromContext — dua-duanya ditaruh RequireAuth sekali,
+// dipakai handler yang perlu tahu sesi request ini sendiri (logout,
+// revoke-others, tempel kredensial passkey baru).
+func userAndSessionFromContext(ctx context.Context) (userID, sessionID uuid.UUID, ok bool) {
+	userID, ok = userIDFromContext(ctx)
+	if !ok {
+		return uuid.UUID{}, uuid.UUID{}, false
+	}
+	sessionID, ok = sessionIDFromContext(ctx)
+	return userID, sessionID, ok
 }
 
 // handleListSessions — GET /auth/sessions (§7.2.2): perangkat yang sedang
@@ -85,17 +93,12 @@ func handleRevokeSession(s *store.Store) http.HandlerFunc {
 // semua kecuali ini" (§7.2.2).
 func handleRevokeOtherSessions(s *store.Store) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		userID, ok := userIDFromContext(r.Context())
+		userID, sessionID, ok := userAndSessionFromContext(r.Context())
 		if !ok {
 			writeError(w, CodeUnauthenticated, "Sesi kamu sudah berakhir. Masuk lagi buat lanjut.", nil)
 			return
 		}
-		sess, err := auth.Validate(r.Context(), s, bearerToken(r))
-		if err != nil {
-			writeError(w, CodeUnauthenticated, "Sesi kamu sudah berakhir. Masuk lagi buat lanjut.", nil)
-			return
-		}
-		if err := auth.RevokeOtherSessions(r.Context(), s, userID, sess.ID); err != nil {
+		if err := auth.RevokeOtherSessions(r.Context(), s, userID, sessionID); err != nil {
 			writeError(w, CodeValidationFailed, "Gagal keluarkan perangkat lain.", nil)
 			return
 		}

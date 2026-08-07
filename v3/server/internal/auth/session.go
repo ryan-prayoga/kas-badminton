@@ -104,7 +104,12 @@ func RevokeSession(ctx context.Context, s *store.Store, ownerID, sessionID uuid.
 		if sess.UserID != ownerID {
 			return ErrNotYourSession
 		}
-		return q.RevokeSession(ctx, sessionID)
+		if err := q.RevokeSession(ctx, sessionID); err != nil {
+			return err
+		}
+		// "Mengeluarkan perangkat juga mencabut passkey yang terdaftar di
+		// situ" (§7.2.2).
+		return q.DeleteWebauthnCredentialsBySession(ctx, &sessionID)
 	})
 }
 
@@ -112,6 +117,11 @@ func RevokeSession(ctx context.Context, s *store.Store, ownerID, sessionID uuid.
 // "keluarkan semua kecuali ini".
 func RevokeOtherSessions(ctx context.Context, s *store.Store, userID, keepSessionID uuid.UUID) error {
 	return s.WithinTx(ctx, func(ctx context.Context, q *gen.Queries) error {
+		if err := q.DeleteWebauthnCredentialsByUserExceptSession(ctx, gen.DeleteWebauthnCredentialsByUserExceptSessionParams{
+			UserID: userID, ID: keepSessionID,
+		}); err != nil {
+			return err
+		}
 		return q.RevokeOtherSessions(ctx, gen.RevokeOtherSessionsParams{UserID: userID, ID: keepSessionID})
 	})
 }

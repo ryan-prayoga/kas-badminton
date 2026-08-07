@@ -45,6 +45,15 @@ type Querier interface {
 	// (bukan status 'unclaimed', itu cuma untuk akun bayangan hasil migrasi
 	// v2 yang belum pernah diverifikasi siapa pun, §7.3).
 	CreateUser(ctx context.Context, arg CreateUserParams) (User, error)
+	// session_id = sesi yang sedang aktif SAAT mendaftar (device_label & bearer
+	// token yang dipakai memanggil register/verify) — dicabut bersama sesi itu
+	// (§7.2.2, lihat auth.RevokeSession yang memanggil
+	// DeleteWebauthnCredentialsBySession).
+	CreateWebauthnCredential(ctx context.Context, arg CreateWebauthnCredentialParams) (WebauthnCredential, error)
+	DeleteWebauthnCredentialsBySession(ctx context.Context, sessionID *uuid.UUID) error
+	// Dipakai bareng RevokeOtherSessions (§7.2.2 "keluarkan semua kecuali ini")
+	// — kredensial passkey milik sesi-sesi yang ikut tercabut, ikut tercabut.
+	DeleteWebauthnCredentialsByUserExceptSession(ctx context.Context, arg DeleteWebauthnCredentialsByUserExceptSessionParams) error
 	// Tanpa club_id di WHERE — clubs tidak ber-RLS (tabel dirinya sendiri
 	// bukan milik klub). Caller (RequireClub) sudah memverifikasi keanggotaan
 	// lewat GetMembership sebelum ini dipanggil.
@@ -84,6 +93,7 @@ type Querier interface {
 	ListGamesByClub(ctx context.Context, arg ListGamesByClubParams) ([]Game, error)
 	// Daftar perangkat aktif (PLAN.md §7.2.2) — terbaru dulu.
 	ListSessionsByUser(ctx context.Context, userID uuid.UUID) ([]Session, error)
+	ListWebauthnCredentialsByUser(ctx context.Context, userID uuid.UUID) ([]WebauthnCredential, error)
 	// Dipanggil internal/realtime.Bus.Publish di DALAM transaksi tenant yang
 	// sama (WithClub/WithinTx) — Postgres menahan NOTIFY sampai COMMIT, jadi
 	// subscriber SSE tidak pernah melihat event sebelum datanya benar-benar
@@ -105,6 +115,9 @@ type Querier interface {
 	// Versioning (invarian §3.4): 0 baris kalau version klien sudah basi —
 	// caller lalu fetch entitas terbaru dan balas 409 version_conflict.
 	UpdateGame(ctx context.Context, arg UpdateGameParams) (Game, error)
+	// sign_count naik tiap login sukses — dipakai mendeteksi kloning
+	// authenticator (dua device beda pakai kredensial "sama" tanpa saling tahu).
+	UpdateWebauthnCredentialSignCount(ctx context.Context, arg UpdateWebauthnCredentialSignCountParams) error
 	UpsertPin(ctx context.Context, arg UpsertPinParams) error
 }
 

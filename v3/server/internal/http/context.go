@@ -17,17 +17,28 @@ type ctxKey int
 
 const (
 	ctxKeyUserID ctxKey = iota
+	ctxKeySessionID
 	ctxKeyClubID
 	ctxKeyRole
 	ctxKeyPerm
 )
 
-func withUserID(ctx context.Context, id uuid.UUID) context.Context {
-	return context.WithValue(ctx, ctxKeyUserID, id)
+func withUserID(ctx context.Context, userID, sessionID uuid.UUID) context.Context {
+	ctx = context.WithValue(ctx, ctxKeyUserID, userID)
+	return context.WithValue(ctx, ctxKeySessionID, sessionID)
 }
 
 func userIDFromContext(ctx context.Context) (uuid.UUID, bool) {
 	v, ok := ctx.Value(ctxKeyUserID).(uuid.UUID)
+	return v, ok
+}
+
+// sessionIDFromContext — sesi (Bearer token) yang sedang dipakai request
+// ini, ditaruh RequireAuth sekali (sama pola dengan withClub+perm). Dipakai
+// alur passkey (kredensial baru ditempel ke sesi/perangkat ini, §7.2.2) dan
+// logout/revoke-others supaya tidak query auth.Validate dua kali.
+func sessionIDFromContext(ctx context.Context) (uuid.UUID, bool) {
+	v, ok := ctx.Value(ctxKeySessionID).(uuid.UUID)
 	return v, ok
 }
 

@@ -20,7 +20,7 @@ func RequireAuth(s *store.Store) func(http.Handler) http.Handler {
 				writeError(w, CodeUnauthenticated, "Sesi kamu sudah berakhir. Masuk lagi buat lanjut.", nil)
 				return
 			}
-			next.ServeHTTP(w, r.WithContext(withUserID(r.Context(), sess.UserID)))
+			next.ServeHTTP(w, r.WithContext(withUserID(r.Context(), sess.UserID, sess.ID)))
 		})
 	}
 }

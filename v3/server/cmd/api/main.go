@@ -16,8 +16,10 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
+	"github.com/go-webauthn/webauthn/webauthn"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/ryan-prayoga/kas-badminton/v3/server/internal/auth"
 	"github.com/ryan-prayoga/kas-badminton/v3/server/internal/config"
 	httpapi "github.com/ryan-prayoga/kas-badminton/v3/server/internal/http"
 	"github.com/ryan-prayoga/kas-badminton/v3/server/internal/logging"
@@ -47,6 +49,12 @@ func run() error {
 	// sungguhan butuh pairing nomor WA nyata, tidak bisa dites di sini.
 	var notifier notify.Notifier = notify.NewFake(logger)
 
+	wa, err := auth.NewWebAuthn(cfg)
+	if err != nil {
+		return err
+	}
+	challenges := auth.NewChallengeStore()
+
 	// Graceful shutdown: SIGINT (Ctrl-C lokal) dan SIGTERM (docker stop /
 	// systemd) berhenti menerima koneksi baru, tunggu request berjalan
 	// selesai, baru keluar. ctx yang sama menghentikan goroutine LISTEN
@@ -67,7 +75,7 @@ func run() error {
 	s := store.New(pool)
 	bus := realtime.NewBus(ctx, cfg.DatabaseURL, logger)
 
-	router, err := newRouter(logger, s, bus, notifier)
+	router, err := newRouter(logger, s, bus, notifier, wa, challenges)
 	if err != nil {
 		return err
 	}
@@ -102,7 +110,7 @@ func run() error {
 	return nil
 }
 
-func newRouter(logger *slog.Logger, s *store.Store, bus *realtime.Bus, notifier notify.Notifier) (http.Handler, error) {
+func newRouter(logger *slog.Logger, s *store.Store, bus *realtime.Bus, notifier notify.Notifier, wa *webauthn.WebAuthn, challenges *auth.ChallengeStore) (http.Handler, error) {
 	r := chi.NewRouter()
 	r.Use(middleware.RequestID)
 	r.Use(middleware.RealIP)
@@ -110,7 +118,7 @@ func newRouter(logger *slog.Logger, s *store.Store, bus *realtime.Bus, notifier 
 	r.Use(middleware.Recoverer)
 
 	r.Get("/healthz", healthHandler)
-	httpapi.Mount(r, s, bus, notifier)
+	httpapi.Mount(r, s, bus, notifier, wa, challenges)
 
 	spa, err := spaHandler()
 	if err != nil {

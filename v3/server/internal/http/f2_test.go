@@ -21,8 +21,11 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/go-webauthn/webauthn/protocol"
+	"github.com/go-webauthn/webauthn/webauthn"
 	"github.com/google/uuid"
 
+	"github.com/ryan-prayoga/kas-badminton/v3/server/internal/auth"
 	httpapi "github.com/ryan-prayoga/kas-badminton/v3/server/internal/http"
 	"github.com/ryan-prayoga/kas-badminton/v3/server/internal/logging"
 	"github.com/ryan-prayoga/kas-badminton/v3/server/internal/notify"
@@ -78,6 +81,17 @@ func (c *captureNotifier) codeFor(t *testing.T, phone string) string {
 	return m[1]
 }
 
+// Config WebAuthn TETAP untuk test — SENGAJA tidak dikaitkan ke alamat asli
+// httptest.Server (yang portnya acak tiap run). Validasi WebAuthn membaca
+// origin dari clientDataJSON yang ditandatangani "authenticator" (virtual di
+// test, lihat f5_test.go), BUKAN dari Host/URL *http.Request yang
+// sesungguhnya — jadi nilai tetap di sini cukup asal konsisten dipakai di
+// kedua sisi.
+const (
+	testWebauthnRPID   = "localhost"
+	testWebauthnOrigin = "http://localhost"
+)
+
 func newTestServer(t *testing.T) (*httptest.Server, *captureNotifier) {
 	t.Helper()
 	pool, dsn := testdb.PoolAndDSN(t)
@@ -88,8 +102,22 @@ func newTestServer(t *testing.T) (*httptest.Server, *captureNotifier) {
 	bus := realtime.NewBus(ctx, dsn, logging.New("dev", "warn"))
 	notifier := newCaptureNotifier()
 
+	wa, err := webauthn.New(&webauthn.Config{
+		RPID:          testWebauthnRPID,
+		RPDisplayName: "Kok Badminton (test)",
+		RPOrigins:     []string{testWebauthnOrigin},
+		AuthenticatorSelection: protocol.AuthenticatorSelection{
+			ResidentKey:      protocol.ResidentKeyRequirementRequired,
+			UserVerification: protocol.VerificationPreferred,
+		},
+	})
+	if err != nil {
+		t.Fatalf("webauthn.New: %v", err)
+	}
+	challenges := auth.NewChallengeStore()
+
 	r := chi.NewRouter()
-	httpapi.Mount(r, s, bus, notifier)
+	httpapi.Mount(r, s, bus, notifier, wa, challenges)
 
 	srv := httptest.NewServer(r)
 	t.Cleanup(srv.Close)

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"strconv"
+	"strings"
 )
 
 type Config struct {
@@ -22,6 +23,15 @@ type Config struct {
 
 	// debug | info | warn | error
 	LogLevel string
+
+	// Konfigurasi Relying Party WebAuthn (PLAN.md §7.2, §4.4 go-webauthn).
+	// WAJIB beda antara dev/test/prod — RPID & origin bukan angka bisnis
+	// seperti TTL OTP, tapi fakta lingkungan, jadi taruhnya di sini (bukan
+	// const di internal/auth). Bawaan dev: localhost, cocok jalan tanpa
+	// disetel apa pun.
+	WebAuthnRPID          string
+	WebAuthnRPDisplayName string
+	WebAuthnRPOrigins     []string
 }
 
 // Load membaca env var dan memvalidasi yang wajib. Tidak membaca file .env —
@@ -32,6 +42,10 @@ func Load() (Config, error) {
 		Port:     envInt("PORT", 8300),
 		Env:      envString("ENV", "dev"),
 		LogLevel: envString("LOG_LEVEL", "info"),
+
+		WebAuthnRPID:          envString("WEBAUTHN_RP_ID", "localhost"),
+		WebAuthnRPDisplayName: envString("WEBAUTHN_RP_DISPLAY_NAME", "Kok Badminton"),
+		WebAuthnRPOrigins:     envList("WEBAUTHN_RP_ORIGINS", []string{"http://localhost:8300"}),
 	}
 
 	cfg.DatabaseURL = os.Getenv("DATABASE_URL")
@@ -51,6 +65,25 @@ func envString(key, fallback string) string {
 		return v
 	}
 	return fallback
+}
+
+// envList — dipisah koma, mis. "https://app.kaskok.my.id,https://kaskok.my.id".
+func envList(key string, fallback []string) []string {
+	v := os.Getenv(key)
+	if v == "" {
+		return fallback
+	}
+	parts := strings.Split(v, ",")
+	out := make([]string, 0, len(parts))
+	for _, p := range parts {
+		if p = strings.TrimSpace(p); p != "" {
+			out = append(out, p)
+		}
+	}
+	if len(out) == 0 {
+		return fallback
+	}
+	return out
 }
 
 func envInt(key string, fallback int) int {
