@@ -78,11 +78,12 @@ type myBillResp struct {
 	TotalOwed     int64 `json:"total_owed"`
 	WalletBalance int64 `json:"wallet_balance"`
 	Items         []struct {
-		ID       string `json:"id"`
-		GameID   string `json:"game_id"`
-		Amount   int64  `json:"amount"`
-		Status   string `json:"status"`
-		PlayedOn string `json:"played_on"`
+		ID        string  `json:"id"`
+		GameID    string  `json:"game_id"`
+		Amount    int64   `json:"amount"`
+		Status    string  `json:"status"`
+		PlayedOn  string  `json:"played_on"`
+		PaymentID *string `json:"payment_id"`
 	} `json:"items"`
 }
 

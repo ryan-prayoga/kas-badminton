@@ -81,19 +81,34 @@ DELETE FROM games WHERE id = $1 AND club_id = $2 AND recorded_by = $3;
 
 -- name: SumUnpaidByPayer :one
 -- Query "tagihanku" — satu index scan lewat game_players_unpaid_idx
--- (indeks paling penting di seluruh skema, DDL.sql baris 371-379).
+-- (indeks paling penting di seluruh skema, DDL.sql baris 371-379). NOT
+-- EXISTS payment pending TIDAK ikut total (F6/2, §9.3): sudah diklaim
+-- "sudah transfer" berarti dari sisi pemain dia sudah bayar — sama alasan
+-- disputed dikecualikan, supaya total tidak terasa mengabaikan laporannya.
 SELECT COALESCE(SUM(amount), 0)::bigint AS total
-FROM game_players
-WHERE club_id = $1 AND payer_id = $2 AND paid_at IS NULL AND disputed_at IS NULL;
+FROM game_players gp
+WHERE gp.club_id = $1 AND gp.payer_id = $2 AND gp.paid_at IS NULL AND gp.disputed_at IS NULL
+  AND NOT EXISTS (
+    SELECT 1 FROM payment_allocations pa
+    JOIN payments p ON p.id = pa.payment_id
+    WHERE pa.game_player_id = gp.id AND p.status = 'pending'
+  );
 
 -- name: ListUnpaidGamePlayersByPayer :many
 -- Baris-baris "tagihanku" (API.md §4 GET .../me/bill `items`), pasangan
--- dari SumUnpaidByPayer di atas — ikut nampilin yang disputed (status beda
--- di Go), tapi disputed TETAP TIDAK ikut total_owed (itu SumUnpaidByPayer,
--- WHERE-nya beda: AND disputed_at IS NULL).
-SELECT gp.id, gp.game_id, gp.amount, gp.disputed_at, g.played_on
+-- dari SumUnpaidByPayer di atas — ikut nampilin yang disputed ATAU
+-- pending_review (status dihitung di Go), tapi keduanya TETAP TIDAK ikut
+-- total_owed (itu SumUnpaidByPayer, WHERE-nya beda).
+-- p.id (bukan pa.payment_id) sengaja dipilih: pa.payment_id tetap terisi
+-- SELAMANYA begitu pernah diklaim (baris alokasi tidak dihapus), sedangkan
+-- p.id lewat JOIN yang difilter status='pending' cuma terisi SELAGI
+-- menunggu — itulah sinyal pending_review yang benar.
+SELECT gp.id, gp.game_id, gp.amount, gp.disputed_at, g.played_on,
+       p.id AS payment_id, p.claimed_at
 FROM game_players gp
 JOIN games g ON g.id = gp.game_id
+LEFT JOIN payment_allocations pa ON pa.game_player_id = gp.id
+LEFT JOIN payments p ON p.id = pa.payment_id AND p.status = 'pending'
 WHERE gp.club_id = $1 AND gp.payer_id = $2 AND gp.paid_at IS NULL AND g.deleted_at IS NULL
 ORDER BY g.played_on DESC, gp.id DESC;
 

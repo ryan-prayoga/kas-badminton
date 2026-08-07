@@ -39,6 +39,11 @@ const (
 	KindSessionRevoked  Kind = "session.revoked"
 )
 
+// KindPaymentRejected — F6/2, dipisah dari KindPaymentVerified: item ini
+// kembali "unpaid" biasa (bukan lunas) baik ditolak bendahara maupun
+// dibatalkan sendiri sebelum diverifikasi (§9.3, §9.5 aturan E lepas).
+const KindPaymentRejected Kind = "payment.rejected"
+
 // Event adalah bentuk yang dikirim lewat NOTIFY dan diteruskan ke
 // subscriber SSE. ClubID dipakai bus buat filter kebocoran antar-klub
 // (§6.2) — subscriber cuma menerima event dari klub yang dia ikuti,

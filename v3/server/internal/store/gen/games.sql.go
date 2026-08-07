@@ -498,9 +498,12 @@ func (q *Queries) ListGamesByClub(ctx context.Context, arg ListGamesByClubParams
 }
 
 const listUnpaidGamePlayersByPayer = `-- name: ListUnpaidGamePlayersByPayer :many
-SELECT gp.id, gp.game_id, gp.amount, gp.disputed_at, g.played_on
+SELECT gp.id, gp.game_id, gp.amount, gp.disputed_at, g.played_on,
+       p.id AS payment_id, p.claimed_at
 FROM game_players gp
 JOIN games g ON g.id = gp.game_id
+LEFT JOIN payment_allocations pa ON pa.game_player_id = gp.id
+LEFT JOIN payments p ON p.id = pa.payment_id AND p.status = 'pending'
 WHERE gp.club_id = $1 AND gp.payer_id = $2 AND gp.paid_at IS NULL AND g.deleted_at IS NULL
 ORDER BY g.played_on DESC, gp.id DESC
 `
@@ -516,12 +519,18 @@ type ListUnpaidGamePlayersByPayerRow struct {
 	Amount     int64              `json:"amount"`
 	DisputedAt pgtype.Timestamptz `json:"disputed_at"`
 	PlayedOn   pgtype.Date        `json:"played_on"`
+	PaymentID  *uuid.UUID         `json:"payment_id"`
+	ClaimedAt  pgtype.Timestamptz `json:"claimed_at"`
 }
 
 // Baris-baris "tagihanku" (API.md §4 GET .../me/bill `items`), pasangan
-// dari SumUnpaidByPayer di atas — ikut nampilin yang disputed (status beda
-// di Go), tapi disputed TETAP TIDAK ikut total_owed (itu SumUnpaidByPayer,
-// WHERE-nya beda: AND disputed_at IS NULL).
+// dari SumUnpaidByPayer di atas — ikut nampilin yang disputed ATAU
+// pending_review (status dihitung di Go), tapi keduanya TETAP TIDAK ikut
+// total_owed (itu SumUnpaidByPayer, WHERE-nya beda).
+// p.id (bukan pa.payment_id) sengaja dipilih: pa.payment_id tetap terisi
+// SELAMANYA begitu pernah diklaim (baris alokasi tidak dihapus), sedangkan
+// p.id lewat JOIN yang difilter status='pending' cuma terisi SELAGI
+// menunggu — itulah sinyal pending_review yang benar.
 func (q *Queries) ListUnpaidGamePlayersByPayer(ctx context.Context, arg ListUnpaidGamePlayersByPayerParams) ([]ListUnpaidGamePlayersByPayerRow, error) {
 	rows, err := q.db.Query(ctx, listUnpaidGamePlayersByPayer, arg.ClubID, arg.PayerID)
 	if err != nil {
@@ -537,6 +546,8 @@ func (q *Queries) ListUnpaidGamePlayersByPayer(ctx context.Context, arg ListUnpa
 			&i.Amount,
 			&i.DisputedAt,
 			&i.PlayedOn,
+			&i.PaymentID,
+			&i.ClaimedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -657,8 +668,13 @@ func (q *Queries) SoftDeleteGame(ctx context.Context, arg SoftDeleteGameParams) 
 
 const sumUnpaidByPayer = `-- name: SumUnpaidByPayer :one
 SELECT COALESCE(SUM(amount), 0)::bigint AS total
-FROM game_players
-WHERE club_id = $1 AND payer_id = $2 AND paid_at IS NULL AND disputed_at IS NULL
+FROM game_players gp
+WHERE gp.club_id = $1 AND gp.payer_id = $2 AND gp.paid_at IS NULL AND gp.disputed_at IS NULL
+  AND NOT EXISTS (
+    SELECT 1 FROM payment_allocations pa
+    JOIN payments p ON p.id = pa.payment_id
+    WHERE pa.game_player_id = gp.id AND p.status = 'pending'
+  )
 `
 
 type SumUnpaidByPayerParams struct {
@@ -667,7 +683,10 @@ type SumUnpaidByPayerParams struct {
 }
 
 // Query "tagihanku" — satu index scan lewat game_players_unpaid_idx
-// (indeks paling penting di seluruh skema, DDL.sql baris 371-379).
+// (indeks paling penting di seluruh skema, DDL.sql baris 371-379). NOT
+// EXISTS payment pending TIDAK ikut total (F6/2, §9.3): sudah diklaim
+// "sudah transfer" berarti dari sisi pemain dia sudah bayar — sama alasan
+// disputed dikecualikan, supaya total tidak terasa mengabaikan laporannya.
 func (q *Queries) SumUnpaidByPayer(ctx context.Context, arg SumUnpaidByPayerParams) (int64, error) {
 	row := q.db.QueryRow(ctx, sumUnpaidByPayer, arg.ClubID, arg.PayerID)
 	var total int64

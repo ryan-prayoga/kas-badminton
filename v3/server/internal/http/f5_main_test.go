@@ -19,6 +19,23 @@ type gameFullResp struct {
 		A      int `json:"a"`
 		B      int `json:"b"`
 	} `json:"score"`
+	Players []struct {
+		ID string `json:"id"`
+	} `json:"players"`
+}
+
+// createGameWithBody — sama pola dgn createGame (f2_test.go) tapi body
+// bebas (butuh koks/tagihan tak nol buat test dompet, F6/2+).
+func createGameWithBody(t *testing.T, base, token, clubID string, body map[string]any) gameFullResp {
+	t.Helper()
+	resp := authedRequest(t, http.MethodPost, base+"/api/v1/clubs/"+clubID+"/games", token, body)
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusCreated {
+		dumpAndFail(t, resp, "create game")
+	}
+	var out gameFullResp
+	_ = json.NewDecoder(resp.Body).Decode(&out)
+	return out
 }
 
 func twoPlayerGameBody(userA, userB string, score any) map[string]any {

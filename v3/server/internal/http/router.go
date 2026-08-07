@@ -120,11 +120,20 @@ func Mount(r chi.Router, s *store.Store, bus *realtime.Bus, notifier notify.Noti
 
 						r.Group(func(r chi.Router) {
 							r.Use(RequirePerm(perm.ManageMoney))
+							r.Get("/bills", handleListClubBills(s))
 							r.Post("/bills/mark-paid", handleMarkBillsPaid(s))
 							r.Get("/wallet/{userId}", handleGetWallet(s))
 							r.Post("/wallet/{userId}/topup", handleTopupWallet(s))
 							r.Post("/wallet/{userId}/withdraw", handleWithdrawWallet(s))
+							r.Post("/payments/{id}/verify", handleVerifyPayment(s))
+							r.Post("/payments/{id}/reject", handleRejectPayment(s))
 						})
+
+						// Klaim "sudah transfer" — HAK PEMAIN atas tagihannya sendiri
+						// (§9.3), bukan RequirePerm: dicek manual lewat payer_id di
+						// query (payments.go), sama pola dgn sanggahan (games.go).
+						r.Post("/payments/claim", handleClaimPayment(s))
+						r.Post("/payments/claim/{id}/cancel", handleCancelPayment(s))
 					})
 
 					r.Route("/links", func(r chi.Router) {

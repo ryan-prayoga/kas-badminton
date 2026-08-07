@@ -22,7 +22,11 @@ type billItemDTO struct {
 	GameID   uuid.UUID `json:"game_id"`
 	Amount   int64     `json:"amount"`
 	PlayedOn string    `json:"played_on"`
-	Status   string    `json:"status"` // unpaid | disputed (pending_review menyusul F6 — payments/claim)
+	Status   string    `json:"status"` // unpaid | pending_review | disputed
+	// Cuma terisi kalau status pending_review (F6/2) — klien butuh ini
+	// buat "batalkan klaim" (POST payments/claim/{id}/cancel).
+	PaymentID *uuid.UUID `json:"payment_id,omitempty"`
+	ClaimedAt *string    `json:"claimed_at,omitempty"`
 }
 
 type myBillDTO struct {
@@ -76,17 +80,23 @@ func handleGetMyBill(s *store.Store) http.HandlerFunc {
 		items := make([]billItemDTO, 0, len(rows))
 		for _, row := range rows {
 			status := "unpaid"
-			if row.DisputedAt.Valid {
-				status = "disputed"
-			}
-			items = append(items, billItemDTO{
-				Kind:     "game",
-				ID:       row.ID,
-				GameID:   row.GameID,
-				Amount:   row.Amount,
+			item := billItemDTO{
+				Kind: "game", ID: row.ID, GameID: row.GameID, Amount: row.Amount,
 				PlayedOn: dateString(row.PlayedOn),
-				Status:   status,
-			})
+			}
+			switch {
+			case row.DisputedAt.Valid:
+				status = "disputed"
+			case row.PaymentID != nil:
+				status = "pending_review"
+				item.PaymentID = row.PaymentID
+				if row.ClaimedAt.Valid {
+					s := row.ClaimedAt.Time.Format(rfc3339)
+					item.ClaimedAt = &s
+				}
+			}
+			item.Status = status
+			items = append(items, item)
 		}
 
 		writeJSON(w, http.StatusOK, myBillDTO{

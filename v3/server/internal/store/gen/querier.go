@@ -12,6 +12,10 @@ import (
 )
 
 type Querier interface {
+	// Pemain BATALKAN klaim sendiri (API.md §4 "Batalkan klaim sendiri
+	// sebelum diverifikasi") — user_id di WHERE memastikan cuma pengklaim
+	// sendiri yang bisa, verified_by tetap NULL (lihat komentar RejectPayment).
+	CancelPayment(ctx context.Context, arg CancelPaymentParams) (Payment, error)
 	// SKIP LOCKED — aman kalau suatu hari ada lebih dari satu waworker
 	// berjalan singkat saat deploy (rolling), walau §12 tetap "satu proses"
 	// normalnya. FOR UPDATE mengunci baris yang diklaim sampai transaksi
@@ -72,6 +76,8 @@ type Querier interface {
 	CreateKokType(ctx context.Context, arg CreateKokTypeParams) (KokType, error)
 	CreateMembership(ctx context.Context, arg CreateMembershipParams) (Membership, error)
 	CreateOTP(ctx context.Context, arg CreateOTPParams) (OtpCode, error)
+	CreatePayment(ctx context.Context, arg CreatePaymentParams) (Payment, error)
+	CreatePaymentAllocation(ctx context.Context, arg CreatePaymentAllocationParams) (PaymentAllocation, error)
 	CreateSession(ctx context.Context, arg CreateSessionParams) (Session, error)
 	// Pemain tamu (§8.1) — pencatat mengetik nama yang tidak cocok anggota
 	// mana pun, sistem bikin akun bayangan langsung di klub itu. phone NULL +
@@ -99,6 +105,13 @@ type Querier interface {
 	DecideClaimRequest(ctx context.Context, arg DecideClaimRequestParams) (ClaimRequest, error)
 	// Pemindahan nomor (§7.2.1) — dicabut total, bukan cuma per-sesi.
 	DeleteAllWebauthnCredentialsByUser(ctx context.Context, userID uuid.UUID) error
+	// Melepas kunci (§9.5 aturan E "kalau ditolak, kuncinya lepas") — WAJIB
+	// dipanggil saat reject/cancel, BUKAN cuma mengubah payments.status: baris
+	// alokasi yang tersisa akan mengunci game_player_id itu SELAMANYA lewat
+	// payment_alloc_gp_idx (unique index tanpa filter status, DDL.sql) kalau
+	// tidak dihapus — klaim ulang jadi mustahil. payments (induk) TETAP
+	// disimpan (status=rejected) buat jurnal audit; cuma alokasinya yang lepas.
+	DeletePaymentAllocations(ctx context.Context, paymentID uuid.UUID) error
 	// Pemindahan nomor (§7.2.1) — PIN lama ikut dicabut, wajib set ulang.
 	DeletePin(ctx context.Context, userID uuid.UUID) error
 	DeleteWebauthnCredentialsBySession(ctx context.Context, sessionID *uuid.UUID) error
@@ -112,6 +125,16 @@ type Querier interface {
 	DisputeGamePlayer(ctx context.Context, arg DisputeGamePlayerParams) (GamePlayer, error)
 	EnqueueWaMessage(ctx context.Context, arg EnqueueWaMessageParams) (WaOutbox, error)
 	GetClaimRequest(ctx context.Context, arg GetClaimRequestParams) (ClaimRequest, error)
+	// Pembayaran dua langkah (PLAN.md §9.3, API.md §4). payment_allocations
+	// dobel-fungsi: baris "tagihan mana yang ditutup pembayaran ini" DAN kunci
+	// yang mencegah potong-otomatis menyentuhnya sementara menunggu verifikasi
+	// (§9.5 aturan E) — indeks unik payment_alloc_gp_idx (DDL.sql) memastikan
+	// satu game_player_id cuma dikunci SATU payment aktif dalam sejarahnya.
+	// Validasi item_ids (§4 "Sudah transfer") SEKALIGUS jadi query lock-check:
+	// baris yang sudah lunas, disanggah, atau sedang dikunci payment pending
+	// lain otomatis TIDAK ikut — pemanggil tahu klaimnya parsial dari selisih
+	// panjang hasil vs item_ids yang diminta.
+	GetClaimableGamePlayers(ctx context.Context, arg GetClaimableGamePlayersParams) ([]GetClaimableGamePlayersRow, error)
 	// Tanpa club_id di WHERE — clubs tidak ber-RLS (tabel dirinya sendiri
 	// bukan milik klub). Caller (RequireClub) sudah memverifikasi keanggotaan
 	// lewat GetMembership sebelum ini dipanggil.
@@ -140,6 +163,7 @@ type Querier interface {
 	// RLS membatasi baris ke klub itu sendiri — filter user_id di sini adalah
 	// lapisan aplikasi (kedua), RLS adalah lapisan ketiga (§6.2).
 	GetMembership(ctx context.Context, arg GetMembershipParams) (Membership, error)
+	GetPayment(ctx context.Context, arg GetPaymentParams) (Payment, error)
 	GetPin(ctx context.Context, userID uuid.UUID) (UserPin, error)
 	GetSessionByID(ctx context.Context, id uuid.UUID) (Session, error)
 	GetSessionByTokenHash(ctx context.Context, tokenHash []byte) (Session, error)
@@ -163,6 +187,15 @@ type Querier interface {
 	IncrementPinFailed(ctx context.Context, arg IncrementPinFailedParams) error
 	IsSuperadmin(ctx context.Context, userID uuid.UUID) (bool, error)
 	ListActiveClubLinks(ctx context.Context, clubID uuid.UUID) ([]ClubLink, error)
+	// Rekap tagihan SELURUH anggota klub (API.md §4 "GET bills?status=unpaid",
+	// bendahara) — status (unpaid/pending_review/disputed) dan payment_id
+	// (kalau pending_review, buat POST payments/{id}/verify) dihitung di Go
+	// dari disputed_at + payment_status di sini, sama pola dgn handleGetMyBill.
+	// p.id (bukan pa.payment_id) — lihat komentar sama di
+	// ListUnpaidGamePlayersByPayer (games.sql): pa.payment_id tidak pernah
+	// lepas begitu pernah diklaim, p.id lewat JOIN berfilter status='pending'
+	// yang jadi sinyal benar "sedang menunggu".
+	ListClubBillItems(ctx context.Context, clubID uuid.UUID) ([]ListClubBillItemsRow, error)
 	// Metrik agregat (§7 API.md: "jumlah anggota, aktivitas") — superadmin
 	// TIDAK boleh baca isi klub (§6.5), jadi cuma hitungan lewat
 	// club_member_count() (migrasi 00019, SECURITY DEFINER sempit), bukan
@@ -186,19 +219,27 @@ type Querier interface {
 	// klub selama user_id = current_user_id(). clubs sendiri tidak ber-RLS
 	// (00016), jadi JOIN-nya aman dipanggil tanpa app.club_id sama sekali.
 	ListMembershipsWithClubByUser(ctx context.Context, userID uuid.UUID) ([]ListMembershipsWithClubByUserRow, error)
+	ListPaymentAllocationsByPayment(ctx context.Context, paymentID uuid.UUID) ([]PaymentAllocation, error)
 	ListPendingClaimRequests(ctx context.Context, clubID uuid.UUID) ([]ClaimRequest, error)
 	// Daftar perangkat aktif (PLAN.md §7.2.2) — terbaru dulu.
 	ListSessionsByUser(ctx context.Context, userID uuid.UUID) ([]Session, error)
 	// Baris-baris "tagihanku" (API.md §4 GET .../me/bill `items`), pasangan
-	// dari SumUnpaidByPayer di atas — ikut nampilin yang disputed (status beda
-	// di Go), tapi disputed TETAP TIDAK ikut total_owed (itu SumUnpaidByPayer,
-	// WHERE-nya beda: AND disputed_at IS NULL).
+	// dari SumUnpaidByPayer di atas — ikut nampilin yang disputed ATAU
+	// pending_review (status dihitung di Go), tapi keduanya TETAP TIDAK ikut
+	// total_owed (itu SumUnpaidByPayer, WHERE-nya beda).
+	// p.id (bukan pa.payment_id) sengaja dipilih: pa.payment_id tetap terisi
+	// SELAMANYA begitu pernah diklaim (baris alokasi tidak dihapus), sedangkan
+	// p.id lewat JOIN yang difilter status='pending' cuma terisi SELAGI
+	// menunggu — itulah sinyal pending_review yang benar.
 	ListUnpaidGamePlayersByPayer(ctx context.Context, arg ListUnpaidGamePlayersByPayerParams) ([]ListUnpaidGamePlayersByPayerRow, error)
 	// Kandidat potong-otomatis (§9.5 aturan B) — tagihan main yang belum lunas
 	// milik payer, lewat indeks yang sama dengan "tagihanku"
 	// (game_players_unpaid_idx sudah mengecualikan disputed_at). g.created_at
 	// ikut diambil buat orderKey planner (WalletDebtRef.CreatedAt) — pemenang
-	// "paling lama" dipakai buat memutus seri best-fit.
+	// "paling lama" dipakai buat memutus seri best-fit. NOT EXISTS di bawah
+	// menegakkan §9.5 aturan E: tagihan yang sudah diklaim (payment pending)
+	// dikunci dari potong otomatis — kalau tidak, bisa terbayar dua kali
+	// begitu klaimnya juga disetujui.
 	ListWalletDeductCandidates(ctx context.Context, arg ListWalletDeductCandidatesParams) ([]ListWalletDeductCandidatesRow, error)
 	// Jurnal dompet satu orang, terbaru dulu. Cursor `before` (timestamptz) —
 	// sqlc.narg supaya NULL berarti "dari awal" (halaman pertama).
@@ -217,6 +258,12 @@ type Querier interface {
 	// club_id di WHERE (dari WithClub) + id di daftar yang diminta; disputed
 	// sengaja tidak ikut kena — harus diselesaikan dulu sebelum ditandai lunas.
 	MarkGamePlayersPaid(ctx context.Context, arg MarkGamePlayersPaidParams) ([]uuid.UUID, error)
+	// Menutup baris tagihan yang teralokasi ke payment yang baru diverifikasi.
+	// disputed_at IS NULL dijaga lagi di sini (bukan cuma saat klaim) — kalau
+	// baris itu disanggah SETELAH diklaim tapi SEBELUM diverifikasi, dia tetap
+	// tertahan (§9.5 aturan D menang atas E): dilewati di sini, bukan
+	// dipaksa lunas.
+	MarkPaymentGamePlayersPaid(ctx context.Context, arg MarkPaymentGamePlayersPaidParams) ([]uuid.UUID, error)
 	MarkWaMessageFailed(ctx context.Context, arg MarkWaMessageFailedParams) error
 	MarkWaMessageSent(ctx context.Context, id uuid.UUID) error
 	// Dipanggil internal/realtime.Bus.Publish di DALAM transaksi tenant yang
@@ -224,6 +271,10 @@ type Querier interface {
 	// subscriber SSE tidak pernah melihat event sebelum datanya benar-benar
 	// tersimpan (PLAN.md §4.3).
 	PgNotify(ctx context.Context, arg PgNotifyParams) error
+	// Ditolak BENDAHARA (verified_by terisi) — beda dari CancelPayment
+	// (pemain sendiri, verified_by tetap NULL) supaya jurnal audit membedakan
+	// "ditolak orang lain" dari "dibatalkan sendiri".
+	RejectPayment(ctx context.Context, arg RejectPaymentParams) (Payment, error)
 	// Klaim kunci lebih dulu (response masih NULL) sebelum handler jalan.
 	// ON CONFLICT DO NOTHING + baris kosong di hasil berarti kunci itu sudah
 	// dipegang permintaan lain (invarian §3.3) — caller cek row count.
@@ -248,7 +299,10 @@ type Querier interface {
 	SearchUnclaimedByClub(ctx context.Context, arg SearchUnclaimedByClubParams) ([]User, error)
 	SoftDeleteGame(ctx context.Context, arg SoftDeleteGameParams) (Game, error)
 	// Query "tagihanku" — satu index scan lewat game_players_unpaid_idx
-	// (indeks paling penting di seluruh skema, DDL.sql baris 371-379).
+	// (indeks paling penting di seluruh skema, DDL.sql baris 371-379). NOT
+	// EXISTS payment pending TIDAK ikut total (F6/2, §9.3): sudah diklaim
+	// "sudah transfer" berarti dari sisi pemain dia sudah bayar — sama alasan
+	// disputed dikecualikan, supaya total tidak terasa mengabaikan laporannya.
 	SumUnpaidByPayer(ctx context.Context, arg SumUnpaidByPayerParams) (int64, error)
 	// Saldo dompet = SUM ledger append-only (DDL.sql "Saldo tidak boleh
 	// minus", ditegakkan trigger DB, bukan diasumsikan di sini). Tulis
@@ -278,6 +332,10 @@ type Querier interface {
 	UpdateWebauthnCredentialSignCount(ctx context.Context, arg UpdateWebauthnCredentialSignCountParams) error
 	UpsertPin(ctx context.Context, arg UpsertPinParams) error
 	UpsertWaHeartbeat(ctx context.Context, arg UpsertWaHeartbeatParams) error
+	// Cuma dari status pending (WHERE, bukan cek Go) — mencegah verifikasi
+	// ganda kalau dua bendahara menekan tombol bersamaan; baris kedua dapat
+	// ErrNoRows, ditangani pemanggil sebagai "sudah diproses".
+	VerifyPayment(ctx context.Context, arg VerifyPaymentParams) (Payment, error)
 }
 
 var _ Querier = (*Queries)(nil)

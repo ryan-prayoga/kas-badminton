@@ -67,6 +67,11 @@ FROM game_players gp
 JOIN games g ON g.id = gp.game_id
 WHERE gp.club_id = $1 AND gp.payer_id = $2 AND gp.paid_at IS NULL
   AND gp.disputed_at IS NULL AND g.deleted_at IS NULL
+  AND NOT EXISTS (
+    SELECT 1 FROM payment_allocations pa
+    JOIN payments p ON p.id = pa.payment_id
+    WHERE pa.game_player_id = gp.id AND p.status = 'pending'
+  )
 ORDER BY g.played_on, g.created_at
 `
 
@@ -86,7 +91,10 @@ type ListWalletDeductCandidatesRow struct {
 // milik payer, lewat indeks yang sama dengan "tagihanku"
 // (game_players_unpaid_idx sudah mengecualikan disputed_at). g.created_at
 // ikut diambil buat orderKey planner (WalletDebtRef.CreatedAt) — pemenang
-// "paling lama" dipakai buat memutus seri best-fit.
+// "paling lama" dipakai buat memutus seri best-fit. NOT EXISTS di bawah
+// menegakkan §9.5 aturan E: tagihan yang sudah diklaim (payment pending)
+// dikunci dari potong otomatis — kalau tidak, bisa terbayar dua kali
+// begitu klaimnya juga disetujui.
 func (q *Queries) ListWalletDeductCandidates(ctx context.Context, arg ListWalletDeductCandidatesParams) ([]ListWalletDeductCandidatesRow, error) {
 	rows, err := q.db.Query(ctx, listWalletDeductCandidates, arg.ClubID, arg.PayerID)
 	if err != nil {
