@@ -44,6 +44,13 @@ const (
 // dibatalkan sendiri sebelum diverifikasi (§9.3, §9.5 aturan E lepas).
 const KindPaymentRejected Kind = "payment.rejected"
 
+// F7 (PLAN.md §14, API.md §5) — turnamen. Satu kind cukup buat semua
+// perubahan (buat, ubah, isi skor, tambah kok, iuran lunas): payload
+// SELALU tournament penuh (tournamentDTO), klien menimpa entri di
+// store-nya sendiri berdasar id — sama pola bill.updated (bukan diff
+// per-field), lebih sederhana daripada mendaftar satu kind per aksi kecil.
+const KindTournamentUpdated Kind = "tournament.updated"
+
 // Event adalah bentuk yang dikirim lewat NOTIFY dan diteruskan ke
 // subscriber SSE. ClubID dipakai bus buat filter kebocoran antar-klub
 // (§6.2) — subscriber cuma menerima event dari klub yang dia ikuti,

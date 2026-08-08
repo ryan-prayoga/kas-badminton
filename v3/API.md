@@ -328,6 +328,7 @@ Rujuk [`PLAN.md §8.1`](PLAN.md#81-pemain-tamu--orang-yang-belum-atau-tidak-akan
 | `POST /clubs/{clubId}/tournaments/{id}/koks` | Kok umum (dibagi rata — menutup lubang kok lepas v2) |
 | `GET /clubs/{clubId}/tournaments/{id}/fees` | Status iuran per peserta |
 | `POST /clubs/{clubId}/tournaments/{id}/fees/{userId}/mark-paid` | Tandai lunas satu orang |
+| `POST /clubs/{clubId}/tournaments/{id}/kok-charges/mark-paid` | **Aksi massal** — `{ids: [...]}` → respons per-baris (§0), tandai lunas tagihan kok (per-partai ATAU umum, `match_kok_charges`) |
 | `GET /clubs/{clubId}/leaderboard?season=` | Papan peringkat (§8.3) — `404` kalau saklar mati |
 
 ---
@@ -395,6 +396,12 @@ cuma `game.created/updated/deleted` dan `bill.updated` — sisanya
 didaftarkan sebagai tipe (`internal/realtime/events.go`) dan nyala saat
 F4/F6 membangun endpoint aslinya (payments/wallet/klaim/sesi ada di luar
 lingkup F2, lihat PLAN.md §14).
+
+**`tournament.updated`** (F7) — satu kind buat semua perubahan turnamen
+(buat, ubah, isi skor, tambah kok, iuran/kok lunas). Payload SELALU
+turnamen penuh (bagan/klasemen sudah terhitung), bukan diff per-field —
+lebih sederhana daripada satu kind per aksi kecil, dan klien cukup
+menimpa entri di store-nya berdasar `id`.
 
 **`club_id` di query wajib di F2** — belum ada `GET /me` (§1, F4) buat
 server tahu sendiri klub mana yang diikuti pemanggil, jadi klien

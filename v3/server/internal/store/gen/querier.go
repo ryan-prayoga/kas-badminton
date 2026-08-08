@@ -79,12 +79,31 @@ type Querier interface {
 	// otomatis game_id): di sini kok_type_id/type_name/slops terisi, game_id
 	// selalu NULL.
 	CreateManualExpense(ctx context.Context, arg CreateManualExpenseParams) (Expense, error)
+	CreateMatchGame(ctx context.Context, arg CreateMatchGameParams) (MatchGame, error)
+	CreateMatchKok(ctx context.Context, arg CreateMatchKokParams) (MatchKok, error)
+	CreateMatchKokCharge(ctx context.Context, arg CreateMatchKokChargeParams) (MatchKokCharge, error)
 	CreateMembership(ctx context.Context, arg CreateMembershipParams) (Membership, error)
 	CreateOTP(ctx context.Context, arg CreateOTPParams) (OtpCode, error)
 	CreatePayment(ctx context.Context, arg CreatePaymentParams) (Payment, error)
 	CreatePaymentAllocation(ctx context.Context, arg CreatePaymentAllocationParams) (PaymentAllocation, error)
 	CreateQrisDynamicEvent(ctx context.Context, arg CreateQrisDynamicEventParams) (QrisDynamicEvent, error)
 	CreateSession(ctx context.Context, arg CreateSessionParams) (Session, error)
+	// F7 (PLAN.md §14): turnamen — bagan/klasemen, skor, kok per-partai & umum,
+	// iuran. Bagan & klasemen sendiri TIDAK disimpan — dihitung ulang tiap baca
+	// lewat internal/domain (BuildBracket/BuildRoundRobin) dari pairs+results,
+	// persis pola v2. Tabel di sini cuma menyimpan input mentahnya.
+	CreateTournament(ctx context.Context, arg CreateTournamentParams) (Tournament, error)
+	CreateTournamentFee(ctx context.Context, arg CreateTournamentFeeParams) (TournamentFee, error)
+	// Pasangan turnamen dari luar klub (§8.1 separuh kedua — beda dari
+	// CreateUnclaimedUser di members/guest yang bikin user BARU): orangnya
+	// sudah punya akun user (anggota klub lain, atau unclaimed hasil migrasi),
+	// cuma belum jadi anggota klub INI. is_tournament_guest=true jadi penyaring
+	// (memberships.sql ListMembers) supaya dia tidak ikut kehitung "anggota
+	// biasa" di layar lain. Dipanggil SETELAH GetMembership memastikan belum
+	// ada baris (handler tournaments.go) — races langka diterima sama seperti
+	// pola CreateMembership lain di basis kode ini.
+	CreateTournamentGuestMembership(ctx context.Context, arg CreateTournamentGuestMembershipParams) (Membership, error)
+	CreateTournamentPair(ctx context.Context, arg CreateTournamentPairParams) (TournamentPair, error)
 	// Pemain tamu (§8.1) — pencatat mengetik nama yang tidak cocok anggota
 	// mana pun, sistem bikin akun bayangan langsung di klub itu. phone NULL +
 	// status 'unclaimed' (constraint users_phone_e164, DDL.sql ~baris 128).
@@ -111,6 +130,7 @@ type Querier interface {
 	DecideClaimRequest(ctx context.Context, arg DecideClaimRequestParams) (ClaimRequest, error)
 	// Pemindahan nomor (§7.2.1) — dicabut total, bukan cuma per-sesi.
 	DeleteAllWebauthnCredentialsByUser(ctx context.Context, userID uuid.UUID) error
+	DeleteMatchGames(ctx context.Context, matchID uuid.UUID) error
 	// Melepas kunci (§9.5 aturan E "kalau ditolak, kuncinya lepas") — WAJIB
 	// dipanggil saat reject/cancel, BUKAN cuma mengubah payments.status: baris
 	// alokasi yang tersisa akan mengunci game_player_id itu SELAMANYA lewat
@@ -130,6 +150,12 @@ type Querier interface {
 	// catatan pertama.
 	DisputeGamePlayer(ctx context.Context, arg DisputeGamePlayerParams) (GamePlayer, error)
 	EnqueueWaMessage(ctx context.Context, arg EnqueueWaMessageParams) (WaOutbox, error)
+	// Baris `matches` dibuat LAZY, pas skor atau kok pertama masuk — bagan
+	// sendiri dihitung dari pairs+results tanpa butuh baris ini ada duluan
+	// (lihat komentar berkas). ON CONFLICT DO UPDATE (bukan DO NOTHING) SENGAJA
+	// — Postgres tidak RETURNING apa pun pada DO NOTHING yang konflik, padahal
+	// pemanggil selalu butuh baris (baru atau lama) buat FK match_games/match_koks.
+	EnsureMatch(ctx context.Context, arg EnsureMatchParams) (Match, error)
 	GetClaimRequest(ctx context.Context, arg GetClaimRequestParams) (ClaimRequest, error)
 	// Pembayaran dua langkah (PLAN.md §9.3, API.md §4). payment_allocations
 	// dobel-fungsi: baris "tagihan mana yang ditutup pembayaran ini" DAN kunci
@@ -173,6 +199,7 @@ type Querier interface {
 	GetPin(ctx context.Context, userID uuid.UUID) (UserPin, error)
 	GetSessionByID(ctx context.Context, id uuid.UUID) (Session, error)
 	GetSessionByTokenHash(ctx context.Context, tokenHash []byte) (Session, error)
+	GetTournament(ctx context.Context, arg GetTournamentParams) (Tournament, error)
 	GetUser(ctx context.Context, id uuid.UUID) (User, error)
 	GetUserByPhone(ctx context.Context, phone pgtype.Text) (User, error)
 	GetWaHeartbeat(ctx context.Context) (WaWorkerHeartbeat, error)
@@ -217,6 +244,13 @@ type Querier interface {
 	// paginasi cursor, bukan offset). sqlc.narg(before) NULL = dari yang
 	// terbaru.
 	ListGamesByClub(ctx context.Context, arg ListGamesByClubParams) ([]Game, error)
+	// Gabungan match+skor buat membangun ulang StoredTournament.Results
+	// (map[matchId]MatchScore) — round/idx dipetakan balik ke id string domain
+	// di Go (tournaments.go matchDomainID), bukan di sini.
+	ListMatchGamesByTournament(ctx context.Context, tournamentID uuid.UUID) ([]ListMatchGamesByTournamentRow, error)
+	ListMatchKokChargesByTournament(ctx context.Context, tournamentID uuid.UUID) ([]MatchKokCharge, error)
+	ListMatchKoksByTournament(ctx context.Context, tournamentID uuid.UUID) ([]MatchKok, error)
+	ListMatchesByTournament(ctx context.Context, tournamentID uuid.UUID) ([]Match, error)
 	// Pencarian nama/username (§5.4) — pg_trgm sudah aktif (00001_extensions).
 	// sqlc.narg supaya q kosong ("") berarti "semua anggota", bukan filter yang
 	// tak pernah cocok.
@@ -230,6 +264,10 @@ type Querier interface {
 	ListPendingClaimRequests(ctx context.Context, clubID uuid.UUID) ([]ClaimRequest, error)
 	// Daftar perangkat aktif (PLAN.md §7.2.2) — terbaru dulu.
 	ListSessionsByUser(ctx context.Context, userID uuid.UUID) ([]Session, error)
+	ListTournamentFeesByTournament(ctx context.Context, tournamentID uuid.UUID) ([]TournamentFee, error)
+	ListTournamentPairsByTournament(ctx context.Context, tournamentID uuid.UUID) ([]TournamentPair, error)
+	// Cursor per tanggal mulai, sama pola ListGamesByClub.
+	ListTournamentsByClub(ctx context.Context, arg ListTournamentsByClubParams) ([]Tournament, error)
 	// Baris-baris "tagihanku" (API.md §4 GET .../me/bill `items`), pasangan
 	// dari SumUnpaidByPayer di atas — ikut nampilin yang disputed ATAU
 	// pending_review (status dihitung di Go), tapi keduanya TETAP TIDAK ikut
@@ -239,6 +277,7 @@ type Querier interface {
 	// p.id lewat JOIN yang difilter status='pending' cuma terisi SELAGI
 	// menunggu — itulah sinyal pending_review yang benar.
 	ListUnpaidGamePlayersByPayer(ctx context.Context, arg ListUnpaidGamePlayersByPayerParams) ([]ListUnpaidGamePlayersByPayerRow, error)
+	ListUsersByIDs(ctx context.Context, ids []uuid.UUID) ([]User, error)
 	// Kandidat potong-otomatis (§9.5 aturan B) — tagihan main yang belum lunas
 	// milik payer, lewat indeks yang sama dengan "tagihanku"
 	// (game_players_unpaid_idx sudah mengecualikan disputed_at). g.created_at
@@ -265,12 +304,16 @@ type Querier interface {
 	// club_id di WHERE (dari WithClub) + id di daftar yang diminta; disputed
 	// sengaja tidak ikut kena — harus diselesaikan dulu sebelum ditandai lunas.
 	MarkGamePlayersPaid(ctx context.Context, arg MarkGamePlayersPaidParams) ([]uuid.UUID, error)
+	// Sama pola MarkGamePlayersPaid (games.sql) — aksi massal boleh berhasil
+	// sebagian, disputed tidak ikut kena.
+	MarkMatchKokChargesPaid(ctx context.Context, arg MarkMatchKokChargesPaidParams) ([]uuid.UUID, error)
 	// Menutup baris tagihan yang teralokasi ke payment yang baru diverifikasi.
 	// disputed_at IS NULL dijaga lagi di sini (bukan cuma saat klaim) — kalau
 	// baris itu disanggah SETELAH diklaim tapi SEBELUM diverifikasi, dia tetap
 	// tertahan (§9.5 aturan D menang atas E): dilewati di sini, bukan
 	// dipaksa lunas.
 	MarkPaymentGamePlayersPaid(ctx context.Context, arg MarkPaymentGamePlayersPaidParams) ([]uuid.UUID, error)
+	MarkTournamentFeePaid(ctx context.Context, arg MarkTournamentFeePaidParams) (TournamentFee, error)
 	MarkWaMessageFailed(ctx context.Context, arg MarkWaMessageFailedParams) error
 	MarkWaMessageSent(ctx context.Context, id uuid.UUID) error
 	// Dipanggil internal/realtime.Bus.Publish di DALAM transaksi tenant yang
@@ -357,8 +400,14 @@ type Querier interface {
 	// Versioning (invarian §3.4): 0 baris kalau version klien sudah basi —
 	// caller lalu fetch entitas terbaru dan balas 409 version_conflict.
 	UpdateGame(ctx context.Context, arg UpdateGameParams) (Game, error)
+	// Cache hasil hitung domain (winner/auto_win) supaya bisa dibaca tanpa
+	// rebuild bagan penuh kalau suatu saat dibutuhkan query langsung — sumber
+	// kebenaran TETAP match_games+pairs, ini cuma salinan (lihat header berkas).
+	UpdateMatchResult(ctx context.Context, arg UpdateMatchResultParams) (Match, error)
 	UpdateMembershipAutoDeduct(ctx context.Context, arg UpdateMembershipAutoDeductParams) (Membership, error)
 	UpdateMembershipRole(ctx context.Context, arg UpdateMembershipRoleParams) (Membership, error)
+	// API.md §5: PATCH cuma ubah fee & catatan. Versioning (invarian §3.4).
+	UpdateTournament(ctx context.Context, arg UpdateTournamentParams) (Tournament, error)
 	// Pemindahan nomor oleh admin (§7.2.1) — constraint users_phone_e164 dan
 	// UNIQUE(phone) di DDL sudah menegakkan format+keunikan, error 23505 kalau
 	// nomor baru sudah dipakai user lain (ditangani di handler).

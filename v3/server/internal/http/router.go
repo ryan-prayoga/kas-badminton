@@ -186,6 +186,34 @@ func Mount(r chi.Router, s *store.Store, bus *realtime.Bus, notifier notify.Noti
 							r.Post("/{id}/players/{playerId}/resolve-dispute", handleResolveGamePlayerDispute(s))
 						})
 					})
+
+					// F7 (PLAN.md §14, API.md §5) — turnamen. Baca terbuka
+					// buat anggota mana pun (sama pola /games); tulis
+					// (buat, skor, kok) digerbang RecordGame — pencatat;
+					// uang (iuran, kok lunas) digerbang ManageMoney —
+					// bendahara, sama pemisahan izin dgn /bills.
+					r.Route("/tournaments", func(r chi.Router) {
+						r.Get("/", handleListTournaments(s))
+						r.Get("/{id}", handleGetTournament(s))
+						r.Get("/{id}/fees", handleListTournamentFees(s))
+
+						r.Group(func(r chi.Router) {
+							r.Use(RequireIdempotency(s))
+							r.Use(RequirePerm(perm.RecordGame))
+							r.Post("/", handleCreateTournament(s))
+							r.Patch("/{id}", handlePatchTournament(s))
+							r.Post("/{id}/matches/{matchId}/score", handleScoreMatch(s))
+							r.Post("/{id}/matches/{matchId}/koks", handleAddMatchKok(s))
+							r.Post("/{id}/koks", handleAddTournamentKok(s))
+						})
+
+						r.Group(func(r chi.Router) {
+							r.Use(RequireIdempotency(s))
+							r.Use(RequirePerm(perm.ManageMoney))
+							r.Post("/{id}/fees/{userId}/mark-paid", handleMarkTournamentFeePaid(s))
+							r.Post("/{id}/kok-charges/mark-paid", handleMarkKokChargesPaid(s))
+						})
+					})
 				})
 			})
 		})
