@@ -202,6 +202,12 @@ type Querier interface {
 	// kok_type_id tidak dikirim, klien boleh kirim type_name+price_per_person
 	// ad-hoc (kolom kok_type_id di game_koks memang nullable).
 	GetKokType(ctx context.Context, arg GetKokTypeParams) (KokType, error)
+	// Jeda antar pengingat (§10.3 "satu orang tidak bisa ditagih dua kali
+	// dalam seminggu") — baris terbaru APAPUN channel/statusnya (queued,
+	// sent, atau bahkan skipped) tetap dihitung "sudah diingatkan", supaya
+	// orang yang push+WA-nya mati berdua tidak diam-diam ditagih tiap jam
+	// scanner jalan.
+	GetLastDebtOverdueNotification(ctx context.Context, arg GetLastDebtOverdueNotificationParams) (Notification, error)
 	// Kode terbaru yang belum kedaluwarsa & belum dipakai buat nomor itu — TANPA
 	// filter purpose, karena POST /auth/otp/verify (API.md §1) cuma menerima
 	// {phone, code}. purpose disimpan buat audit/log kirimnya, bukan dicocokkan
@@ -242,6 +248,9 @@ type Querier interface {
 	IncrementPinFailed(ctx context.Context, arg IncrementPinFailedParams) error
 	IncrementPushSubscriptionFailed(ctx context.Context, id uuid.UUID) (PushSubscription, error)
 	IsSuperadmin(ctx context.Context, userID uuid.UUID) (bool, error)
+	// Scanner tunggakan (§10.3, internal/notify/overdue.go) — cuma klub aktif,
+	// klub ditangguhkan/dihapus tidak perlu ditagih siapa pun.
+	ListActiveClubIDs(ctx context.Context) ([]uuid.UUID, error)
 	ListActiveClubLinks(ctx context.Context, clubID uuid.UUID) ([]ClubLink, error)
 	// Rekap tagihan SELURUH anggota klub (API.md §4 "GET bills?status=unpaid",
 	// bendahara) — status (unpaid/pending_review/disputed) dan payment_id
@@ -291,6 +300,11 @@ type Querier interface {
 	// Pusat notifikasi in-app (API.md §6 "GET /me/notifications?unread=true").
 	// sqlc.narg(unread_only) — true = cuma read_at IS NULL.
 	ListNotificationsByUser(ctx context.Context, arg ListNotificationsByUserParams) ([]Notification, error)
+	// Total tunggakan + tanggal tagihan TERTUA per payer, satu klub. Sama
+	// pengecualian dgn SumUnpaidByPayer (games.sql): baris yang lagi
+	// pending_review (diklaim, menunggu verifikasi) tidak ikut — orang itu
+	// sudah bilang "sudah transfer", tidak perlu ditagih ulang lewat WA.
+	ListOverdueDebtorsByClub(ctx context.Context, clubID uuid.UUID) ([]ListOverdueDebtorsByClubRow, error)
 	ListPaymentAllocationsByPayment(ctx context.Context, paymentID uuid.UUID) ([]PaymentAllocation, error)
 	ListPendingClaimRequests(ctx context.Context, clubID uuid.UUID) ([]ClaimRequest, error)
 	ListPushSubscriptionsByUser(ctx context.Context, userID uuid.UUID) ([]PushSubscription, error)

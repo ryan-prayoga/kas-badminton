@@ -94,3 +94,34 @@ RETURNING *;
 
 -- name: MarkPushSubscriptionOk :exec
 UPDATE push_subscriptions SET failed = 0, last_ok_at = now() WHERE id = $1;
+
+-- name: ListActiveClubIDs :many
+-- Scanner tunggakan (§10.3, internal/notify/overdue.go) — cuma klub aktif,
+-- klub ditangguhkan/dihapus tidak perlu ditagih siapa pun.
+SELECT id FROM clubs WHERE status = 'active' AND deleted_at IS NULL;
+
+-- name: ListOverdueDebtorsByClub :many
+-- Total tunggakan + tanggal tagihan TERTUA per payer, satu klub. Sama
+-- pengecualian dgn SumUnpaidByPayer (games.sql): baris yang lagi
+-- pending_review (diklaim, menunggu verifikasi) tidak ikut — orang itu
+-- sudah bilang "sudah transfer", tidak perlu ditagih ulang lewat WA.
+SELECT gp.payer_id, SUM(gp.amount)::bigint AS total_owed, MIN(g.played_on)::date AS earliest_unpaid
+FROM game_players gp
+JOIN games g ON g.id = gp.game_id
+WHERE gp.club_id = $1 AND gp.paid_at IS NULL AND gp.disputed_at IS NULL AND g.deleted_at IS NULL
+  AND NOT EXISTS (
+    SELECT 1 FROM payment_allocations pa
+    JOIN payments p ON p.id = pa.payment_id
+    WHERE pa.game_player_id = gp.id AND p.status = 'pending'
+  )
+GROUP BY gp.payer_id;
+
+-- name: GetLastDebtOverdueNotification :one
+-- Jeda antar pengingat (§10.3 "satu orang tidak bisa ditagih dua kali
+-- dalam seminggu") — baris terbaru APAPUN channel/statusnya (queued,
+-- sent, atau bahkan skipped) tetap dihitung "sudah diingatkan", supaya
+-- orang yang push+WA-nya mati berdua tidak diam-diam ditagih tiap jam
+-- scanner jalan.
+SELECT * FROM notifications
+WHERE user_id = $1 AND club_id = $2 AND kind = 'debt_overdue'
+ORDER BY created_at DESC LIMIT 1;

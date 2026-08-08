@@ -13,8 +13,11 @@ import (
 
 // Mount memasang seluruh permukaan /api/v1 (F2 clubs+games, F4 auth/1+2 —
 // lihat PLAN.md §14) ke router chi yang sudah dikonfigurasi middleware
-// dasarnya (RequestID, Recoverer, dst — cmd/api/main.go).
-func Mount(r chi.Router, s *store.Store, bus *realtime.Bus, notifier notify.Notifier, wa *webauthn.WebAuthn, challenges *auth.ChallengeStore) {
+// dasarnya (RequestID, Recoverer, dst — cmd/api/main.go). vapidPublicKey
+// boleh kosong (dev/CI tanpa VAPID sungguhan, internal/push.Fake dipakai
+// cmd/api/main.go) — klien lihat kunci kosong berarti push tidak
+// tersedia di lingkungan ini, bukan galat.
+func Mount(r chi.Router, s *store.Store, bus *realtime.Bus, notifier notify.Notifier, wa *webauthn.WebAuthn, challenges *auth.ChallengeStore, vapidPublicKey string) {
 	r.Route("/api/v1", func(r chi.Router) {
 		// Publik, tanpa auth — QR tembok/tautan grup (§6.4). clubId belum
 		// diketahui, itulah gunanya token (join.go resolveJoinToken).
@@ -53,6 +56,7 @@ func Mount(r chi.Router, s *store.Store, bus *realtime.Bus, notifier notify.Noti
 			// — lintas klub, bukan /clubs/{clubId}/... (notifications.go).
 			r.Get("/me/notifications", handleListMyNotifications(s))
 			r.Get("/me/notification-prefs", handleGetNotificationPrefs(s))
+			r.Get("/me/push-vapid-key", handleGetVapidPublicKey(vapidPublicKey))
 			r.Group(func(r chi.Router) {
 				r.Use(RequireIdempotency(s))
 				r.Post("/me/notifications/{id}/read", handleMarkNotificationRead(s))

@@ -117,7 +117,7 @@ func newTestServer(t *testing.T) (*httptest.Server, *captureNotifier) {
 	challenges := auth.NewChallengeStore()
 
 	r := chi.NewRouter()
-	httpapi.Mount(r, s, bus, notifier, wa, challenges)
+	httpapi.Mount(r, s, bus, notifier, wa, challenges, "")
 
 	srv := httptest.NewServer(r)
 	t.Cleanup(srv.Close)

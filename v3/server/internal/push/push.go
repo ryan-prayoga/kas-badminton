@@ -84,3 +84,13 @@ var (
 	_ Sender = (*VAPID)(nil)
 	_ Sender = (*Fake)(nil)
 )
+
+// GenerateDevKeys bikin pasangan VAPID SEKALI PAKAI buat dev/CI yang
+// belum menyetel VAPID_PUBLIC_KEY (cmd/api/main.go). Tujuannya BUKAN
+// supaya push sungguhan terkirim di dev (Sender-nya tetap Fake) — ini
+// supaya PushManager.subscribe() di browser tetap bisa dites ujung ke
+// ujung (kunci publik harus kunci ECDSA P-256 yang sah, browser
+// menolak string sembarangan) tanpa perlu VAPID key produksi.
+func GenerateDevKeys() (publicKey, privateKey string, err error) {
+	return webpush.GenerateVAPIDKeys()
+}

@@ -54,6 +54,16 @@ func newNotificationDTO(n gen.Notification) notificationDTO {
 	return dto
 }
 
+// handleGetVapidPublicKey — GET /me/push-vapid-key. Klien butuh ini buat
+// PushManager.subscribe({applicationServerKey: ...}) — kunci PUBLIK,
+// aman dikirim ke siapa pun yang sudah login (tidak ada rahasia di sini,
+// bedanya dari VAPIDPrivateKey yang tidak pernah meninggalkan server).
+func handleGetVapidPublicKey(publicKey string) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		writeJSON(w, http.StatusOK, map[string]string{"public_key": publicKey})
+	}
+}
+
 // handleListMyNotifications — GET /me/notifications?unread=true.
 func handleListMyNotifications(s *store.Store) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {

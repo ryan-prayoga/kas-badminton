@@ -41,6 +41,12 @@ type NotifyInput struct {
 	// URL — deep link opsional, ikut payload Push buat klik notifikasi.
 	URL string
 	Now time.Time
+	// ForceChannel menimpa domain.DefaultChannelFor(Kind) — satu-satunya
+	// pemakai saat ini: tunggakan lewat batas (§10.3) waktu klub mematikan
+	// saklar pengingat_wa, jalur bawaannya (WA) dipaksa jadi Push, BUKAN
+	// dimatikan total ("pengingat tetap muncul sebagai notifikasi in-app
+	// dan Web Push"). nil = pakai bawaan kind seperti biasa.
+	ForceChannel *domain.NotifChannel
 }
 
 type notifPayload struct {
@@ -61,6 +67,9 @@ func Enqueue(ctx context.Context, q *gen.Queries, in NotifyInput) error {
 	}
 
 	channel := domain.DefaultChannelFor(in.Kind)
+	if in.ForceChannel != nil {
+		channel = *in.ForceChannel
+	}
 	sendAfter := in.Now
 
 	if channel == domain.ChannelPush {

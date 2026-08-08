@@ -90,15 +90,32 @@ func run() error {
 	// koneksi eksternal stateful yang perlu dijaga tunggal di sini,
 	// beda dari whatsmeow (§12 "Bridge WA satu proses").
 	var pushSender push.Sender
+	vapidPublicKey := cfg.VAPIDPublicKey
 	if cfg.VAPIDPublicKey != "" && cfg.VAPIDPrivateKey != "" {
 		pushSender = &push.VAPID{PublicKey: cfg.VAPIDPublicKey, PrivateKey: cfg.VAPIDPrivateKey, Subject: cfg.VAPIDSubject}
 	} else {
 		pushSender = push.NewFake(logger)
+		// dev/CI: kunci publik SUNGGUHAN (biar PushManager.subscribe() di
+		// browser tetap bisa dites) tapi Sender tetap Fake (tidak pernah
+		// kontak jaringan push sungguhan) — lihat komentar GenerateDevKeys.
+		if cfg.IsDev() {
+			if pub, _, err := push.GenerateDevKeys(); err == nil {
+				vapidPublicKey = pub
+			} else {
+				logger.Warn("gagal generate VAPID key dev — push subscribe akan gagal di klien", "err", err)
+			}
+		}
 	}
 	dispatcher := notify.NewDispatcher(s, pushSender, notifier, logger)
 	go dispatcher.Run(ctx, 30*time.Second)
 
-	router, err := newRouter(logger, s, bus, notifier, wa, challenges)
+	// Tunggakan lewat batas (§10.3, F8) — ambangnya harian, jadi jauh
+	// lebih jarang dari Dispatcher; sejam sekali cukup, tidak perlu
+	// segera seperti antrean push/WA.
+	overdueScanner := notify.NewOverdueScanner(s, logger)
+	go overdueScanner.Run(ctx, time.Hour)
+
+	router, err := newRouter(logger, s, bus, notifier, wa, challenges, vapidPublicKey)
 	if err != nil {
 		return err
 	}
@@ -133,7 +150,7 @@ func run() error {
 	return nil
 }
 
-func newRouter(logger *slog.Logger, s *store.Store, bus *realtime.Bus, notifier notify.Notifier, wa *webauthn.WebAuthn, challenges *auth.ChallengeStore) (http.Handler, error) {
+func newRouter(logger *slog.Logger, s *store.Store, bus *realtime.Bus, notifier notify.Notifier, wa *webauthn.WebAuthn, challenges *auth.ChallengeStore, vapidPublicKey string) (http.Handler, error) {
 	r := chi.NewRouter()
 	r.Use(middleware.RequestID)
 	r.Use(middleware.RealIP)
@@ -141,7 +158,7 @@ func newRouter(logger *slog.Logger, s *store.Store, bus *realtime.Bus, notifier 
 	r.Use(middleware.Recoverer)
 
 	r.Get("/healthz", healthHandler)
-	httpapi.Mount(r, s, bus, notifier, wa, challenges)
+	httpapi.Mount(r, s, bus, notifier, wa, challenges, vapidPublicKey)
 
 	spa, err := spaHandler()
 	if err != nil {

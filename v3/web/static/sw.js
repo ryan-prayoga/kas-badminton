@@ -94,3 +94,40 @@ function revalidateInBackground(req, cache) {
 		})
 		.catch(() => {});
 }
+
+// Web Push (PLAN.md §10.2, §14 F8) — payload dikirim server persis bentuk
+// notify.notifPayload Go ({title, body, url}), lihat internal/notify/router.go.
+self.addEventListener('push', (event) => {
+	let data = { title: 'Kok Badminton', body: 'Ada kabar baru.' };
+	try {
+		if (event.data) data = { ...data, ...event.data.json() };
+	} catch {
+		// payload bukan JSON (seharusnya tidak pernah terjadi, server selalu
+		// kirim JSON) — tampilkan judul bawaan daripada gagal diam-diam.
+	}
+	event.waitUntil(
+		self.registration.showNotification(data.title, {
+			body: data.body,
+			icon: '/favicon.svg',
+			data: { url: data.url || '/' }
+		})
+	);
+});
+
+// Klik notifikasi → fokus tab yang sudah terbuka kalau ada, atau buka baru
+// ke URL deep-link yang dikirim server (mis. "/main", "/klub").
+self.addEventListener('notificationclick', (event) => {
+	event.notification.close();
+	const url = event.notification.data?.url || '/';
+	event.waitUntil(
+		self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clients) => {
+			for (const client of clients) {
+				if ('focus' in client) {
+					client.navigate(url);
+					return client.focus();
+				}
+			}
+			return self.clients.openWindow(url);
+		})
+	);
+});

@@ -7,9 +7,11 @@
 	onCreateClub (buka dialog "buat klub baru" lokal halaman itu).
 -->
 <script lang="ts">
+	import { goto } from '$app/navigation';
 	import { activeClub, myMemberships, otherMemberships } from '$lib/stores/club.svelte';
 	import { currentUser } from '$lib/stores/session.svelte';
 	import { Dialog, Button } from '$lib/components/ui';
+	import NotificationBell from './NotificationBell.svelte';
 
 	let { onSwitch, onCreateClub }: { onSwitch: (clubId: string) => void; onCreateClub: () => void } =
 		$props();
@@ -32,7 +34,12 @@
 			{/if}
 		</span>
 	</button>
-	<div class="avatar">{(currentUser()?.display_name ?? '?').slice(0, 1).toUpperCase()}</div>
+	<div class="right">
+		<NotificationBell />
+		<button class="avatar" onclick={() => goto('/account')} aria-label="Akun">
+			{(currentUser()?.display_name ?? '?').slice(0, 1).toUpperCase()}
+		</button>
+	</div>
 </div>
 
 <Dialog bind:open={switcherOpen} title="Ganti klub">
@@ -115,6 +122,12 @@
 		color: var(--ink-faint);
 		font-size: 11px;
 	}
+	.right {
+		display: flex;
+		align-items: center;
+		gap: 4px;
+		flex: none;
+	}
 	.avatar {
 		width: 34px;
 		height: 34px;
@@ -127,6 +140,8 @@
 		font-weight: 700;
 		font-size: 13px;
 		color: var(--ink-soft);
+		font-family: inherit;
+		cursor: pointer;
 	}
 	@media (min-width: 768px) {
 		.club-txt {
@@ -138,7 +153,7 @@
 		.club-row {
 			justify-content: center;
 		}
-		.avatar {
+		.right {
 			display: none;
 		}
 	}
@@ -146,8 +161,8 @@
 		.club-row {
 			justify-content: space-between;
 		}
-		.avatar {
-			display: grid;
+		.right {
+			display: flex;
 		}
 		.club-txt {
 			display: flex;

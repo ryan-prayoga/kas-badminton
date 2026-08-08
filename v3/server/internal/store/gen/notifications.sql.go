@@ -136,6 +136,43 @@ func (q *Queries) DeletePushSubscriptionByEndpoint(ctx context.Context, endpoint
 	return err
 }
 
+const getLastDebtOverdueNotification = `-- name: GetLastDebtOverdueNotification :one
+SELECT id, user_id, club_id, kind, channel, payload, status, attempts, send_after, sent_at, read_at, error, created_at FROM notifications
+WHERE user_id = $1 AND club_id = $2 AND kind = 'debt_overdue'
+ORDER BY created_at DESC LIMIT 1
+`
+
+type GetLastDebtOverdueNotificationParams struct {
+	UserID uuid.UUID  `json:"user_id"`
+	ClubID *uuid.UUID `json:"club_id"`
+}
+
+// Jeda antar pengingat (§10.3 "satu orang tidak bisa ditagih dua kali
+// dalam seminggu") — baris terbaru APAPUN channel/statusnya (queued,
+// sent, atau bahkan skipped) tetap dihitung "sudah diingatkan", supaya
+// orang yang push+WA-nya mati berdua tidak diam-diam ditagih tiap jam
+// scanner jalan.
+func (q *Queries) GetLastDebtOverdueNotification(ctx context.Context, arg GetLastDebtOverdueNotificationParams) (Notification, error) {
+	row := q.db.QueryRow(ctx, getLastDebtOverdueNotification, arg.UserID, arg.ClubID)
+	var i Notification
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.ClubID,
+		&i.Kind,
+		&i.Channel,
+		&i.Payload,
+		&i.Status,
+		&i.Attempts,
+		&i.SendAfter,
+		&i.SentAt,
+		&i.ReadAt,
+		&i.Error,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
 const getNotificationPref = `-- name: GetNotificationPref :one
 SELECT user_id, club_id, kind, push_on, wa_on FROM notification_prefs
 WHERE user_id = $1 AND club_id IS NOT DISTINCT FROM $3::uuid AND kind = $2
@@ -182,6 +219,32 @@ func (q *Queries) IncrementPushSubscriptionFailed(ctx context.Context, id uuid.U
 		&i.LastOkAt,
 	)
 	return i, err
+}
+
+const listActiveClubIDs = `-- name: ListActiveClubIDs :many
+SELECT id FROM clubs WHERE status = 'active' AND deleted_at IS NULL
+`
+
+// Scanner tunggakan (§10.3, internal/notify/overdue.go) — cuma klub aktif,
+// klub ditangguhkan/dihapus tidak perlu ditagih siapa pun.
+func (q *Queries) ListActiveClubIDs(ctx context.Context) ([]uuid.UUID, error) {
+	rows, err := q.db.Query(ctx, listActiveClubIDs)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []uuid.UUID{}
+	for rows.Next() {
+		var id uuid.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const listDueNotificationsByChannel = `-- name: ListDueNotificationsByChannel :many
@@ -302,6 +365,49 @@ func (q *Queries) ListNotificationsByUser(ctx context.Context, arg ListNotificat
 			&i.Error,
 			&i.CreatedAt,
 		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listOverdueDebtorsByClub = `-- name: ListOverdueDebtorsByClub :many
+SELECT gp.payer_id, SUM(gp.amount)::bigint AS total_owed, MIN(g.played_on)::date AS earliest_unpaid
+FROM game_players gp
+JOIN games g ON g.id = gp.game_id
+WHERE gp.club_id = $1 AND gp.paid_at IS NULL AND gp.disputed_at IS NULL AND g.deleted_at IS NULL
+  AND NOT EXISTS (
+    SELECT 1 FROM payment_allocations pa
+    JOIN payments p ON p.id = pa.payment_id
+    WHERE pa.game_player_id = gp.id AND p.status = 'pending'
+  )
+GROUP BY gp.payer_id
+`
+
+type ListOverdueDebtorsByClubRow struct {
+	PayerID        uuid.UUID   `json:"payer_id"`
+	TotalOwed      int64       `json:"total_owed"`
+	EarliestUnpaid pgtype.Date `json:"earliest_unpaid"`
+}
+
+// Total tunggakan + tanggal tagihan TERTUA per payer, satu klub. Sama
+// pengecualian dgn SumUnpaidByPayer (games.sql): baris yang lagi
+// pending_review (diklaim, menunggu verifikasi) tidak ikut — orang itu
+// sudah bilang "sudah transfer", tidak perlu ditagih ulang lewat WA.
+func (q *Queries) ListOverdueDebtorsByClub(ctx context.Context, clubID uuid.UUID) ([]ListOverdueDebtorsByClubRow, error) {
+	rows, err := q.db.Query(ctx, listOverdueDebtorsByClub, clubID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListOverdueDebtorsByClubRow{}
+	for rows.Next() {
+		var i ListOverdueDebtorsByClubRow
+		if err := rows.Scan(&i.PayerID, &i.TotalOwed, &i.EarliestUnpaid); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
