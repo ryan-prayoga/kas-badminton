@@ -44,6 +44,18 @@ func walletEntryID(slug, canonicalName string) uuid.UUID {
 	return deriveID("walletEntry", slug, "carry", canonicalName)
 }
 
+// walletEntryDeltaID — dipakai SyncOnce (sync.go), bukan Migrate. carry
+// v2 itu skalar tunggal (player_carry, bukan ledger) — tiap kali
+// berubah, sync hidup harus menulis SATU wallet_entry baru buat
+// SELISIHnya (ledger v3 append-only). Menyertakan transisi from->to di
+// input id supaya tetap idempoten kalau proses mati tepat setelah
+// INSERT tapi sebelum UpsertSyncState mencatat watermark baru — run
+// berikutnya menghitung ulang transisi yang SAMA, dapat id yang SAMA,
+// ON CONFLICT DO NOTHING (InsertMigratedWalletEntry) menjaganya.
+func walletEntryDeltaID(slug, canonicalName string, from, to int64) uuid.UUID {
+	return deriveID("walletEntryDelta", slug, canonicalName, fmt.Sprintf("%d->%d", from, to))
+}
+
 func tournamentID(slug, v2ID string) uuid.UUID { return deriveID("tournament", slug, v2ID) }
 func tournamentPairID(slug, v2TournamentID string, slot int) uuid.UUID {
 	return deriveID("tournamentPair", slug, v2TournamentID, fmt.Sprintf("%d", slot))

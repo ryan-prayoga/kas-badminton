@@ -883,6 +883,13 @@ type Membership struct {
 	LeftAt            pgtype.Timestamptz `json:"left_at"`
 }
 
+type Migratev2SyncState struct {
+	ClubID    uuid.UUID          `json:"club_id"`
+	Key       string             `json:"key"`
+	Value     string             `json:"value"`
+	UpdatedAt pgtype.Timestamptz `json:"updated_at"`
+}
+
 type Notification struct {
 	ID        uuid.UUID          `json:"id"`
 	UserID    uuid.UUID          `json:"user_id"`

@@ -51,6 +51,29 @@ func (q *Queries) CountMigratedTournaments(ctx context.Context, clubID uuid.UUID
 	return column_1, err
 }
 
+const getSyncState = `-- name: GetSyncState :one
+
+SELECT value FROM migratev2_sync_state WHERE club_id = $1 AND key = $2
+`
+
+type GetSyncStateParams struct {
+	ClubID uuid.UUID `json:"club_id"`
+	Key    string    `json:"key"`
+}
+
+// --- Sync HIDUP v2->v3 (cmd/sync-v2, internal/migratev2/sync.go) ---
+// Beda dari INSERT/UPSERT di atas: dipanggil BERULANG dengan data v2
+// yang bisa BERUBAH (bukan cuma nambah), jadi pakai DO UPDATE di
+// tempat yang di one-shot sengaja DO NOTHING. Cakupan terbatas ke apa
+// yang rutin berubah setelah baris pertama kali tersync: status lunas
+// pemain/kok, dan metadata game (catatan, siapa yang mencatat).
+func (q *Queries) GetSyncState(ctx context.Context, arg GetSyncStateParams) (string, error) {
+	row := q.db.QueryRow(ctx, getSyncState, arg.ClubID, arg.Key)
+	var value string
+	err := row.Scan(&value)
+	return value, err
+}
+
 const insertMigratedExpense = `-- name: InsertMigratedExpense :exec
 INSERT INTO expenses (id, club_id, amount, kok_type_id, type_name, note, recorded_by, created_at)
 VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
@@ -554,5 +577,134 @@ type UpsertMigrationMembershipParams struct {
 // lain (§7.3), chicken-egg kalau semua 'member'.
 func (q *Queries) UpsertMigrationMembership(ctx context.Context, arg UpsertMigrationMembershipParams) error {
 	_, err := q.db.Exec(ctx, upsertMigrationMembership, arg.ClubID, arg.UserID, arg.Role)
+	return err
+}
+
+const upsertSyncState = `-- name: UpsertSyncState :exec
+INSERT INTO migratev2_sync_state (club_id, key, value, updated_at)
+VALUES ($1, $2, $3, now())
+ON CONFLICT (club_id, key) DO UPDATE SET value = EXCLUDED.value, updated_at = now()
+`
+
+type UpsertSyncStateParams struct {
+	ClubID uuid.UUID `json:"club_id"`
+	Key    string    `json:"key"`
+	Value  string    `json:"value"`
+}
+
+func (q *Queries) UpsertSyncState(ctx context.Context, arg UpsertSyncStateParams) error {
+	_, err := q.db.Exec(ctx, upsertSyncState, arg.ClubID, arg.Key, arg.Value)
+	return err
+}
+
+const upsertSyncedGame = `-- name: UpsertSyncedGame :exec
+INSERT INTO games (id, club_id, played_on, format, notes, recorded_by, recorded_by_name, created_at, updated_at)
+VALUES ($1, $2, $3, 'ganda', $4, $5, $6, $7, $8)
+ON CONFLICT (id) DO UPDATE SET
+  played_on = EXCLUDED.played_on, notes = EXCLUDED.notes,
+  recorded_by = EXCLUDED.recorded_by, recorded_by_name = EXCLUDED.recorded_by_name,
+  updated_at = EXCLUDED.updated_at
+`
+
+type UpsertSyncedGameParams struct {
+	ID             uuid.UUID          `json:"id"`
+	ClubID         uuid.UUID          `json:"club_id"`
+	PlayedOn       pgtype.Date        `json:"played_on"`
+	Notes          pgtype.Text        `json:"notes"`
+	RecordedBy     *uuid.UUID         `json:"recorded_by"`
+	RecordedByName pgtype.Text        `json:"recorded_by_name"`
+	CreatedAt      pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt      pgtype.Timestamptz `json:"updated_at"`
+}
+
+// Dipanggil HANYA kalau v2 games.updated_at berubah sejak sync
+// terakhir (SyncOnce yang mengecek, bukan query ini) — DO UPDATE aman
+// karena baris hasil cermin v2 tidak pernah diedit langsung dari v3
+// (kebijakan v2-induk, PLAN.md §14 F10 catatan sync hidup).
+func (q *Queries) UpsertSyncedGame(ctx context.Context, arg UpsertSyncedGameParams) error {
+	_, err := q.db.Exec(ctx, upsertSyncedGame,
+		arg.ID,
+		arg.ClubID,
+		arg.PlayedOn,
+		arg.Notes,
+		arg.RecordedBy,
+		arg.RecordedByName,
+		arg.CreatedAt,
+		arg.UpdatedAt,
+	)
+	return err
+}
+
+const upsertSyncedGameKok = `-- name: UpsertSyncedGameKok :exec
+INSERT INTO game_koks (id, game_id, club_id, kok_type_id, type_name, price_per_person, qty)
+VALUES ($1, $2, $3, $4, $5, $6, 1)
+ON CONFLICT (id) DO UPDATE SET
+  kok_type_id = EXCLUDED.kok_type_id, type_name = EXCLUDED.type_name,
+  price_per_person = EXCLUDED.price_per_person
+`
+
+type UpsertSyncedGameKokParams struct {
+	ID             uuid.UUID   `json:"id"`
+	GameID         uuid.UUID   `json:"game_id"`
+	ClubID         uuid.UUID   `json:"club_id"`
+	KokTypeID      *uuid.UUID  `json:"kok_type_id"`
+	TypeName       pgtype.Text `json:"type_name"`
+	PricePerPerson int64       `json:"price_per_person"`
+}
+
+// id turunan dari (typeID, pricePerPerson) — kalau harga kok di v2
+// diedit SETELAH baris ini pernah tersync, itu jadi id BARU (bukan
+// update baris lama) — kok lama yang tergantikan sengaja dibiarkan
+// (arsip pemakaian, bukan status hidup yang harus tepat satu per
+// game), sama semangat match_koks turnamen.
+func (q *Queries) UpsertSyncedGameKok(ctx context.Context, arg UpsertSyncedGameKokParams) error {
+	_, err := q.db.Exec(ctx, upsertSyncedGameKok,
+		arg.ID,
+		arg.GameID,
+		arg.ClubID,
+		arg.KokTypeID,
+		arg.TypeName,
+		arg.PricePerPerson,
+	)
+	return err
+}
+
+const upsertSyncedGamePlayer = `-- name: UpsertSyncedGamePlayer :exec
+INSERT INTO game_players (id, game_id, club_id, user_id, payer_id, side, slot, amount, paid_at, paid_by)
+VALUES ($1, $2, $3, $4, $4, $5, $6, $7, $8, $9)
+ON CONFLICT (id) DO UPDATE SET
+  user_id = EXCLUDED.user_id, payer_id = EXCLUDED.payer_id,
+  side = EXCLUDED.side, slot = EXCLUDED.slot, amount = EXCLUDED.amount,
+  paid_at = EXCLUDED.paid_at, paid_by = EXCLUDED.paid_by
+`
+
+type UpsertSyncedGamePlayerParams struct {
+	ID     uuid.UUID          `json:"id"`
+	GameID uuid.UUID          `json:"game_id"`
+	ClubID uuid.UUID          `json:"club_id"`
+	UserID uuid.UUID          `json:"user_id"`
+	Side   GameSide           `json:"side"`
+	Slot   int16              `json:"slot"`
+	Amount int64              `json:"amount"`
+	PaidAt pgtype.Timestamptz `json:"paid_at"`
+	PaidBy *uuid.UUID         `json:"paid_by"`
+}
+
+// id deterministik per (game, slot) — TIDAK berubah walau pemain di
+// slot itu ganti/ganti status lunas, jadi DO UPDATE di sini yang
+// menangkap "ditandai lunas belakangan" (alur v2 paling umum), bukan
+// INSERT baru yang tidak akan pernah kena baris lama.
+func (q *Queries) UpsertSyncedGamePlayer(ctx context.Context, arg UpsertSyncedGamePlayerParams) error {
+	_, err := q.db.Exec(ctx, upsertSyncedGamePlayer,
+		arg.ID,
+		arg.GameID,
+		arg.ClubID,
+		arg.UserID,
+		arg.Side,
+		arg.Slot,
+		arg.Amount,
+		arg.PaidAt,
+		arg.PaidBy,
+	)
 	return err
 }

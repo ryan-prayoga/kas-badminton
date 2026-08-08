@@ -126,3 +126,54 @@ SELECT payer_id, SUM(amount)::bigint AS total
 FROM game_players
 WHERE club_id = $1 AND paid_at IS NULL AND disputed_at IS NULL
 GROUP BY payer_id;
+
+-- --- Sync HIDUP v2->v3 (cmd/sync-v2, internal/migratev2/sync.go) ---
+-- Beda dari INSERT/UPSERT di atas: dipanggil BERULANG dengan data v2
+-- yang bisa BERUBAH (bukan cuma nambah), jadi pakai DO UPDATE di
+-- tempat yang di one-shot sengaja DO NOTHING. Cakupan terbatas ke apa
+-- yang rutin berubah setelah baris pertama kali tersync: status lunas
+-- pemain/kok, dan metadata game (catatan, siapa yang mencatat).
+
+-- name: GetSyncState :one
+SELECT value FROM migratev2_sync_state WHERE club_id = $1 AND key = $2;
+
+-- name: UpsertSyncState :exec
+INSERT INTO migratev2_sync_state (club_id, key, value, updated_at)
+VALUES ($1, $2, $3, now())
+ON CONFLICT (club_id, key) DO UPDATE SET value = EXCLUDED.value, updated_at = now();
+
+-- name: UpsertSyncedGame :exec
+-- Dipanggil HANYA kalau v2 games.updated_at berubah sejak sync
+-- terakhir (SyncOnce yang mengecek, bukan query ini) — DO UPDATE aman
+-- karena baris hasil cermin v2 tidak pernah diedit langsung dari v3
+-- (kebijakan v2-induk, PLAN.md §14 F10 catatan sync hidup).
+INSERT INTO games (id, club_id, played_on, format, notes, recorded_by, recorded_by_name, created_at, updated_at)
+VALUES ($1, $2, $3, 'ganda', $4, $5, $6, $7, $8)
+ON CONFLICT (id) DO UPDATE SET
+  played_on = EXCLUDED.played_on, notes = EXCLUDED.notes,
+  recorded_by = EXCLUDED.recorded_by, recorded_by_name = EXCLUDED.recorded_by_name,
+  updated_at = EXCLUDED.updated_at;
+
+-- name: UpsertSyncedGamePlayer :exec
+-- id deterministik per (game, slot) — TIDAK berubah walau pemain di
+-- slot itu ganti/ganti status lunas, jadi DO UPDATE di sini yang
+-- menangkap "ditandai lunas belakangan" (alur v2 paling umum), bukan
+-- INSERT baru yang tidak akan pernah kena baris lama.
+INSERT INTO game_players (id, game_id, club_id, user_id, payer_id, side, slot, amount, paid_at, paid_by)
+VALUES ($1, $2, $3, $4, $4, $5, $6, $7, $8, $9)
+ON CONFLICT (id) DO UPDATE SET
+  user_id = EXCLUDED.user_id, payer_id = EXCLUDED.payer_id,
+  side = EXCLUDED.side, slot = EXCLUDED.slot, amount = EXCLUDED.amount,
+  paid_at = EXCLUDED.paid_at, paid_by = EXCLUDED.paid_by;
+
+-- name: UpsertSyncedGameKok :exec
+-- id turunan dari (typeID, pricePerPerson) — kalau harga kok di v2
+-- diedit SETELAH baris ini pernah tersync, itu jadi id BARU (bukan
+-- update baris lama) — kok lama yang tergantikan sengaja dibiarkan
+-- (arsip pemakaian, bukan status hidup yang harus tepat satu per
+-- game), sama semangat match_koks turnamen.
+INSERT INTO game_koks (id, game_id, club_id, kok_type_id, type_name, price_per_person, qty)
+VALUES ($1, $2, $3, $4, $5, $6, 1)
+ON CONFLICT (id) DO UPDATE SET
+  kok_type_id = EXCLUDED.kok_type_id, type_name = EXCLUDED.type_name,
+  price_per_person = EXCLUDED.price_per_person;

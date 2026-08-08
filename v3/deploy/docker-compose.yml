@@ -72,5 +72,48 @@ services:
     ports:
       - "127.0.0.1:8300:8300"
 
+  # PERSISTEN (beda dari `migrate-v2` di atas yang sekali jalan) — v2 & v3
+  # jalan BERSAMAAN sampai Ryan bilang pindah (PLAN.md §14 F10 "sync
+  # hidup"), proses ini yang menjaga v3 tetap cermin dari v2 setiap
+  # --interval. Di bawah `profiles: sync-v2` SENGAJA — service ini OPT-IN
+  # (`docker compose --profile sync-v2 up -d`), supaya `docker compose up`
+  # biasa (db+api saja) tidak pernah gagal gara-gara env var sync ini
+  # belum diisi. Matikan (`docker compose stop sync-v2` atau lepas
+  # profile-nya dari perintah up) begitu cutover sungguhan diputuskan.
+  #
+  # SYNC_V2_DATABASE_URL wajib diisi di .env sebelum dipakai (validasi
+  # ADA, tapi di level aplikasi — cmd/sync-v2/main.go, bukan di compose
+  # ini, supaya `--profile sync-v2` tetap gagal JELAS kalau lupa isi,
+  # bukan bikin seluruh `docker compose up` ikut gagal parse). Menunjuk
+  # ke stack v2 ASLI (v2 jalan terpisah, network_mode: host, lihat
+  # v2/docker-compose.yml), BUKAN service di compose ini. Disarankan role
+  # Postgres READ-ONLY di sisi v2 khusus buat ini (sync cuma pernah
+  # SELECT, lihat README.md).
+  sync-v2:
+    profiles: ["sync-v2"]
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+      target: sync-v2
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      - V2_DATABASE_URL=${SYNC_V2_DATABASE_URL:-}
+      - DATABASE_URL=postgresql://kok_app:${KOK_APP_PASSWORD:-kok_app_dev_only}@db:5432/kok_v3
+      - SYNC_V2_CLUB_SLUG=${SYNC_V2_CLUB_SLUG:-}
+      - SYNC_V2_CLUB_NAME=${SYNC_V2_CLUB_NAME:-}
+      - SYNC_V2_ADMIN=${SYNC_V2_ADMIN:-}
+      - SYNC_V2_TIMEZONE=${SYNC_V2_TIMEZONE:-Asia/Jakarta}
+      - SYNC_V2_MAPPING=/data/mapping.json
+      - SYNC_V2_INTERVAL=${SYNC_V2_INTERVAL:-60s}
+    volumes:
+      # berkas pemetaan nama (hasil `migrate-v2 dedupe --write-template`,
+      # sudah diedit manual) — di-mount, BUKAN dibangun ke image, supaya
+      # bisa diedit operator sambil proses jalan tanpa rebuild (sync-v2
+      # muat ulang tiap putaran, lihat cmd/sync-v2/main.go).
+      - ./mapping.json:/data/mapping.json:ro
+
 volumes:
   kok_v3_pgdata:

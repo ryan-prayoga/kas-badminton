@@ -258,6 +258,13 @@ type Querier interface {
 	GetSessionByID(ctx context.Context, id uuid.UUID) (Session, error)
 	GetSessionByTokenHash(ctx context.Context, tokenHash []byte) (Session, error)
 	GetSideBet(ctx context.Context, arg GetSideBetParams) (SideBet, error)
+	// --- Sync HIDUP v2->v3 (cmd/sync-v2, internal/migratev2/sync.go) ---
+	// Beda dari INSERT/UPSERT di atas: dipanggil BERULANG dengan data v2
+	// yang bisa BERUBAH (bukan cuma nambah), jadi pakai DO UPDATE di
+	// tempat yang di one-shot sengaja DO NOTHING. Cakupan terbatas ke apa
+	// yang rutin berubah setelah baris pertama kali tersync: status lunas
+	// pemain/kok, dan metadata game (catatan, siapa yang mencatat).
+	GetSyncState(ctx context.Context, arg GetSyncStateParams) (string, error)
 	GetTournament(ctx context.Context, arg GetTournamentParams) (Tournament, error)
 	GetUser(ctx context.Context, id uuid.UUID) (User, error)
 	GetUserByPhone(ctx context.Context, phone pgtype.Text) (User, error)
@@ -590,6 +597,23 @@ type Querier interface {
 	UpsertMigrationMembership(ctx context.Context, arg UpsertMigrationMembershipParams) error
 	UpsertNotificationPref(ctx context.Context, arg UpsertNotificationPrefParams) (NotificationPref, error)
 	UpsertPin(ctx context.Context, arg UpsertPinParams) error
+	UpsertSyncState(ctx context.Context, arg UpsertSyncStateParams) error
+	// Dipanggil HANYA kalau v2 games.updated_at berubah sejak sync
+	// terakhir (SyncOnce yang mengecek, bukan query ini) — DO UPDATE aman
+	// karena baris hasil cermin v2 tidak pernah diedit langsung dari v3
+	// (kebijakan v2-induk, PLAN.md §14 F10 catatan sync hidup).
+	UpsertSyncedGame(ctx context.Context, arg UpsertSyncedGameParams) error
+	// id turunan dari (typeID, pricePerPerson) — kalau harga kok di v2
+	// diedit SETELAH baris ini pernah tersync, itu jadi id BARU (bukan
+	// update baris lama) — kok lama yang tergantikan sengaja dibiarkan
+	// (arsip pemakaian, bukan status hidup yang harus tepat satu per
+	// game), sama semangat match_koks turnamen.
+	UpsertSyncedGameKok(ctx context.Context, arg UpsertSyncedGameKokParams) error
+	// id deterministik per (game, slot) — TIDAK berubah walau pemain di
+	// slot itu ganti/ganti status lunas, jadi DO UPDATE di sini yang
+	// menangkap "ditandai lunas belakangan" (alur v2 paling umum), bukan
+	// INSERT baru yang tidak akan pernah kena baris lama.
+	UpsertSyncedGamePlayer(ctx context.Context, arg UpsertSyncedGamePlayerParams) error
 	UpsertWaHeartbeat(ctx context.Context, arg UpsertWaHeartbeatParams) error
 	// Cuma dari status pending (WHERE, bukan cek Go) — mencegah verifikasi
 	// ganda kalau dua bendahara menekan tombol bersamaan; baris kedua dapat

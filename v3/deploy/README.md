@@ -115,3 +115,73 @@ claim-request siapa pun (§7.3).
 pulang"): jalankan ke salinan v3 yang boleh dibuang, bandingkan angka,
 ulangi sampai nol selisih — `migrate-v2 run` idempoten jadi aman diulang
 persis, tidak perlu bersih-bersih manual di antara percobaan.
+
+## Sync HIDUP v2 ↔ v3 (`cmd/sync-v2`) — jalan bareng, bukan freeze
+
+Beda dari `migrate-v2` di atas (sekali jalan, buat cutover): **v2 dan v3
+boleh jalan BERSAMAAN** selama Ryan belum bilang pindah total. v2 tetap
+SATU-SATUNYA tempat input buat domain klasik (main harian, pembayaran,
+pengeluaran, stok kok, pemain, turnamen) — `sync-v2` cuma proses latar
+yang menjaga v3 tetap cermin HIDUP dari v2, jalan tiap `--interval`
+(bawaan 60 detik). Fitur v3-only (dompet/deposit, main jumlah pemain
+bebas, taruhan barang, alokasi bayar sebagian) TIDAK disentuh proses ini
+— tidak ada representasinya di skema v2, jadi bebas dipakai di v3 tanpa
+pernah bentrok.
+
+**Prasyarat**: klub sudah pernah dimigrasi (`migrate-v2 run`, bagian di
+atas) — atau biarkan `sync-v2` yang membuatnya di putaran pertama kalau
+belum ada (dia pakai `--slug`/`--name`/`--admin` yang sama). Berkas
+pemetaan nama (`mapping.json`) tetap wajib, dan **boleh diedit sambil
+proses jalan** — `sync-v2` muat ulang tiap putaran, jadi nama baru/typo
+yang ke-skip satu putaran bisa langsung tertangkap putaran berikutnya
+tanpa restart.
+
+```bash
+# 1. .env: isi minimal ini (di luar yang sudah ada buat db/api)
+#    SYNC_V2_DATABASE_URL=postgresql://<role-readonly>@<host-v2>:5432/kok_badminton
+#    SYNC_V2_CLUB_SLUG=pb-nama-klub
+#    SYNC_V2_CLUB_NAME=PB Nama Klub
+#    SYNC_V2_ADMIN=Nama Admin
+
+# 2. mapping.json (sama berkas hasil `migrate-v2 dedupe`) taruh di
+#    v3/deploy/mapping.json — di-mount read-only ke container.
+
+# 3. Nyalakan (opt-in lewat --profile, TIDAK ikut naik di `docker compose
+#    up` biasa — supaya lupa isi env di atas tidak pernah menjatuhkan
+#    db/api juga):
+docker compose --profile sync-v2 up -d sync-v2
+
+# Log tiap putaran (jumlah tersync, nama yang di-skip, dst):
+docker compose logs -f sync-v2
+
+# Matikan begitu cutover sungguhan diputuskan — v2 dibekukan read-only,
+# sync-v2 tidak perlu jalan lagi:
+docker compose stop sync-v2
+```
+
+**Role Postgres read-only di sisi v2** (disarankan, tidak wajib — sync
+cuma pernah `SELECT`, lihat komentar package `internal/migratev2`):
+
+```sql
+-- Dijalankan di DB v2 (kok_badminton), sekali:
+CREATE ROLE kok_sync_readonly LOGIN PASSWORD '...';
+GRANT CONNECT ON DATABASE kok_badminton TO kok_sync_readonly;
+GRANT USAGE ON SCHEMA public TO kok_sync_readonly;
+GRANT SELECT ON ALL TABLES IN SCHEMA public TO kok_sync_readonly;
+```
+
+**Batasan yang diketahui** (bukan bug diam-diam — lihat komentar package
+`internal/migratev2/sync.go`):
+
+- Kesegaran dibatasi interval polling, bukan real-time detik. Kalau
+  perlu lebih cepat, `v2/lib/realtime.ts` sudah punya sinyal
+  `publish("update")` tiap mutasi — bisa dipakai trigger sync langsung
+  di iterasi berikutnya, belum dikerjakan di v1 ini.
+- Status lunas iuran & kok per-partai TURNAMEN (beda dari main harian,
+  yang sudah tertangkap) belum ikut disinkronkan ulang kalau diedit
+  setelah tersync pertama kali — cakupan v1 fokus ke main harian, domain
+  paling sering berubah setelah tercatat.
+- Carry v2 yang TURUN (koreksi manual) tidak ditarik otomatis dari
+  dompet v3 (ledger append-only, §9.1 tidak boleh minus) — dilaporkan di
+  log (`carry v2 turun`), butuh tindakan manual (penyesuaian dompet lewat
+  UI admin).

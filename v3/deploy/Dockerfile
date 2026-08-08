@@ -22,6 +22,7 @@ RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-s -w" -o /out/api ./c
 RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-s -w" -o /out/seed ./cmd/seed
 RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-s -w" -o /out/migrate ./cmd/migrate
 RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-s -w" -o /out/migrate-v2 ./cmd/migrate-v2
+RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-s -w" -o /out/sync-v2 ./cmd/sync-v2
 
 # ---- stage 3: image final, tanpa toolchain sama sekali ---------------------
 FROM gcr.io/distroless/static-debian12:nonroot AS final
@@ -45,3 +46,12 @@ FROM gcr.io/distroless/static-debian12:nonroot AS migrate-v2
 COPY --from=server-build /out/migrate-v2 /usr/local/bin/migrate-v2
 USER nonroot:nonroot
 ENTRYPOINT ["/usr/local/bin/migrate-v2"]
+
+# ---- stage 6: cmd/sync-v2 — BEDA dari migrate-v2 di atas, ini proses
+# PERSISTEN (docker-compose.yml service `sync-v2`, restart: unless-stopped),
+# bukan `--profile tools` sekali jalan — v2 & v3 jalan bersamaan sampai
+# Ryan bilang pindah (PLAN.md §14 F10 "sync hidup"). --------------------------
+FROM gcr.io/distroless/static-debian12:nonroot AS sync-v2
+COPY --from=server-build /out/sync-v2 /usr/local/bin/sync-v2
+USER nonroot:nonroot
+ENTRYPOINT ["/usr/local/bin/sync-v2"]

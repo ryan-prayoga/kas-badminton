@@ -1706,6 +1706,37 @@ yang **sudah diuji restore**; masa pemantauan ketat beberapa hari pertama.
 Setelah anggota pindah dan angkanya terbukti cocok, v2 dibekukan read-only sebagai
 arsip, dan **v1 (Express di akar repo) dimatikan**.
 
+**Update (Agustus 2026): "jalan bareng", bukan freeze-lalu-migrasi-sekali.**
+Rencana rilis di atas ("v3 naik, lalu v2 dibekukan setelah angkanya cocok")
+diganti — Ryan minta v2 dan v3 jalan **bersamaan sungguhan**, orang tetap
+input di v2 seperti biasa DAN boleh pakai v3, sampai dia bilang pindah
+total. `cmd/migrate-v2` (di atas) tetap ada apa adanya — itu jalur
+verified-rollback buat cutover FINAL nanti — tapi selama masa jalan bareng,
+`cmd/sync-v2` (proses terpisah, persisten, `internal/migratev2/sync.go`)
+yang menjaga v3 tetap cermin HIDUP dari v2, disinkron ulang tiap beberapa
+menit:
+
+- **v2 tetap satu-satunya tempat input buat domain klasik** (main harian,
+  pembayaran, pengeluaran, stok kok, pemain, turnamen) — kebijakan ini,
+  bukan keterbatasan teknis semata, walau memang ada keterbatasan teknis
+  yang mendorongnya (poin berikut).
+- **Fitur v3-only (dompet/deposit + potong-otomatis, main jumlah pemain
+  bebas, taruhan barang, alokasi bayar sebagian) sama sekali tidak ada
+  representasinya di skema v2** — tidak mungkin disinkronkan balik ke v2
+  apapun caranya. Bebas dipakai di v3 selama masa jalan bareng justru
+  karena itu: tidak akan pernah bentrok dengan v2.
+- Beda dari `Migrate` (one-shot, gagal-satu-batalkan-semua): `SyncOnce`
+  dipanggil berulang, nama v2 yang belum dipetakan cuma melewati baris
+  terkait (bukan menggagalkan seluruh putaran), dan status lunas main
+  harian yang berubah di v2 SETELAH tersync pertama kali ikut menyebar
+  ulang ke v3 (lihat `internal/migratev2/sync.go` buat detail & batasan
+  yang diketahui — status lunas turnamen belum ikut, itu keterbatasan
+  v1 yang disengaja, bukan bug diam-diam).
+- Cutover sungguhan (v2 dibekukan, `sync-v2` dimatikan) sekarang **murni
+  keputusan Ryan kapan saja**, bukan syarat teknis "angka sudah cocok" —
+  karena v3 sudah terus-menerus dicek lewat rekonsiliasi lunak tiap
+  putaran sync, bukan sekali di titik cutover.
+
 ---
 
 ## 15. Risiko
