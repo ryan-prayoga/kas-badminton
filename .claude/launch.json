@@ -28,6 +28,13 @@
       "runtimeArgs": ["--prefix", "v3/web", "run", "dev"],
       "port": 5173,
       "autoPort": true
+    },
+    {
+      "name": "kok-v3-api (dev)",
+      "runtimeExecutable": "bash",
+      "runtimeArgs": ["-c", "cd v3/server && DATABASE_URL=postgresql://kok_app@localhost:5432/kok_v3 go run ./cmd/api"],
+      "port": 8300,
+      "autoPort": true
     }
   ]
 }
