@@ -56,6 +56,7 @@ type Querier interface {
 	// Kuota anggota_per_klub (PLAN.md §12.1, F9/3) — dicek sebelum
 	// CreateMembership/CreateTournamentGuestMembership, bukan cuma ditampilkan.
 	CountMembers(ctx context.Context, clubID uuid.UUID) (int64, error)
+	CountMigratedGames(ctx context.Context, clubID uuid.UUID) (int64, error)
 	CountQueuedNotifications(ctx context.Context) (int64, error)
 	CountQueuedNotificationsByChannel(ctx context.Context) ([]CountQueuedNotificationsByChannelRow, error)
 	// Rate limit kirim ulang (PLAN.md §7.2) — dihitung dari SEMUA kode yang
@@ -272,6 +273,18 @@ type Querier interface {
 	IncrementOTPAttempts(ctx context.Context, id uuid.UUID) error
 	IncrementPinFailed(ctx context.Context, arg IncrementPinFailedParams) error
 	IncrementPushSubscriptionFailed(ctx context.Context, id uuid.UUID) (PushSubscription, error)
+	InsertMigratedExpense(ctx context.Context, arg InsertMigratedExpenseParams) error
+	// score_format/winner_side selalu NULL — v2 TIDAK PERNAH menyimpan skor
+	// main harian (StoredGame v2 tidak punya field itu, cuma turnamen yang
+	// punya skor; lihat komentar migratev2/migrate.go).
+	InsertMigratedGame(ctx context.Context, arg InsertMigratedGameParams) error
+	InsertMigratedGameKok(ctx context.Context, arg InsertMigratedGameKokParams) error
+	// user_id = payer_id SELALU — v2 tidak punya konsep "dibayarin orang
+	// lain" (§8.2 fitur BARU v3), jadi pemetaannya lurus.
+	InsertMigratedGamePlayer(ctx context.Context, arg InsertMigratedGamePlayerParams) error
+	// player_carry v2 → saldo deposit awal (§14 F10). kind 'topup', note
+	// menandai asalnya jelas buat siapa pun yang baca jurnal nanti.
+	InsertMigratedWalletEntry(ctx context.Context, arg InsertMigratedWalletEntryParams) error
 	IsSuperadmin(ctx context.Context, userID uuid.UUID) (bool, error)
 	// Scanner tunggakan (§10.3, internal/notify/overdue.go) — cuma klub aktif,
 	// klub ditangguhkan/dihapus tidak perlu ditagih siapa pun.
@@ -494,6 +507,11 @@ type Querier interface {
 	// "sudah transfer" berarti dari sisi pemain dia sudah bayar — sama alasan
 	// disputed dikecualikan, supaya total tidak terasa mengabaikan laporannya.
 	SumUnpaidByPayer(ctx context.Context, arg SumUnpaidByPayerParams) (int64, error)
+	// Verifikasi F10 "piutang per orang cocok" — total belum lunas PER
+	// ORANG di klub hasil migrasi, dibandingkan hitungan sisi v2
+	// (migratev2/verify.go). Pola WHERE sama SumUnpaidByPayer (games.sql)
+	// tapi di-GROUP BY, bukan difilter satu payer.
+	SumUnpaidByPayerAllUsers(ctx context.Context, clubID uuid.UUID) ([]SumUnpaidByPayerAllUsersRow, error)
 	// Saldo dompet = SUM ledger append-only (DDL.sql "Saldo tidak boleh
 	// minus", ditegakkan trigger DB, bukan diasumsikan di sini). Tulis
 	// ledgernya sendiri (deposit, potong otomatis) baru dibangun F6 — F5
@@ -535,6 +553,25 @@ type Querier interface {
 	// sign_count naik tiap login sukses — dipakai mendeteksi kloning
 	// authenticator (dua device beda pakai kredensial "sama" tanpa saling tahu).
 	UpdateWebauthnCredentialSignCount(ctx context.Context, arg UpdateWebauthnCredentialSignCountParams) error
+	UpsertMigratedKokType(ctx context.Context, arg UpsertMigratedKokTypeParams) (KokType, error)
+	// Migrasi v2 → v3 (PLAN.md §14 F10, cmd/migrate-v2). SEMUA insert di sini
+	// pakai ID yang DITENTUKAN PEMANGGIL (deterministik dari id/nama v2 —
+	// lihat internal/migratev2/ids.go), bukan gen_random_uuid() bawaan tabel
+	// — itulah yang bikin migrasi ini IDEMPOTEN: dijalankan dua kali pakai
+	// data v2 yang sama menghasilkan id v3 yang SAMA persis, jadi ON CONFLICT
+	// DO NOTHING/DO UPDATE cukup buat aman diulang, tanpa tabel "sudah pernah
+	// migrasi row mana" terpisah.
+	// status SELALU 'unclaimed' (§7.3 "akun bayangan... tanpa nomor") — user
+	// v2 belum pernah diverifikasi WA, diklaim belakangan lewat alur yang
+	// SUDAH ada (F4/3 join.go, F7 claim-requests). DO UPDATE (bukan DO
+	// NOTHING) supaya tetap RETURNING baris yang sudah ada kalau dijalankan
+	// ulang — pemanggil butuh id-nya buat baris lain yang mereferensikannya.
+	UpsertMigratedUser(ctx context.Context, arg UpsertMigratedUserParams) (User, error)
+	// role default 'member' kecuali operator migrasi menandai satu nama
+	// sebagai admin lewat --admin (cmd/migrate-v2/main.go) — klub baru butuh
+	// MINIMAL satu admin supaya ada yang bisa menyetujui claim-request orang
+	// lain (§7.3), chicken-egg kalau semua 'member'.
+	UpsertMigrationMembership(ctx context.Context, arg UpsertMigrationMembershipParams) error
 	UpsertNotificationPref(ctx context.Context, arg UpsertNotificationPrefParams) (NotificationPref, error)
 	UpsertPin(ctx context.Context, arg UpsertPinParams) error
 	UpsertWaHeartbeat(ctx context.Context, arg UpsertWaHeartbeatParams) error

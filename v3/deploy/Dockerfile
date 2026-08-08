@@ -21,6 +21,7 @@ COPY --from=web-build /web/build ./internal/webassets/dist
 RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-s -w" -o /out/api ./cmd/api
 RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-s -w" -o /out/seed ./cmd/seed
 RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-s -w" -o /out/migrate ./cmd/migrate
+RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-s -w" -o /out/migrate-v2 ./cmd/migrate-v2
 
 # ---- stage 3: image final, tanpa toolchain sama sekali ---------------------
 FROM gcr.io/distroless/static-debian12:nonroot AS final
@@ -37,3 +38,10 @@ FROM gcr.io/distroless/static-debian12:nonroot AS migrate
 COPY --from=server-build /out/migrate /usr/local/bin/migrate
 USER nonroot:nonroot
 ENTRYPOINT ["/usr/local/bin/migrate"]
+
+# ---- stage 5: khusus buat `docker compose run migrate-v2` (F10, sekali
+# pakai saat cutover — bukan bagian image yang jalan terus) ------------------
+FROM gcr.io/distroless/static-debian12:nonroot AS migrate-v2
+COPY --from=server-build /out/migrate-v2 /usr/local/bin/migrate-v2
+USER nonroot:nonroot
+ENTRYPOINT ["/usr/local/bin/migrate-v2"]

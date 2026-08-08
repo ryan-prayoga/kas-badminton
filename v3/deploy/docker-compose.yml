@@ -39,6 +39,23 @@ services:
     environment:
       - MIGRATE_DATABASE_URL=postgresql://kok_migrate:${KOK_MIGRATE_PASSWORD:-kok_migrate_dev_only}@db:5432/kok_v3
 
+  # One-off, F10 (§14, cutover): `docker compose --profile tools run --rm
+  # migrate-v2 dedupe --v2-dsn=... --write-template /tmp/mapping.json`
+  # lalu `... run migrate-v2 run --v2-dsn=... --v3-dsn=... --slug=... ...`
+  # (v2-dsn arahkan ke DB v2 sungguhan, BUKAN service di compose ini — v2
+  # jalan di stack terpisah, tidak pernah disentuh selain dibaca).
+  migrate-v2:
+    profiles: ["tools"]
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+      target: migrate-v2
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      - DATABASE_URL=postgresql://kok_app:${KOK_APP_PASSWORD:-kok_app_dev_only}@db:5432/kok_v3
+
   api:
     build:
       context: ..

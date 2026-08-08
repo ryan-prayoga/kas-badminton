@@ -1,4 +1,4 @@
-# Operasional — backup & restore (F9/2)
+# Operasional — backup, restore, migrasi v2 → v3 (F9/2, F10)
 
 PLAN.md §12: "Backup terjadwal + uji pemulihan. Bukan cuma dijadwalkan —
 restore diuji berkala, karena cadangan yang tak pernah diuji bukan
@@ -76,3 +76,41 @@ kelihatan jelas jalur mana yang bermasalah.
 selisih; cadangan DB tepat sebelum cutover yang **sudah diuji restore**".
 Jalankan `restore-test.sh` manual tepat sebelum cutover, bukan
 mengandalkan jadwal mingguan kebetulan baru jalan.
+
+## Migrasi v2 → v3 (F10, `cmd/migrate-v2`)
+
+v2 TIDAK PERNAH ditulis — `migrate-v2` cuma SELECT read-only ke DB v2.
+Cakupan pass ini: pemain, jenis kok, main harian, pengeluaran, carry→
+dompet awal. **Turnamen belum termasuk** — jangan cutover sungguhan
+sebelum itu menyusul dan diuji seketat bagian ini (lihat komentar
+`server/internal/migratev2/migrate.go`).
+
+```bash
+# 1. Deteksi nama yang mungkin sama orang + tulis berkas pemetaan awal.
+#    Berkas ini berisi NAMA ANGGOTA SUNGGUHAN — jangan commit ke repo
+#    publik, taruh di ops/deploy operator (sama semangat .env).
+docker compose --profile tools run --rm migrate-v2 \
+  dedupe --v2-dsn=postgresql://user@host/kok_v2 --write-template /data/mapping.json
+
+# 2. EDIT MANUAL berkas mapping.json — samakan value buat nama yang
+#    memang orang yang sama, biarkan apa adanya kalau kebetulan mirip
+#    tapi beda orang. Ini keputusan MANUSIA, bukan langkah otomatis.
+
+# 3. Migrasi sungguhan — idempoten, aman diulang kalau gagal di tengah
+#    (verifikasi gagal = seluruh transaksi dibatalkan, tidak ada data
+#    setengah-jadi yang tertinggal).
+docker compose --profile tools run --rm migrate-v2 \
+  run --v2-dsn=postgresql://user@host/kok_v2 \
+      --slug=pb-nama-klub --name="PB Nama Klub" \
+      --mapping=/data/mapping.json --admin="Nama Admin"
+```
+
+`--v3-dsn` default ke `$DATABASE_URL` (sudah diisi service `migrate-v2`
+di docker-compose.yml, mengarah ke `db` role `kok_app`). `--admin` SANGAT
+disarankan diisi — klub tanpa admin tidak ada yang bisa menyetujui
+claim-request siapa pun (§7.3).
+
+**Latihan berulang sebelum cutover sungguhan** (§10 F10 "tidak ada jalur
+pulang"): jalankan ke salinan v3 yang boleh dibuang, bandingkan angka,
+ulangi sampai nol selisih — `migrate-v2 run` idempoten jadi aman diulang
+persis, tidak perlu bersih-bersih manual di antara percobaan.
