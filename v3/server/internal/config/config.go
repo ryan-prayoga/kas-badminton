@@ -32,6 +32,14 @@ type Config struct {
 	WebAuthnRPID          string
 	WebAuthnRPDisplayName string
 	WebAuthnRPOrigins     []string
+
+	// Web Push / VAPID (PLAN.md §4.4, §10.2, §14 F8). Kosong di dev =
+	// internal/push.Fake dipakai (sama semangat notify.Fake — "lingkungan
+	// dev tanpa WA" §12, di sini dev tanpa push sungguhan juga boleh).
+	// VAPIDSubject wajib "mailto:..." per spec kalau VAPIDPublicKey diisi.
+	VAPIDPublicKey  string
+	VAPIDPrivateKey string
+	VAPIDSubject    string
 }
 
 // Load membaca env var dan memvalidasi yang wajib. Tidak membaca file .env —
@@ -46,6 +54,10 @@ func Load() (Config, error) {
 		WebAuthnRPID:          envString("WEBAUTHN_RP_ID", "localhost"),
 		WebAuthnRPDisplayName: envString("WEBAUTHN_RP_DISPLAY_NAME", "Kok Badminton"),
 		WebAuthnRPOrigins:     envList("WEBAUTHN_RP_ORIGINS", []string{"http://localhost:8300"}),
+
+		VAPIDPublicKey:  envString("VAPID_PUBLIC_KEY", ""),
+		VAPIDPrivateKey: envString("VAPID_PRIVATE_KEY", ""),
+		VAPIDSubject:    envString("VAPID_SUBJECT", "mailto:admin@kaskok.my.id"),
 	}
 
 	cfg.DatabaseURL = os.Getenv("DATABASE_URL")

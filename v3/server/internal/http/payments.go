@@ -4,12 +4,16 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 
+	"github.com/ryan-prayoga/kas-badminton/v3/server/internal/domain"
+	"github.com/ryan-prayoga/kas-badminton/v3/server/internal/notify"
 	"github.com/ryan-prayoga/kas-badminton/v3/server/internal/realtime"
 	"github.com/ryan-prayoga/kas-badminton/v3/server/internal/store"
 	"github.com/ryan-prayoga/kas-badminton/v3/server/internal/store/gen"
@@ -269,9 +273,21 @@ func handleVerifyPayment(s *store.Store) http.HandlerFunc {
 			})); err != nil {
 				return err
 			}
-			return realtime.Publish(ctx, q, realtime.NewEvent(realtime.KindPaymentVerified, clubID, map[string]any{
+			if err := realtime.Publish(ctx, q, realtime.NewEvent(realtime.KindPaymentVerified, clubID, map[string]any{
 				"club_id": clubID, "payment_id": payment.ID, "user_id": payment.UserID,
-			}))
+			})); err != nil {
+				return err
+			}
+			club, err := q.GetClub(ctx, clubID)
+			if err != nil {
+				return err
+			}
+			return notify.Enqueue(ctx, q, notify.NotifyInput{
+				UserID: payment.UserID, ClubID: &clubID, ClubTimezone: club.Timezone,
+				Kind: domain.NotifPaymentVerified, Now: time.Now().UTC(),
+				Title: "Pembayaran diverifikasi",
+				Body:  fmt.Sprintf("Klaim bayar %s di %s sudah diverifikasi. Tagihanmu berkurang.", rupiahText(payment.Amount), club.Name),
+			})
 		})
 		if err != nil {
 			writeWalletError(w, err, "Gagal memverifikasi pembayaran.")

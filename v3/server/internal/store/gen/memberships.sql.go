@@ -187,6 +187,37 @@ func (q *Queries) ListMembershipsWithClubByUser(ctx context.Context, userID uuid
 	return items, nil
 }
 
+const listVerifiersByClub = `-- name: ListVerifiersByClub :many
+SELECT user_id FROM memberships
+WHERE club_id = $1 AND left_at IS NULL AND role IN ('admin', 'verifikator')
+`
+
+// Siapa yang harus diberi tahu saat ada permintaan klaim baru (§10.1
+// "permintaan klaim masuk"). Bukan perm.Resolve penuh (role sementara
+// kedaluwarsa dsb, internal/perm) — cukup admin+verifikator aktif;
+// notifikasi yang telat sampai ke satu admin yang perannya baru saja
+// kedaluwarsa bukan kegagalan fatal, beda dari RequirePerm yang menolak
+// akses sungguhan.
+func (q *Queries) ListVerifiersByClub(ctx context.Context, clubID uuid.UUID) ([]uuid.UUID, error) {
+	rows, err := q.db.Query(ctx, listVerifiersByClub, clubID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []uuid.UUID{}
+	for rows.Next() {
+		var user_id uuid.UUID
+		if err := rows.Scan(&user_id); err != nil {
+			return nil, err
+		}
+		items = append(items, user_id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const updateMembershipAutoDeduct = `-- name: UpdateMembershipAutoDeduct :one
 UPDATE memberships SET auto_deduct = $3
 WHERE club_id = $1 AND user_id = $2 AND left_at IS NULL

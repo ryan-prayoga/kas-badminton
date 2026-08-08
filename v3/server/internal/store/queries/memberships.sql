@@ -25,6 +25,16 @@ WHERE m.club_id = $1 AND m.left_at IS NULL
        OR u.username ILIKE '%' || sqlc.narg(q) || '%')
 ORDER BY u.display_name;
 
+-- name: ListVerifiersByClub :many
+-- Siapa yang harus diberi tahu saat ada permintaan klaim baru (§10.1
+-- "permintaan klaim masuk"). Bukan perm.Resolve penuh (role sementara
+-- kedaluwarsa dsb, internal/perm) — cukup admin+verifikator aktif;
+-- notifikasi yang telat sampai ke satu admin yang perannya baru saja
+-- kedaluwarsa bukan kegagalan fatal, beda dari RequirePerm yang menolak
+-- akses sungguhan.
+SELECT user_id FROM memberships
+WHERE club_id = $1 AND left_at IS NULL AND role IN ('admin', 'verifikator');
+
 -- name: UpdateMembershipRole :one
 UPDATE memberships SET role = $3, role_expires_at = $4
 WHERE club_id = $1 AND user_id = $2 AND left_at IS NULL

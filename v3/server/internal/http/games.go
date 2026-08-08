@@ -304,7 +304,7 @@ func handleCreateGame(s *store.Store) http.HandlerFunc {
 					return err
 				}
 			}
-			return nil
+			return notifyGamePlayers(ctx, q, clubID, savedPlayers, dateString(playedOn))
 		})
 		if err != nil {
 			var ve *validationErr

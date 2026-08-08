@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"time"
 
@@ -11,6 +12,8 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 
+	"github.com/ryan-prayoga/kas-badminton/v3/server/internal/domain"
+	"github.com/ryan-prayoga/kas-badminton/v3/server/internal/notify"
 	"github.com/ryan-prayoga/kas-badminton/v3/server/internal/store"
 	"github.com/ryan-prayoga/kas-badminton/v3/server/internal/store/gen"
 )
@@ -76,7 +79,10 @@ func handleCreateClaimRequest(s *store.Store) http.HandlerFunc {
 			claim, err = q.CreateClaimRequest(ctx, gen.CreateClaimRequestParams{
 				ClubID: clubID, RequesterID: userID, TargetUser: targetUser,
 			})
-			return err
+			if err != nil {
+				return err
+			}
+			return notifyVerifiersOfClaim(ctx, q, clubID, userID)
 		})
 		if err != nil {
 			writeError(w, CodeValidationFailed, "Gagal mengajukan permintaan gabung.", nil)
@@ -162,6 +168,37 @@ func decideClaim(s *store.Store, status gen.ClaimStatus) http.HandlerFunc {
 
 		writeJSON(w, http.StatusOK, newClaimRequestDTO(claim))
 	}
+}
+
+// notifyVerifiersOfClaim — "permintaan klaim masuk" (§10.1), dikirim ke
+// SEMUA admin+verifikator aktif klub, bukan cuma satu orang — siapa pun
+// yang lebih dulu buka app yang memutuskan.
+func notifyVerifiersOfClaim(ctx context.Context, q *gen.Queries, clubID, requesterID uuid.UUID) error {
+	club, err := q.GetClub(ctx, clubID)
+	if err != nil {
+		return err
+	}
+	verifiers, err := q.ListVerifiersByClub(ctx, clubID)
+	if err != nil {
+		return err
+	}
+	names, err := namesFor(ctx, q, []uuid.UUID{requesterID})
+	if err != nil {
+		return err
+	}
+	now := time.Now().UTC()
+	for _, verifierID := range verifiers {
+		if err := notify.Enqueue(ctx, q, notify.NotifyInput{
+			UserID: verifierID, ClubID: &clubID, ClubTimezone: club.Timezone,
+			Kind: domain.NotifClaimRequested, Now: now,
+			Title: "Permintaan gabung baru",
+			Body:  fmt.Sprintf("%s minta gabung %s — cek dan setujui.", names[requesterID], club.Name),
+			URL:   "/klub",
+		}); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // handleApproveClaim — POST /clubs/{clubId}/claim-requests/{id}/approve.

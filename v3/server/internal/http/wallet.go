@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"time"
 
@@ -11,6 +12,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/ryan-prayoga/kas-badminton/v3/server/internal/domain"
+	"github.com/ryan-prayoga/kas-badminton/v3/server/internal/notify"
 	"github.com/ryan-prayoga/kas-badminton/v3/server/internal/realtime"
 	"github.com/ryan-prayoga/kas-badminton/v3/server/internal/store"
 	"github.com/ryan-prayoga/kas-badminton/v3/server/internal/store/gen"
@@ -234,10 +236,27 @@ func writeWalletError(w http.ResponseWriter, err error, fallback string) {
 	writeError(w, CodeValidationFailed, fallback, nil)
 }
 
+// publishWalletUpdated — realtime SEKALIGUS notify.Enqueue "deposit
+// berubah" (§10.1). Dipusatkan di sini (bukan di tiap pemanggil — topup,
+// tarik, kelebihan bayar klaim, potong otomatis) supaya SETIAP jalur
+// yang mengubah saldo otomatis memberi tahu pemiliknya, tanpa ada yang
+// lupa ditambah satu-satu.
 func publishWalletUpdated(ctx context.Context, q *gen.Queries, clubID, userID uuid.UUID, balance int64) error {
-	return realtime.Publish(ctx, q, realtime.NewEvent(realtime.KindWalletUpdated, clubID, map[string]any{
+	if err := realtime.Publish(ctx, q, realtime.NewEvent(realtime.KindWalletUpdated, clubID, map[string]any{
 		"club_id": clubID, "user_id": userID, "balance": balance,
-	}))
+	})); err != nil {
+		return err
+	}
+	club, err := q.GetClub(ctx, clubID)
+	if err != nil {
+		return err
+	}
+	return notify.Enqueue(ctx, q, notify.NotifyInput{
+		UserID: userID, ClubID: &clubID, ClubTimezone: club.Timezone,
+		Kind: domain.NotifWalletUpdated, Now: time.Now().UTC(),
+		Title: "Depositmu berubah",
+		Body:  fmt.Sprintf("Saldo depositmu di %s sekarang %s.", club.Name, rupiahText(balance)),
+	})
 }
 
 // walletDeductionDTO — satu baris tagihan yang ditutup potong otomatis,

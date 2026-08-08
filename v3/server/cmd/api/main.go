@@ -24,6 +24,7 @@ import (
 	httpapi "github.com/ryan-prayoga/kas-badminton/v3/server/internal/http"
 	"github.com/ryan-prayoga/kas-badminton/v3/server/internal/logging"
 	"github.com/ryan-prayoga/kas-badminton/v3/server/internal/notify"
+	"github.com/ryan-prayoga/kas-badminton/v3/server/internal/push"
 	"github.com/ryan-prayoga/kas-badminton/v3/server/internal/realtime"
 	"github.com/ryan-prayoga/kas-badminton/v3/server/internal/store"
 	"github.com/ryan-prayoga/kas-badminton/v3/server/internal/webassets"
@@ -82,6 +83,20 @@ func run() error {
 	} else {
 		notifier = notify.NewOutbox(s)
 	}
+
+	// Web Push (§10.2, F8) — VAPID kosong (dev/CI bawaan) → Fake, sama
+	// alasan notifier di atas. Dispatcher jalan sebagai goroutine di
+	// PROSES INI (bukan proses terpisah seperti waworker) — tidak ada
+	// koneksi eksternal stateful yang perlu dijaga tunggal di sini,
+	// beda dari whatsmeow (§12 "Bridge WA satu proses").
+	var pushSender push.Sender
+	if cfg.VAPIDPublicKey != "" && cfg.VAPIDPrivateKey != "" {
+		pushSender = &push.VAPID{PublicKey: cfg.VAPIDPublicKey, PrivateKey: cfg.VAPIDPrivateKey, Subject: cfg.VAPIDSubject}
+	} else {
+		pushSender = push.NewFake(logger)
+	}
+	dispatcher := notify.NewDispatcher(s, pushSender, notifier, logger)
+	go dispatcher.Run(ctx, 30*time.Second)
 
 	router, err := newRouter(logger, s, bus, notifier, wa, challenges)
 	if err != nil {

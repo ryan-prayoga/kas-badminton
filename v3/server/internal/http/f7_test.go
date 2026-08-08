@@ -151,13 +151,34 @@ func TestAdmin_WaHealth_ReportsFakeHonestly(t *testing.T) {
 	}
 }
 
-func TestAdmin_QueueDepth_ZeroUntilF8Wired(t *testing.T) {
+// TestAdmin_QueueDepth_GrowsWhenNotificationsEnqueued — F8 mengisi
+// `notifications` sungguhan sekarang (dulu selalu 0 sampai F8 jalan).
+// DB test dipakai bersama seluruh test lain di paket ini (tidak
+// diisolasi per test), jadi ini mengukur SELISIH sebelum/sesudah satu
+// aksi yang pasti memicu notifikasi (catat main 2 pemain → 2 baris
+// game_recorded), bukan angka absolut.
+func TestAdmin_QueueDepth_GrowsWhenNotificationsEnqueued(t *testing.T) {
 	srv, notifier := newTestServer(t)
 	base := srv.URL
 	sudo := otpLogin(t, base, notifier, randPhone())
 	makeSuperadmin(t, sudo.userID)
+	admin := otpLogin(t, base, notifier, randPhone())
+	club := createClub(t, base, admin.token, randSlug())
+	lawan := otpLogin(t, base, notifier, randPhone())
+	addMembership(t, club, lawan.userID, gen.ClubRoleMember)
 
-	resp := authedRequest(t, http.MethodGet, base+"/api/v1/admin/notifications/queue-depth", sudo.token, nil)
+	before := queueDepthTotal(t, base, sudo.token)
+	createGameWithBody(t, base, admin.token, club, twoPlayerGameBody(admin.userID, lawan.userID, nil))
+	after := queueDepthTotal(t, base, sudo.token)
+
+	if after < before+2 {
+		t.Fatalf("total antrean = %d (sebelum %d), mau naik minimal 2 (game_recorded ke 2 pemain)", after, before)
+	}
+}
+
+func queueDepthTotal(t *testing.T, base, token string) int64 {
+	t.Helper()
+	resp := authedRequest(t, http.MethodGet, base+"/api/v1/admin/notifications/queue-depth", token, nil)
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
 		dumpAndFail(t, resp, "GET /admin/notifications/queue-depth")
@@ -166,7 +187,5 @@ func TestAdmin_QueueDepth_ZeroUntilF8Wired(t *testing.T) {
 		Total int64 `json:"total"`
 	}
 	_ = json.NewDecoder(resp.Body).Decode(&got)
-	if got.Total != 0 {
-		t.Fatalf("total antrean = %d, mau 0 (belum ada yang menulis ke notifications, F8)", got.Total)
-	}
+	return got.Total
 }

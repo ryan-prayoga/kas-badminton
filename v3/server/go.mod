@@ -3,6 +3,7 @@ module github.com/ryan-prayoga/kas-badminton/v3/server
 go 1.25.7
 
 require (
+	github.com/SherClockHolmes/webpush-go v1.4.0
 	github.com/fogleman/gg v1.3.0
 	github.com/go-chi/chi/v5 v5.3.1
 	github.com/go-pdf/fpdf v0.9.0

@@ -49,6 +49,18 @@ func Mount(r chi.Router, s *store.Store, bus *realtime.Bus, notifier notify.Noti
 			r.Get("/events", handleEvents(s, bus))
 			r.Get("/me", handleGetMe(s))
 
+			// Pusat notifikasi in-app, preferensi, langganan push (§10, F8)
+			// — lintas klub, bukan /clubs/{clubId}/... (notifications.go).
+			r.Get("/me/notifications", handleListMyNotifications(s))
+			r.Get("/me/notification-prefs", handleGetNotificationPrefs(s))
+			r.Group(func(r chi.Router) {
+				r.Use(RequireIdempotency(s))
+				r.Post("/me/notifications/{id}/read", handleMarkNotificationRead(s))
+				r.Patch("/me/notification-prefs", handlePatchNotificationPrefs(s))
+				r.Post("/me/push-subscriptions", handleCreatePushSubscription(s))
+				r.Delete("/me/push-subscriptions/{id}", handleDeletePushSubscription(s))
+			})
+
 			// Tanpa {clubId} — superadmin TIDAK boleh baca isi klub (§6.5).
 			r.Route("/admin", func(r chi.Router) {
 				r.Use(RequireSuperadmin(s))
@@ -152,6 +164,11 @@ func Mount(r chi.Router, s *store.Store, bus *realtime.Bus, notifier notify.Noti
 						// dipakai pemain sendiri saat bayar (§9.6).
 						r.Post("/qris/dynamic", handleCreateDynamicQris(s))
 						r.Post("/qris/dynamic/{id}/report-rejected", handleReportQrisDynamicRejected(s))
+
+						// Share teks (§5.9, F8) — HAK PEMAIN/bendahara buat
+						// bill (dicek manual, share.go), turnamen terbuka.
+						r.Post("/share/bill/{userId}", handleShareBill(s))
+						r.Post("/share/tournament/{id}", handleShareTournament(s))
 					})
 
 					r.Route("/links", func(r chi.Router) {

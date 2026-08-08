@@ -50,6 +50,9 @@ type Querier interface {
 	// diminta di jendela waktu, bukan cuma yang masih aktif, supaya spam
 	// kirim-lalu-tunggu-kadaluwarsa tidak lolos dari hitungan.
 	CountRecentOTP(ctx context.Context, arg CountRecentOTPParams) (int64, error)
+	// Kuota WA per klub per hari (§12.1) — indeks notifications_wa_quota_idx
+	// (00014) dibuat persis buat query ini.
+	CountWaSentTodayByClub(ctx context.Context, clubID *uuid.UUID) (int64, error)
 	// target_user NULL = "daftar sebagai orang baru" (§7.3). requester_id SUDAH
 	// terverifikasi OTP di titik ini (RequireAuth) — cuma belum anggota klub
 	// ini, itulah kenapa endpoint ini TIDAK di belakang RequireClub biasa.
@@ -83,9 +86,14 @@ type Querier interface {
 	CreateMatchKok(ctx context.Context, arg CreateMatchKokParams) (MatchKok, error)
 	CreateMatchKokCharge(ctx context.Context, arg CreateMatchKokChargeParams) (MatchKokCharge, error)
 	CreateMembership(ctx context.Context, arg CreateMembershipParams) (Membership, error)
+	// F8 (PLAN.md §14, §10) — router dua jalur (Push/WA), pusat notifikasi
+	// in-app, preferensi, langganan Web Push. Baca komentar internal/notify
+	// (Router, Dispatcher) buat alur lengkapnya — file ini cuma query mentah.
+	CreateNotification(ctx context.Context, arg CreateNotificationParams) (Notification, error)
 	CreateOTP(ctx context.Context, arg CreateOTPParams) (OtpCode, error)
 	CreatePayment(ctx context.Context, arg CreatePaymentParams) (Payment, error)
 	CreatePaymentAllocation(ctx context.Context, arg CreatePaymentAllocationParams) (PaymentAllocation, error)
+	CreatePushSubscription(ctx context.Context, arg CreatePushSubscriptionParams) (PushSubscription, error)
 	CreateQrisDynamicEvent(ctx context.Context, arg CreateQrisDynamicEventParams) (QrisDynamicEvent, error)
 	CreateSession(ctx context.Context, arg CreateSessionParams) (Session, error)
 	// Taruhan barang (PLAN.md §8.4) — SENGAJA tidak ada kolom rupiah (lihat
@@ -145,6 +153,10 @@ type Querier interface {
 	DeletePaymentAllocations(ctx context.Context, paymentID uuid.UUID) error
 	// Pemindahan nomor (§7.2.1) — PIN lama ikut dicabut, wajib set ulang.
 	DeletePin(ctx context.Context, userID uuid.UUID) error
+	DeletePushSubscription(ctx context.Context, arg DeletePushSubscriptionParams) error
+	// Dipakai Dispatcher pas push.ErrSubscriptionGone (404/410) — endpoint
+	// yang menentukan identitas langganan di sisi browser, bukan id kita.
+	DeletePushSubscriptionByEndpoint(ctx context.Context, endpoint string) error
 	DeleteWebauthnCredentialsBySession(ctx context.Context, sessionID *uuid.UUID) error
 	// Dipakai bareng RevokeOtherSessions (§7.2.2 "keluarkan semua kecuali ini")
 	// — kredensial passkey milik sesi-sesi yang ikut tercabut, ikut tercabut.
@@ -200,6 +212,10 @@ type Querier interface {
 	// RLS membatasi baris ke klub itu sendiri — filter user_id di sini adalah
 	// lapisan aplikasi (kedua), RLS adalah lapisan ketiga (§6.2).
 	GetMembership(ctx context.Context, arg GetMembershipParams) (Membership, error)
+	// club_id nullable — pemanggil coba baris khusus klub dulu, NULL kalau
+	// tidak ketemu, lalu coba lagi dengan club_id=NULL (bawaan lintas klub)
+	// di lapisan Go (dua query eksplisit lebih jelas daripada COALESCE ganda).
+	GetNotificationPref(ctx context.Context, arg GetNotificationPrefParams) (NotificationPref, error)
 	GetPayment(ctx context.Context, arg GetPaymentParams) (Payment, error)
 	GetPin(ctx context.Context, userID uuid.UUID) (UserPin, error)
 	GetSessionByID(ctx context.Context, id uuid.UUID) (Session, error)
@@ -224,6 +240,7 @@ type Querier interface {
 	IncrementClubLinkScanCount(ctx context.Context, id uuid.UUID) error
 	IncrementOTPAttempts(ctx context.Context, id uuid.UUID) error
 	IncrementPinFailed(ctx context.Context, arg IncrementPinFailedParams) error
+	IncrementPushSubscriptionFailed(ctx context.Context, id uuid.UUID) (PushSubscription, error)
 	IsSuperadmin(ctx context.Context, userID uuid.UUID) (bool, error)
 	ListActiveClubLinks(ctx context.Context, clubID uuid.UUID) ([]ClubLink, error)
 	// Rekap tagihan SELURUH anggota klub (API.md §4 "GET bills?status=unpaid",
@@ -241,6 +258,10 @@ type Querier interface {
 	// subquery memberships langsung (ber-RLS, akan selalu nol tanpa
 	// app.club_id — sama masalahnya dengan 00017/00018).
 	ListClubsWithMemberCount(ctx context.Context) ([]ListClubsWithMemberCountRow, error)
+	// Diambil Dispatcher (internal/notify/dispatcher.go), satu channel per
+	// polling — push dan wa dikirim lewat jalur yang beda-beda (push.Sender
+	// vs notify.Notifier/wa_outbox), jadi tidak dicampur satu query.
+	ListDueNotificationsByChannel(ctx context.Context, arg ListDueNotificationsByChannelParams) ([]Notification, error)
 	ListExpenses(ctx context.Context, arg ListExpensesParams) ([]Expense, error)
 	ListGameKoksByGame(ctx context.Context, gameID uuid.UUID) ([]GameKok, error)
 	ListGamePlayersByGame(ctx context.Context, gameID uuid.UUID) ([]GamePlayer, error)
@@ -266,8 +287,13 @@ type Querier interface {
 	// klub selama user_id = current_user_id(). clubs sendiri tidak ber-RLS
 	// (00016), jadi JOIN-nya aman dipanggil tanpa app.club_id sama sekali.
 	ListMembershipsWithClubByUser(ctx context.Context, userID uuid.UUID) ([]ListMembershipsWithClubByUserRow, error)
+	ListNotificationPrefsByUser(ctx context.Context, userID uuid.UUID) ([]NotificationPref, error)
+	// Pusat notifikasi in-app (API.md §6 "GET /me/notifications?unread=true").
+	// sqlc.narg(unread_only) — true = cuma read_at IS NULL.
+	ListNotificationsByUser(ctx context.Context, arg ListNotificationsByUserParams) ([]Notification, error)
 	ListPaymentAllocationsByPayment(ctx context.Context, paymentID uuid.UUID) ([]PaymentAllocation, error)
 	ListPendingClaimRequests(ctx context.Context, clubID uuid.UUID) ([]ClaimRequest, error)
+	ListPushSubscriptionsByUser(ctx context.Context, userID uuid.UUID) ([]PushSubscription, error)
 	// Papan peringkat klub (PLAN.md §8.3, §14 F7) — cuma main yang SUDAH
 	// dinilai (winner_side terisi) yang ikut kehitung; main tanpa skor
 	// dilewati begitu saja di domain.LeaderboardOf. Diurutkan per tanggal
@@ -292,6 +318,13 @@ type Querier interface {
 	// menunggu — itulah sinyal pending_review yang benar.
 	ListUnpaidGamePlayersByPayer(ctx context.Context, arg ListUnpaidGamePlayersByPayerParams) ([]ListUnpaidGamePlayersByPayerRow, error)
 	ListUsersByIDs(ctx context.Context, ids []uuid.UUID) ([]User, error)
+	// Siapa yang harus diberi tahu saat ada permintaan klaim baru (§10.1
+	// "permintaan klaim masuk"). Bukan perm.Resolve penuh (role sementara
+	// kedaluwarsa dsb, internal/perm) — cukup admin+verifikator aktif;
+	// notifikasi yang telat sampai ke satu admin yang perannya baru saja
+	// kedaluwarsa bukan kegagalan fatal, beda dari RequirePerm yang menolak
+	// akses sungguhan.
+	ListVerifiersByClub(ctx context.Context, clubID uuid.UUID) ([]uuid.UUID, error)
 	// Kandidat potong-otomatis (§9.5 aturan B) — tagihan main yang belum lunas
 	// milik payer, lewat indeks yang sama dengan "tagihanku"
 	// (game_players_unpaid_idx sudah mengecualikan disputed_at). g.created_at
@@ -321,12 +354,16 @@ type Querier interface {
 	// Sama pola MarkGamePlayersPaid (games.sql) — aksi massal boleh berhasil
 	// sebagian, disputed tidak ikut kena.
 	MarkMatchKokChargesPaid(ctx context.Context, arg MarkMatchKokChargesPaidParams) ([]uuid.UUID, error)
+	MarkNotificationFailed(ctx context.Context, arg MarkNotificationFailedParams) (Notification, error)
+	MarkNotificationRead(ctx context.Context, arg MarkNotificationReadParams) (Notification, error)
+	MarkNotificationSent(ctx context.Context, id uuid.UUID) (Notification, error)
 	// Menutup baris tagihan yang teralokasi ke payment yang baru diverifikasi.
 	// disputed_at IS NULL dijaga lagi di sini (bukan cuma saat klaim) — kalau
 	// baris itu disanggah SETELAH diklaim tapi SEBELUM diverifikasi, dia tetap
 	// tertahan (§9.5 aturan D menang atas E): dilewati di sini, bukan
 	// dipaksa lunas.
 	MarkPaymentGamePlayersPaid(ctx context.Context, arg MarkPaymentGamePlayersPaidParams) ([]uuid.UUID, error)
+	MarkPushSubscriptionOk(ctx context.Context, id uuid.UUID) error
 	MarkTournamentFeePaid(ctx context.Context, arg MarkTournamentFeePaidParams) (TournamentFee, error)
 	MarkWaMessageFailed(ctx context.Context, arg MarkWaMessageFailedParams) error
 	MarkWaMessageSent(ctx context.Context, id uuid.UUID) error
@@ -343,6 +380,10 @@ type Querier interface {
 	// (rejected_at IS NULL di WHERE) — "kejadian" dicatat sekali, sama
 	// semangat DisputeGamePlayer (games.sql).
 	ReportQrisDynamicRejected(ctx context.Context, arg ReportQrisDynamicRejectedParams) (QrisDynamicEvent, error)
+	// Push gagal SEMENTARA (bukan subscription mati) — antre ulang beberapa
+	// menit lagi lewat send_after, bukan langsung 'failed'. attempts tetap
+	// naik supaya ada batas retry (dicek Dispatcher, bukan di SQL).
+	RescheduleNotification(ctx context.Context, arg RescheduleNotificationParams) (Notification, error)
 	// Klaim kunci lebih dulu (response masih NULL) sebelum handler jalan.
 	// ON CONFLICT DO NOTHING + baris kosong di hasil berarti kunci itu sudah
 	// dipegang permintaan lain (invarian §3.3) — caller cek row count.
@@ -438,6 +479,7 @@ type Querier interface {
 	// sign_count naik tiap login sukses — dipakai mendeteksi kloning
 	// authenticator (dua device beda pakai kredensial "sama" tanpa saling tahu).
 	UpdateWebauthnCredentialSignCount(ctx context.Context, arg UpdateWebauthnCredentialSignCountParams) error
+	UpsertNotificationPref(ctx context.Context, arg UpsertNotificationPrefParams) (NotificationPref, error)
 	UpsertPin(ctx context.Context, arg UpsertPinParams) error
 	UpsertWaHeartbeat(ctx context.Context, arg UpsertWaHeartbeatParams) error
 	// Cuma dari status pending (WHERE, bukan cek Go) — mencegah verifikasi
