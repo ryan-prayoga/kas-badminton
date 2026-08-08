@@ -132,6 +132,51 @@ func decideClaim(s *store.Store, status gen.ClaimStatus) http.HandlerFunc {
 		var req decideClaimBody
 		_ = json.NewDecoder(r.Body).Decode(&req) // note opsional, body kosong tetap sah
 
+		// Kuota (§12.1, F9/3) dicek SEBELUM memutuskan approve — bukan
+		// sesudah, dan bukan diam-diam diabaikan seperti duplikat member.
+		// Approve yang kepentok kuota dan tetap ditandai "approved" tanpa
+		// membership sungguhan bikin requester nyangkut di antrean tanpa
+		// jalan keluar; lebih jujur menolak lebih awal dengan pesan jelas
+		// supaya pengurus tahu harus menghubungi admin platform.
+		if status == gen.ClaimStatusApproved {
+			var pending gen.ClaimRequest
+			pendingFound := false
+			err := s.WithClub(r.Context(), clubID, func(ctx context.Context, q *gen.Queries) error {
+				c, err := q.GetClaimRequest(ctx, gen.GetClaimRequestParams{ID: claimID, ClubID: clubID})
+				if errors.Is(err, pgx.ErrNoRows) {
+					return nil
+				}
+				if err != nil {
+					return err
+				}
+				pending = c
+				pendingFound = true
+				club, err := q.GetClub(ctx, clubID)
+				if err != nil {
+					return err
+				}
+				return checkMemberQuota(ctx, q, club)
+			})
+			if err != nil {
+				if msg, ok := asQuotaExceeded(err); ok {
+					writeError(w, CodeQuotaExceeded, msg, nil)
+					return
+				}
+				writeError(w, CodeValidationFailed, "Gagal memeriksa kuota klub.", nil)
+				return
+			}
+			if pendingFound {
+				if err := checkClubsPerUserQuota(r.Context(), s, pending.RequesterID); err != nil {
+					if _, ok := asQuotaExceeded(err); ok {
+						writeError(w, CodeQuotaExceeded, "Orang ini sudah ikut terlalu banyak klub — tidak bisa disetujui sekarang.", nil)
+						return
+					}
+					writeError(w, CodeValidationFailed, "Gagal memeriksa kuota klub.", nil)
+					return
+				}
+			}
+		}
+
 		var claim gen.ClaimRequest
 		notFound := false
 		err = s.WithClub(r.Context(), clubID, func(ctx context.Context, q *gen.Queries) error {
@@ -157,7 +202,9 @@ func decideClaim(s *store.Store, status gen.ClaimStatus) http.HandlerFunc {
 		if status == gen.ClaimStatusApproved {
 			// Requester jadi anggota — role bawaan `member`, pengurus
 			// menaikkan lewat PATCH .../members/{userId}/role kalau perlu.
-			// Duplikat (sudah anggota) diabaikan, bukan galat.
+			// Duplikat (sudah anggota) diabaikan, bukan galat — kuota sudah
+			// dipastikan aman di atas, jadi kegagalan di sini cuma berarti
+			// dia sudah anggota lebih dulu lewat jalur lain.
 			_ = s.WithClub(r.Context(), clubID, func(ctx context.Context, q *gen.Queries) error {
 				_, err := q.CreateMembership(ctx, gen.CreateMembershipParams{
 					ClubID: clubID, UserID: claim.RequesterID, Role: gen.ClubRoleMember,

@@ -103,7 +103,7 @@
 
 <svelte:head>
 	<title>{club ? club.name : slug} · Kok Badminton</title>
-	<meta name="robots" content="noindex" />
+	<meta name="robots" content="noindex, nofollow" />
 </svelte:head>
 
 <div class="wrap">

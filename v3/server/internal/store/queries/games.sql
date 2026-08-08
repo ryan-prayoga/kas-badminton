@@ -90,6 +90,20 @@ RETURNING *;
 -- mencatat main ini yang boleh membatalkannya.
 DELETE FROM games WHERE id = $1 AND club_id = $2 AND recorded_by = $3;
 
+-- name: ListGamePlayersByUserForExport :many
+-- Ekspor data pribadi (§12 "Hapus akun & ekspor data pribadi", F9/4) —
+-- SEMUA baris tagihan orang ini di klub ini, apa pun statusnya (beda dari
+-- SumUnpaidByPayer/ListUnpaidGamePlayersByPayer di bawah yang cuma yang
+-- belum lunas). payer_id, BUKAN user_id — orang mau tahu apa yang harus
+-- DIA bayar, sekaligus baris yang dia MAIN tapi dibayarin orang lain
+-- muncul lewat query terpisah kalau nanti dibutuhkan (di luar lingkup
+-- F9/4: ekspor fokus ke kewajiban uang, bukan statistik main).
+SELECT gp.id, gp.game_id, gp.amount, gp.paid_at, gp.disputed_at, g.played_on
+FROM game_players gp
+JOIN games g ON g.id = gp.game_id
+WHERE gp.club_id = $1 AND gp.payer_id = $2
+ORDER BY g.played_on DESC;
+
 -- name: SumUnpaidByPayer :one
 -- Query "tagihanku" — satu index scan lewat game_players_unpaid_idx
 -- (indeks paling penting di seluruh skema, DDL.sql baris 371-379). NOT

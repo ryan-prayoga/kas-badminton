@@ -12,6 +12,40 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const anonymizeUser = `-- name: AnonymizeUser :one
+UPDATE users
+SET display_name = 'Pemain terhapus', phone = NULL, username = NULL,
+    status = 'disabled', updated_at = now(), version = version + 1
+WHERE id = $1
+RETURNING id, phone, username, display_name, photo_id, status, username_changed_at, created_at, updated_at, version
+`
+
+// Hapus akun sendiri (§12 "Hapus akun & ekspor data pribadi", §12.2, F9/4,
+// migrasi 00024). Transaksi keuangan (game_players, payments,
+// wallet_entries) SENGAJA TIDAK disentuh di sini — tetap menempel ke
+// user_id ini lewat FK, cuma nama yang muncul di JOIN berubah jadi
+// "Pemain terhapus" secara otomatis. status='disabled' (BUKAN
+// 'unclaimed') supaya tidak muncul lagi di SearchUnclaimedByClub — akun
+// yang sudah dihapus pemiliknya sendiri tidak boleh diklaim ulang orang
+// lain (lihat komentar migrasi 00024).
+func (q *Queries) AnonymizeUser(ctx context.Context, id uuid.UUID) (User, error) {
+	row := q.db.QueryRow(ctx, anonymizeUser, id)
+	var i User
+	err := row.Scan(
+		&i.ID,
+		&i.Phone,
+		&i.Username,
+		&i.DisplayName,
+		&i.PhotoID,
+		&i.Status,
+		&i.UsernameChangedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.Version,
+	)
+	return i, err
+}
+
 const createUnclaimedUser = `-- name: CreateUnclaimedUser :one
 INSERT INTO users (display_name, status)
 VALUES ($1, 'unclaimed')

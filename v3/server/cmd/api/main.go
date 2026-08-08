@@ -23,6 +23,7 @@ import (
 	"github.com/ryan-prayoga/kas-badminton/v3/server/internal/config"
 	httpapi "github.com/ryan-prayoga/kas-badminton/v3/server/internal/http"
 	"github.com/ryan-prayoga/kas-badminton/v3/server/internal/logging"
+	"github.com/ryan-prayoga/kas-badminton/v3/server/internal/metrics"
 	"github.com/ryan-prayoga/kas-badminton/v3/server/internal/notify"
 	"github.com/ryan-prayoga/kas-badminton/v3/server/internal/push"
 	"github.com/ryan-prayoga/kas-badminton/v3/server/internal/realtime"
@@ -115,7 +116,7 @@ func run() error {
 	overdueScanner := notify.NewOverdueScanner(s, logger)
 	go overdueScanner.Run(ctx, time.Hour)
 
-	router, err := newRouter(logger, s, bus, notifier, wa, challenges, vapidPublicKey)
+	router, err := newRouter(logger, pool, s, bus, notifier, wa, challenges, vapidPublicKey)
 	if err != nil {
 		return err
 	}
@@ -150,14 +151,22 @@ func run() error {
 	return nil
 }
 
-func newRouter(logger *slog.Logger, s *store.Store, bus *realtime.Bus, notifier notify.Notifier, wa *webauthn.WebAuthn, challenges *auth.ChallengeStore, vapidPublicKey string) (http.Handler, error) {
+func newRouter(logger *slog.Logger, pool *pgxpool.Pool, s *store.Store, bus *realtime.Bus, notifier notify.Notifier, wa *webauthn.WebAuthn, challenges *auth.ChallengeStore, vapidPublicKey string) (http.Handler, error) {
 	r := chi.NewRouter()
 	r.Use(middleware.RequestID)
 	r.Use(middleware.RealIP)
 	r.Use(slogRequestLogger(logger))
 	r.Use(middleware.Recoverer)
 
+	// /healthz: proses hidup, tidak cek dependensi (dipakai orkestrator
+	// buat "restart apa tidak"). /readyz: proses SIAP menerima trafik,
+	// cek DB (dipakai load balancer/reverse proxy buat "alirkan trafik
+	// apa tidak") — beda tujuan, PLAN.md §12 "endpoint health/readiness"
+	// sebut keduanya secara eksplisit sebagai dua hal.
 	r.Get("/healthz", healthHandler)
+	r.Get("/readyz", readyzHandler(pool))
+	r.Get("/metrics", metricsHandler)
+
 	httpapi.Mount(r, s, bus, notifier, wa, challenges, vapidPublicKey)
 
 	spa, err := spaHandler()
@@ -174,6 +183,34 @@ func healthHandler(w http.ResponseWriter, _ *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	_, _ = w.Write([]byte(`{"status":"ok"}`))
+}
+
+// readyzHandler — ping DB dengan timeout pendek. Timeout sengaja singkat
+// (2s): kalau DB butuh lebih lama dari itu buat menjawab ping kosong,
+// instance ini memang belum layak menerima trafik baru.
+func readyzHandler(pool *pgxpool.Pool) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		ctx, cancel := context.WithTimeout(r.Context(), 2*time.Second)
+		defer cancel()
+		w.Header().Set("Content-Type", "application/json")
+		if err := pool.Ping(ctx); err != nil {
+			w.WriteHeader(http.StatusServiceUnavailable)
+			_, _ = w.Write([]byte(`{"status":"not_ready"}`))
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"status":"ready"}`))
+	}
+}
+
+// metricsHandler — teks exposition Prometheus (internal/metrics, F9/3).
+// TIDAK dipasang di belakang auth apa pun — di produksi ini harus
+// ditutup di level reverse proxy (Caddy/nginx, jaringan internal saja),
+// sama seperti /healthz; mengunci lewat kode di sini cuma menambah
+// friksi buat scraper tanpa manfaat, jaringan yang jadi batasnya.
+func metricsHandler(w http.ResponseWriter, _ *http.Request) {
+	w.Header().Set("Content-Type", "text/plain; version=0.0.4")
+	metrics.WriteText(w)
 }
 
 // spaHandler menyajikan SPA statis yang di-embed. NotFound jatuh ke
@@ -215,22 +252,45 @@ func cloneWithPath(r *http.Request, path string) *http.Request {
 // slogRequestLogger loggat tiap request lewat slog (bukan log/std chi
 // default) supaya format ikut konsisten dengan seluruh app: teks di dev,
 // JSON di prod (internal/logging), dengan request ID dari middleware.RequestID.
+//
+// Level naik dengan status (F9/3, PLAN.md §12 "pelacakan galat" — tanpa
+// APM eksternal di skala ~10 klub, §4.2, log terstruktur yang bisa
+// disaring per level INI alat diagnosanya, superadmin sengaja tidak boleh
+// intip isi klub jadi ini juga satu-satunya jendela buat operator):
+// 5xx = Error (server yang salah), 4xx = Warn (klien/pemakaian, bukan
+// selalu bug tapi layak diperhatikan polanya), selain itu Info biasa.
+// metrics.Observe (internal/metrics) dipanggil di sini juga — SATU
+// tempat yang tahu status akhir tiap request, dipakai dua alat sekaligus
+// (log buat "apa yang terjadi", metrik buat "berapa banyak").
 func slogRequestLogger(logger *slog.Logger) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			start := time.Now()
 			ww := middleware.NewWrapResponseWriter(w, r.ProtoMajor)
 
+			metrics.InFlightStart()
 			next.ServeHTTP(ww, r)
+			metrics.InFlightEnd()
 
-			logger.Info("request",
+			status := ww.Status()
+			metrics.Observe(status)
+
+			args := []any{
 				"method", r.Method,
 				"path", r.URL.Path,
-				"status", ww.Status(),
+				"status", status,
 				"bytes", ww.BytesWritten(),
 				"duration_ms", time.Since(start).Milliseconds(),
 				"request_id", middleware.GetReqID(r.Context()),
-			)
+			}
+			switch {
+			case status >= 500:
+				logger.Error("request", args...)
+			case status >= 400:
+				logger.Warn("request", args...)
+			default:
+				logger.Info("request", args...)
+			}
 		})
 	}
 }

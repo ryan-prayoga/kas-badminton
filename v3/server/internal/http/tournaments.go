@@ -811,12 +811,24 @@ func handleCreateTournament(s *store.Store) http.HandlerFunc {
 			// Peserta dari luar klub jadi anggota is_tournament_guest
 			// (§8.1) — supaya kena tagihan iuran/kok & muncul di daftar
 			// anggota bertanda "Tamu turnamen", bukan pengguna hantu.
+			// Kuota anggota_per_klub (§12.1, F9/3) dicek TIAP kali sebelum
+			// nambah — bukan sekali di depan pakai hitungan basi, karena
+			// loop ini sendiri bisa menaikkan jumlah anggota beberapa kali
+			// berturut-turut dalam satu request (banyak peserta luar klub
+			// sekaligus).
 			for _, uid := range userOrder {
 				_, err := q.GetMembership(ctx, gen.GetMembershipParams{ClubID: clubID, UserID: uid})
 				if err == nil {
 					continue
 				}
 				if !errors.Is(err, pgx.ErrNoRows) {
+					return err
+				}
+				club, err := q.GetClub(ctx, clubID)
+				if err != nil {
+					return err
+				}
+				if err := checkMemberQuota(ctx, q, club); err != nil {
 					return err
 				}
 				if _, err := q.CreateTournamentGuestMembership(ctx, gen.CreateTournamentGuestMembershipParams{
@@ -847,6 +859,10 @@ func handleCreateTournament(s *store.Store) http.HandlerFunc {
 			var ve *validationErr
 			if errors.As(err, &ve) {
 				writeError(w, CodeValidationFailed, ve.msg, nil)
+				return
+			}
+			if msg, ok := asQuotaExceeded(err); ok {
+				writeError(w, CodeQuotaExceeded, msg, nil)
 				return
 			}
 			writeError(w, CodeValidationFailed, "Gagal membuat turnamen.", nil)

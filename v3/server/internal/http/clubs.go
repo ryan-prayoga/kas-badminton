@@ -95,6 +95,14 @@ func handleCreateClub(s *store.Store) http.HandlerFunc {
 			writeError(w, CodeValidationFailed, "Nama klub belum diisi.", nil)
 			return
 		}
+		if err := checkClubsPerUserQuota(r.Context(), s, userID); err != nil {
+			if msg, ok := asQuotaExceeded(err); ok {
+				writeError(w, CodeQuotaExceeded, msg, nil)
+				return
+			}
+			writeError(w, CodeValidationFailed, "Gagal memeriksa kuota klub.", nil)
+			return
+		}
 
 		clubID := uuid.New()
 		var club gen.Club

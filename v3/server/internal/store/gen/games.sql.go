@@ -416,6 +416,62 @@ func (q *Queries) ListGamePlayersByGames(ctx context.Context, gameIds []uuid.UUI
 	return items, nil
 }
 
+const listGamePlayersByUserForExport = `-- name: ListGamePlayersByUserForExport :many
+SELECT gp.id, gp.game_id, gp.amount, gp.paid_at, gp.disputed_at, g.played_on
+FROM game_players gp
+JOIN games g ON g.id = gp.game_id
+WHERE gp.club_id = $1 AND gp.payer_id = $2
+ORDER BY g.played_on DESC
+`
+
+type ListGamePlayersByUserForExportParams struct {
+	ClubID  uuid.UUID `json:"club_id"`
+	PayerID uuid.UUID `json:"payer_id"`
+}
+
+type ListGamePlayersByUserForExportRow struct {
+	ID         uuid.UUID          `json:"id"`
+	GameID     uuid.UUID          `json:"game_id"`
+	Amount     int64              `json:"amount"`
+	PaidAt     pgtype.Timestamptz `json:"paid_at"`
+	DisputedAt pgtype.Timestamptz `json:"disputed_at"`
+	PlayedOn   pgtype.Date        `json:"played_on"`
+}
+
+// Ekspor data pribadi (§12 "Hapus akun & ekspor data pribadi", F9/4) —
+// SEMUA baris tagihan orang ini di klub ini, apa pun statusnya (beda dari
+// SumUnpaidByPayer/ListUnpaidGamePlayersByPayer di bawah yang cuma yang
+// belum lunas). payer_id, BUKAN user_id — orang mau tahu apa yang harus
+// DIA bayar, sekaligus baris yang dia MAIN tapi dibayarin orang lain
+// muncul lewat query terpisah kalau nanti dibutuhkan (di luar lingkup
+// F9/4: ekspor fokus ke kewajiban uang, bukan statistik main).
+func (q *Queries) ListGamePlayersByUserForExport(ctx context.Context, arg ListGamePlayersByUserForExportParams) ([]ListGamePlayersByUserForExportRow, error) {
+	rows, err := q.db.Query(ctx, listGamePlayersByUserForExport, arg.ClubID, arg.PayerID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListGamePlayersByUserForExportRow{}
+	for rows.Next() {
+		var i ListGamePlayersByUserForExportRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.GameID,
+			&i.Amount,
+			&i.PaidAt,
+			&i.DisputedAt,
+			&i.PlayedOn,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listGameScoresByGame = `-- name: ListGameScoresByGame :many
 SELECT game_id, game_no, score_a, score_b FROM game_scores WHERE game_id = $1 ORDER BY game_no
 `

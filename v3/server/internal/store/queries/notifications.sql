@@ -83,6 +83,11 @@ SELECT * FROM push_subscriptions WHERE user_id = $1;
 -- name: DeletePushSubscription :exec
 DELETE FROM push_subscriptions WHERE id = $1 AND user_id = $2;
 
+-- name: DeleteAllPushSubscriptionsByUser :exec
+-- Hapus akun (§12, F9/4) — perangkat yang masih terpasang berhenti dapat
+-- push begitu akun dihapus, sama semangat RevokeAllSessionsByUser.
+DELETE FROM push_subscriptions WHERE user_id = $1;
+
 -- name: DeletePushSubscriptionByEndpoint :exec
 -- Dipakai Dispatcher pas push.ErrSubscriptionGone (404/410) — endpoint
 -- yang menentukan identitas langganan di sisi browser, bukan id kita.

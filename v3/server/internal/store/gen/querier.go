@@ -12,6 +12,15 @@ import (
 )
 
 type Querier interface {
+	// Hapus akun sendiri (§12 "Hapus akun & ekspor data pribadi", §12.2, F9/4,
+	// migrasi 00024). Transaksi keuangan (game_players, payments,
+	// wallet_entries) SENGAJA TIDAK disentuh di sini — tetap menempel ke
+	// user_id ini lewat FK, cuma nama yang muncul di JOIN berubah jadi
+	// "Pemain terhapus" secara otomatis. status='disabled' (BUKAN
+	// 'unclaimed') supaya tidak muncul lagi di SearchUnclaimedByClub — akun
+	// yang sudah dihapus pemiliknya sendiri tidak boleh diklaim ulang orang
+	// lain (lihat komentar migrasi 00024).
+	AnonymizeUser(ctx context.Context, id uuid.UUID) (User, error)
 	// Pemain BATALKAN klaim sendiri (API.md §4 "Batalkan klaim sendiri
 	// sebelum diverifikasi") — user_id di WHERE memastikan cuma pengklaim
 	// sendiri yang bisa, verified_by tetap NULL (lihat komentar RejectPayment).
@@ -44,6 +53,9 @@ type Querier interface {
 	// RLS tetap menahan meski filter aplikasinya "benar" (§6.2 lapisan
 	// ketiga).
 	CountKokTypesByClub(ctx context.Context, clubID uuid.UUID) (int64, error)
+	// Kuota anggota_per_klub (PLAN.md §12.1, F9/3) — dicek sebelum
+	// CreateMembership/CreateTournamentGuestMembership, bukan cuma ditampilkan.
+	CountMembers(ctx context.Context, clubID uuid.UUID) (int64, error)
 	CountQueuedNotifications(ctx context.Context) (int64, error)
 	CountQueuedNotificationsByChannel(ctx context.Context) ([]CountQueuedNotificationsByChannelRow, error)
 	// Rate limit kirim ulang (PLAN.md §7.2) — dihitung dari SEMUA kode yang
@@ -141,6 +153,9 @@ type Querier interface {
 	// DeleteWebauthnCredentialsBySession).
 	CreateWebauthnCredential(ctx context.Context, arg CreateWebauthnCredentialParams) (WebauthnCredential, error)
 	DecideClaimRequest(ctx context.Context, arg DecideClaimRequestParams) (ClaimRequest, error)
+	// Hapus akun (§12, F9/4) — perangkat yang masih terpasang berhenti dapat
+	// push begitu akun dihapus, sama semangat RevokeAllSessionsByUser.
+	DeleteAllPushSubscriptionsByUser(ctx context.Context, userID uuid.UUID) error
 	// Pemindahan nomor (§7.2.1) — dicabut total, bukan cuma per-sesi.
 	DeleteAllWebauthnCredentialsByUser(ctx context.Context, userID uuid.UUID) error
 	DeleteMatchGames(ctx context.Context, matchID uuid.UUID) error
@@ -285,6 +300,14 @@ type Querier interface {
 	ListGameKoksByGame(ctx context.Context, gameID uuid.UUID) ([]GameKok, error)
 	ListGamePlayersByGame(ctx context.Context, gameID uuid.UUID) ([]GamePlayer, error)
 	ListGamePlayersByGames(ctx context.Context, gameIds []uuid.UUID) ([]GamePlayer, error)
+	// Ekspor data pribadi (§12 "Hapus akun & ekspor data pribadi", F9/4) —
+	// SEMUA baris tagihan orang ini di klub ini, apa pun statusnya (beda dari
+	// SumUnpaidByPayer/ListUnpaidGamePlayersByPayer di bawah yang cuma yang
+	// belum lunas). payer_id, BUKAN user_id — orang mau tahu apa yang harus
+	// DIA bayar, sekaligus baris yang dia MAIN tapi dibayarin orang lain
+	// muncul lewat query terpisah kalau nanti dibutuhkan (di luar lingkup
+	// F9/4: ekspor fokus ke kewajiban uang, bukan statistik main).
+	ListGamePlayersByUserForExport(ctx context.Context, arg ListGamePlayersByUserForExportParams) ([]ListGamePlayersByUserForExportRow, error)
 	ListGameScoresByGame(ctx context.Context, gameID uuid.UUID) ([]GameScore, error)
 	// Cursor per tanggal (§4.2 "daftar main dimuat per bulan"; API.md §0
 	// paginasi cursor, bukan offset). sqlc.narg(before) NULL = dari yang
@@ -316,6 +339,9 @@ type Querier interface {
 	// sudah bilang "sudah transfer", tidak perlu ditagih ulang lewat WA.
 	ListOverdueDebtorsByClub(ctx context.Context, clubID uuid.UUID) ([]ListOverdueDebtorsByClubRow, error)
 	ListPaymentAllocationsByPayment(ctx context.Context, paymentID uuid.UUID) ([]PaymentAllocation, error)
+	// Ekspor data pribadi (§12, F9/4) — riwayat klaim "sudah transfer" orang
+	// ini di klub ini, semua status (pending/verified/rejected).
+	ListPaymentsByUserForExport(ctx context.Context, arg ListPaymentsByUserForExportParams) ([]Payment, error)
 	ListPendingClaimRequests(ctx context.Context, clubID uuid.UUID) ([]ClaimRequest, error)
 	// "Rekap tagihan per nama" (§6.3) — SENGAJA cuma total per orang, bukan
 	// baris per main: rincian tanggal/jumlah partai tetap privat, publik cuma

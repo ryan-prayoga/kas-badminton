@@ -1,12 +1,15 @@
 package httpapi
 
 import (
+	"time"
+
 	"github.com/go-chi/chi/v5"
 	"github.com/go-webauthn/webauthn/webauthn"
 
 	"github.com/ryan-prayoga/kas-badminton/v3/server/internal/auth"
 	"github.com/ryan-prayoga/kas-badminton/v3/server/internal/notify"
 	"github.com/ryan-prayoga/kas-badminton/v3/server/internal/perm"
+	"github.com/ryan-prayoga/kas-badminton/v3/server/internal/ratelimit"
 	"github.com/ryan-prayoga/kas-badminton/v3/server/internal/realtime"
 	"github.com/ryan-prayoga/kas-badminton/v3/server/internal/store"
 )
@@ -18,7 +21,21 @@ import (
 // cmd/api/main.go) — klien lihat kunci kosong berarti push tidak
 // tersedia di lingkungan ini, bukan galat.
 func Mount(r chi.Router, s *store.Store, bus *realtime.Bus, notifier notify.Notifier, wa *webauthn.WebAuthn, challenges *auth.ChallengeStore, vapidPublicKey string) {
+	// Rate limit umum (PLAN.md §12, F9/3) — dua lapis. IP di sini, MELIPUTI
+	// seluruh /api/v1 termasuk yang tanpa sesi (/join, /auth/otp/request,
+	// halaman publik F9/1); user di RequireAuth (middleware_auth.go),
+	// cuma jalan buat rute yang memang butuh sesi. Angkanya longgar
+	// sengaja (§12.1 "melindungi sumber daya bersama, bukan membatasi
+	// pemakaian wajar") — 300/menit per IP, 600/menit per user (device
+	// yang login di banyak tab + outbox offline yang mengejar ketinggalan
+	// bisa meledak sesaat, jangan sampai kena limit dalam pemakaian normal).
+	ipLimiter := ratelimit.New(300, time.Minute)
+	userLimiter := ratelimit.New(600, time.Minute)
+	go sweepLimiters(ipLimiter, userLimiter)
+
 	r.Route("/api/v1", func(r chi.Router) {
+		r.Use(RateLimitByIP(ipLimiter))
+
 		// Publik, tanpa auth — QR tembok/tautan grup (§6.4). clubId belum
 		// diketahui, itulah gunanya token (join.go resolveJoinToken).
 		r.Route("/join/{token}", func(r chi.Router) {
@@ -49,7 +66,7 @@ func Mount(r chi.Router, s *store.Store, bus *realtime.Bus, notifier notify.Noti
 			r.Post("/passkey/login/verify", handlePasskeyLoginVerify(s, wa, challenges))
 
 			r.Group(func(r chi.Router) {
-				r.Use(RequireAuth(s))
+				r.Use(RequireAuth(s, userLimiter))
 				r.Post("/pin/set", handlePinSet(s))
 				r.Post("/passkey/register/options", handlePasskeyRegisterOptions(s, wa, challenges))
 				r.Post("/passkey/register/verify", handlePasskeyRegisterVerify(s, wa, challenges))
@@ -61,10 +78,17 @@ func Mount(r chi.Router, s *store.Store, bus *realtime.Bus, notifier notify.Noti
 		})
 
 		r.Group(func(r chi.Router) {
-			r.Use(RequireAuth(s))
+			r.Use(RequireAuth(s, userLimiter))
 
 			r.Get("/events", handleEvents(s, bus))
 			r.Get("/me", handleGetMe(s))
+			// Ekspor & hapus akun (§12 "Hapus akun & ekspor data pribadi",
+			// F9/4) — lintas klub sama seperti /me, bukan /clubs/{clubId}/....
+			r.Get("/me/export", handleExportMe(s))
+			r.Group(func(r chi.Router) {
+				r.Use(RequireIdempotency(s))
+				r.Post("/me/delete", handleDeleteMe(s))
+			})
 
 			// Pusat notifikasi in-app, preferensi, langganan push (§10, F8)
 			// — lintas klub, bukan /clubs/{clubId}/... (notifications.go).
@@ -280,4 +304,19 @@ func Mount(r chi.Router, s *store.Store, bus *realtime.Bus, notifier notify.Noti
 			})
 		})
 	})
+}
+
+// sweepLimiters buang entri limiter yang sudah lama diam (ratelimit.go
+// komentar Sweep) supaya peta in-memory tidak tumbuh selamanya di proses
+// yang jalan berbulan-bulan. Interval 10 menit — jauh lebih longgar dari
+// window limiter (1 menit) sendiri, cuma soal kebersihan memori bukan
+// soal ketepatan limit.
+func sweepLimiters(limiters ...*ratelimit.Limiter) {
+	ticker := time.NewTicker(10 * time.Minute)
+	defer ticker.Stop()
+	for now := range ticker.C {
+		for _, l := range limiters {
+			l.Sweep(now)
+		}
+	}
 }

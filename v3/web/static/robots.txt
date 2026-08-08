@@ -1,3 +1,9 @@
-# allow crawling everything by default
+# Seluruh app di balik login kecuali halaman publik klub (/{slug}), dan
+# bahkan itu SENGAJA tidak boleh diindeks (PLAN.md §12: nama anggota —
+# termasuk pemain tamu yang belum klaim akun — tampil di sana; orang
+# mendaftar ke klub badminton, bukan ke hasil pencarian Google atas
+# namanya). Tidak ada permukaan di app ini yang butuh SEO (§4.1), jadi
+# tutup semuanya di sini SEKALIGUS per-halaman lewat <meta name="robots">
+# (dua lapis, bukan mengandalkan satu-satunya).
 User-agent: *
-Disallow:
+Disallow: /

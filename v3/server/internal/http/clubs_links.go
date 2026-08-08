@@ -94,6 +94,15 @@ func handleCreateClubLink(s *store.Store) http.HandlerFunc {
 
 		var link gen.ClubLink
 		err = s.WithClub(r.Context(), clubID, func(ctx context.Context, q *gen.Queries) error {
+			if purpose == gen.LinkPurposePoster {
+				club, err := q.GetClub(ctx, clubID)
+				if err != nil {
+					return err
+				}
+				if err := checkPosterQuota(ctx, q, club); err != nil {
+					return err
+				}
+			}
 			var err error
 			link, err = q.CreateClubLink(ctx, gen.CreateClubLinkParams{
 				ClubID: clubID, Purpose: purpose, Token: token,
@@ -102,6 +111,10 @@ func handleCreateClubLink(s *store.Store) http.HandlerFunc {
 			return err
 		})
 		if err != nil {
+			if msg, ok := asQuotaExceeded(err); ok {
+				writeError(w, CodeQuotaExceeded, msg, nil)
+				return
+			}
 			writeError(w, CodeValidationFailed, "Gagal membuat tautan.", nil)
 			return
 		}

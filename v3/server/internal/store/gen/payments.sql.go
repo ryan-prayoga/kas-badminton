@@ -315,6 +315,51 @@ func (q *Queries) ListPaymentAllocationsByPayment(ctx context.Context, paymentID
 	return items, nil
 }
 
+const listPaymentsByUserForExport = `-- name: ListPaymentsByUserForExport :many
+SELECT id, club_id, user_id, amount, status, method, claimed_at, claimed_by, verified_at, verified_by, note, created_at, version FROM payments WHERE club_id = $1 AND user_id = $2 ORDER BY created_at DESC
+`
+
+type ListPaymentsByUserForExportParams struct {
+	ClubID uuid.UUID `json:"club_id"`
+	UserID uuid.UUID `json:"user_id"`
+}
+
+// Ekspor data pribadi (§12, F9/4) — riwayat klaim "sudah transfer" orang
+// ini di klub ini, semua status (pending/verified/rejected).
+func (q *Queries) ListPaymentsByUserForExport(ctx context.Context, arg ListPaymentsByUserForExportParams) ([]Payment, error) {
+	rows, err := q.db.Query(ctx, listPaymentsByUserForExport, arg.ClubID, arg.UserID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []Payment{}
+	for rows.Next() {
+		var i Payment
+		if err := rows.Scan(
+			&i.ID,
+			&i.ClubID,
+			&i.UserID,
+			&i.Amount,
+			&i.Status,
+			&i.Method,
+			&i.ClaimedAt,
+			&i.ClaimedBy,
+			&i.VerifiedAt,
+			&i.VerifiedBy,
+			&i.Note,
+			&i.CreatedAt,
+			&i.Version,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const markPaymentGamePlayersPaid = `-- name: MarkPaymentGamePlayersPaid :many
 UPDATE game_players
 SET paid_at = now(), paid_by = $1

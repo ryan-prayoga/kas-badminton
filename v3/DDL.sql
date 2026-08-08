@@ -123,9 +123,14 @@ CREATE TABLE users (
   updated_at   timestamptz NOT NULL DEFAULT now(),
   version      bigint NOT NULL DEFAULT 1,
 
-  -- Akun yang sudah diklaim wajib punya nomor; yang belum, wajib tidak punya.
+  -- Akun yang sudah diklaim wajib punya nomor; yang belum (unclaimed) atau
+  -- sudah dihapus pemiliknya sendiri (disabled, §12 "Hapus akun & ekspor
+  -- data pribadi" — migrasi 00024) wajib tidak punya.
   CONSTRAINT users_claimed_has_phone
-    CHECK ((status = 'unclaimed' AND phone IS NULL) OR (status <> 'unclaimed' AND phone IS NOT NULL))
+    CHECK (
+      (status IN ('unclaimed', 'disabled') AND phone IS NULL)
+      OR (status NOT IN ('unclaimed', 'disabled') AND phone IS NOT NULL)
+    )
 );
 
 CREATE INDEX users_name_trgm_idx ON users USING gin (display_name gin_trgm_ops);

@@ -111,6 +111,17 @@ func (q *Queries) CreatePushSubscription(ctx context.Context, arg CreatePushSubs
 	return i, err
 }
 
+const deleteAllPushSubscriptionsByUser = `-- name: DeleteAllPushSubscriptionsByUser :exec
+DELETE FROM push_subscriptions WHERE user_id = $1
+`
+
+// Hapus akun (§12, F9/4) — perangkat yang masih terpasang berhenti dapat
+// push begitu akun dihapus, sama semangat RevokeAllSessionsByUser.
+func (q *Queries) DeleteAllPushSubscriptionsByUser(ctx context.Context, userID uuid.UUID) error {
+	_, err := q.db.Exec(ctx, deleteAllPushSubscriptionsByUser, userID)
+	return err
+}
+
 const deletePushSubscription = `-- name: DeletePushSubscription :exec
 DELETE FROM push_subscriptions WHERE id = $1 AND user_id = $2
 `

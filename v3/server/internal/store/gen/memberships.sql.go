@@ -12,6 +12,19 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const countMembers = `-- name: CountMembers :one
+SELECT COUNT(*)::bigint FROM memberships WHERE club_id = $1 AND left_at IS NULL
+`
+
+// Kuota anggota_per_klub (PLAN.md §12.1, F9/3) — dicek sebelum
+// CreateMembership/CreateTournamentGuestMembership, bukan cuma ditampilkan.
+func (q *Queries) CountMembers(ctx context.Context, clubID uuid.UUID) (int64, error) {
+	row := q.db.QueryRow(ctx, countMembers, clubID)
+	var column_1 int64
+	err := row.Scan(&column_1)
+	return column_1, err
+}
+
 const createMembership = `-- name: CreateMembership :one
 INSERT INTO memberships (club_id, user_id, role)
 VALUES ($1, $2, $3)

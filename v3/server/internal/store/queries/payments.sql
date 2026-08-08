@@ -20,6 +20,11 @@ WHERE gp.club_id = sqlc.arg(club_id) AND gp.payer_id = sqlc.arg(payer_id)
     WHERE pa.game_player_id = gp.id AND p.status = 'pending'
   );
 
+-- name: ListPaymentsByUserForExport :many
+-- Ekspor data pribadi (§12, F9/4) — riwayat klaim "sudah transfer" orang
+-- ini di klub ini, semua status (pending/verified/rejected).
+SELECT * FROM payments WHERE club_id = $1 AND user_id = $2 ORDER BY created_at DESC;
+
 -- name: CreatePayment :one
 INSERT INTO payments (club_id, user_id, amount, status, method, claimed_at, claimed_by, note)
 VALUES ($1, $2, $3, 'pending', $4, now(), $5, $6)

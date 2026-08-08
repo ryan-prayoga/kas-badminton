@@ -31,6 +31,21 @@ INSERT INTO users (display_name, status)
 VALUES ($1, 'unclaimed')
 RETURNING *;
 
+-- name: AnonymizeUser :one
+-- Hapus akun sendiri (§12 "Hapus akun & ekspor data pribadi", §12.2, F9/4,
+-- migrasi 00024). Transaksi keuangan (game_players, payments,
+-- wallet_entries) SENGAJA TIDAK disentuh di sini — tetap menempel ke
+-- user_id ini lewat FK, cuma nama yang muncul di JOIN berubah jadi
+-- "Pemain terhapus" secara otomatis. status='disabled' (BUKAN
+-- 'unclaimed') supaya tidak muncul lagi di SearchUnclaimedByClub — akun
+-- yang sudah dihapus pemiliknya sendiri tidak boleh diklaim ulang orang
+-- lain (lihat komentar migrasi 00024).
+UPDATE users
+SET display_name = 'Pemain terhapus', phone = NULL, username = NULL,
+    status = 'disabled', updated_at = now(), version = version + 1
+WHERE id = $1
+RETURNING *;
+
 -- name: CreateUser :one
 -- Dipanggil dari VerifyOTP (internal/auth/otp.go) begitu nomor terverifikasi
 -- — langsung 'active' karena OTP SUDAH membuktikan pemilik nomor

@@ -25,6 +25,11 @@ WHERE m.club_id = $1 AND m.left_at IS NULL
        OR u.username ILIKE '%' || sqlc.narg(q) || '%')
 ORDER BY u.display_name;
 
+-- name: CountMembers :one
+-- Kuota anggota_per_klub (PLAN.md §12.1, F9/3) — dicek sebelum
+-- CreateMembership/CreateTournamentGuestMembership, bukan cuma ditampilkan.
+SELECT COUNT(*)::bigint FROM memberships WHERE club_id = $1 AND left_at IS NULL;
+
 -- name: ListVerifiersByClub :many
 -- Siapa yang harus diberi tahu saat ada permintaan klaim baru (§10.1
 -- "permintaan klaim masuk"). Bukan perm.Resolve penuh (role sementara

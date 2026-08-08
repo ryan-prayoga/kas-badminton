@@ -101,6 +101,13 @@ func handleCreateGuestMember(s *store.Store) http.HandlerFunc {
 
 		var dto memberDTO
 		err := s.WithClub(r.Context(), clubID, func(ctx context.Context, q *gen.Queries) error {
+			club, err := q.GetClub(ctx, clubID)
+			if err != nil {
+				return err
+			}
+			if err := checkMemberQuota(ctx, q, club); err != nil {
+				return err
+			}
 			u, err := q.CreateUnclaimedUser(ctx, name)
 			if err != nil {
 				return err
@@ -121,6 +128,10 @@ func handleCreateGuestMember(s *store.Store) http.HandlerFunc {
 			return nil
 		})
 		if err != nil {
+			if msg, ok := asQuotaExceeded(err); ok {
+				writeError(w, CodeQuotaExceeded, msg, nil)
+				return
+			}
 			writeError(w, CodeValidationFailed, "Gagal membuat pemain tamu.", nil)
 			return
 		}
