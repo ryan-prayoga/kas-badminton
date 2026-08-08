@@ -1,8 +1,7 @@
 <!--
-	Beranda (F5/3, PLAN.md §5.5) — tagihanku sebagai hero, lingkupnya klub
-	aktif saja (bukan gabungan lintas klub, §5.5.1). "Bayar sekarang" masih
-	stub: QRIS/payments-claim baru dibangun F6, jadi tombolnya jujur bilang
-	belum tersedia alih-alih pura-pura jalan.
+	Beranda (F5/3 + F6/5, PLAN.md §5.5) — tagihanku sebagai hero, lingkupnya
+	klub aktif saja (bukan gabungan lintas klub, §5.5.1). "Bayar sekarang"
+	kini beneran jalan (F6/5 PayDialog: klaim + QRIS statis/dinamis).
 -->
 <script lang="ts">
 	import { onMount } from 'svelte';
@@ -18,15 +17,24 @@
 	} from '$lib/stores/club.svelte';
 	import { myBill, isBillLoading, loadMyBill } from '$lib/stores/bill.svelte';
 	import { setAutoDeduct } from '$lib/api/clubs';
+	import { cancelPayment } from '$lib/api/payments';
 	import { listRecentGames, type GameSummary } from '$lib/api/games';
 	import { AppShell, Button, Card, Badge, toast } from '$lib/components/ui';
 	import ClubHeaderBar from '$lib/components/ClubHeaderBar.svelte';
 	import CreateClubDialog from '$lib/components/CreateClubDialog.svelte';
+	import PayDialog from '$lib/components/PayDialog.svelte';
 	import { rupiah, tanggalPendek } from '$lib/format';
 
 	let createOpen = $state(false);
+	let payOpen = $state(false);
 	let recentGames = $state<GameSummary[]>([]);
 	let togglingAutoDeduct = $state(false);
+	let cancellingPaymentId = $state('');
+	const STATUS_LABEL: Record<string, string> = {
+		unpaid: 'Belum lunas',
+		pending_review: 'Menunggu dicek bendahara',
+		disputed: 'Disanggah'
+	};
 	// Gagal muat profil (§0 galat) HARUS beda dari "memang belum punya
 	// klub" — kalau digabung, satu koneksi putus bikin layarnya bohong
 	// bilang "belum punya klub" padahal klubnya ada (PLAN.md §5.6.1 nada
@@ -86,7 +94,26 @@
 	}
 
 	function bayarSekarang() {
-		toast('Pembayaran online segera hadir — transfer manual ke pengurus dulu ya.', { tone: 'netral' });
+		payOpen = true;
+	}
+
+	function unpaidItemsForDialog() {
+		return myBill()?.items.filter((i) => i.status === 'unpaid') ?? [];
+	}
+
+	async function batalkanKlaim(paymentId: string) {
+		const club = activeClub();
+		if (!club) return;
+		cancellingPaymentId = paymentId;
+		try {
+			await cancelPayment(club.club_id, paymentId);
+			toast('Klaim dibatalkan.', { tone: 'netral' });
+			await loadMyBill(club.club_id);
+		} catch (e) {
+			toast(e instanceof ApiError ? e.message : 'Gagal membatalkan klaim.', { tone: 'hancur' });
+		} finally {
+			cancellingPaymentId = '';
+		}
 	}
 
 	async function logout() {
@@ -148,6 +175,7 @@
 	{@const club = activeClub()}
 	{@const bill = myBill()}
 	{@const others = otherMemberships()}
+	{@const unpaidItems = bill?.items.filter((i) => i.status === 'unpaid') ?? []}
 
 	{#snippet clubHeader()}
 		<ClubHeaderBar onSwitch={pickClub} onCreateClub={() => (createOpen = true)} />
@@ -169,14 +197,48 @@
 							<p class="hero-label">Tagihanku</p>
 							<p class="hero-amount display tabular">{rupiah(bill.total_owed)}</p>
 							<p class="hero-ctx">
-								{bill.items.length} main belum lunas
+								{unpaidItems.length} main belum lunas
+								{#if bill.items.some((i) => i.status === 'pending_review')}· ada yang menunggu dicek{/if}
 								{#if bill.items.some((i) => i.status === 'disputed')}· ada yang disanggah{/if}
 							</p>
-							<Button variant="primary" size="lg" fullWidth onclick={bayarSekarang}>Bayar sekarang</Button>
+							<Button
+								variant="primary"
+								size="lg"
+								fullWidth
+								disabled={unpaidItems.length === 0}
+								onclick={bayarSekarang}>Bayar sekarang</Button
+							>
 						{:else}
 							<p class="hero-label">Tagihanku</p>
 							<p class="hero-clear display">Semua beres 🎉</p>
 							<p class="hero-ctx">Gak ada tagihan nunggak di {club!.club_name}.</p>
+						{/if}
+
+						{#if bill.items.length > 0}
+							<div class="bill-items">
+								{#each bill.items as item (item.id)}
+									<div class="bill-item">
+										<span class="bi-date">{tanggalPendek(item.played_on)}</span>
+										<Badge
+											tone={item.status === 'unpaid'
+												? 'belum'
+												: item.status === 'pending_review'
+													? 'accent'
+													: 'netral'}>{STATUS_LABEL[item.status]}</Badge
+										>
+										<span class="bi-amount tabular">{rupiah(item.amount)}</span>
+										{#if item.status === 'pending_review' && item.payment_id}
+											<button
+												class="bi-cancel"
+												disabled={cancellingPaymentId === item.payment_id}
+												onclick={() => batalkanKlaim(item.payment_id!)}
+											>
+												{cancellingPaymentId === item.payment_id ? '…' : 'Batalkan'}
+											</button>
+										{/if}
+									</div>
+								{/each}
+							</div>
 						{/if}
 					{/if}
 				</Card>
@@ -232,6 +294,14 @@
 {/if}
 
 <CreateClubDialog bind:open={createOpen} onCreated={(clubId) => loadClubData(clubId)} />
+{#if activeClub()}
+	<PayDialog
+		bind:open={payOpen}
+		clubId={activeClub()!.club_id}
+		items={unpaidItemsForDialog()}
+		onPaid={() => loadMyBill(activeClub()!.club_id)}
+	/>
+{/if}
 
 <style>
 	.empty-page {
@@ -303,6 +373,40 @@
 		font-size: 13.5px;
 		color: var(--ink-soft);
 		margin-bottom: 14px;
+	}
+
+	.bill-items {
+		display: flex;
+		flex-direction: column;
+		gap: 2px;
+		margin-top: 8px;
+		padding-top: 10px;
+		border-top: 1px solid var(--line);
+	}
+	.bill-item {
+		display: flex;
+		align-items: center;
+		gap: 10px;
+		padding: 6px 0;
+		font-size: 13px;
+	}
+	.bi-date {
+		flex: 1;
+		color: var(--ink-soft);
+	}
+	.bi-amount {
+		font-weight: 700;
+	}
+	.bi-cancel {
+		background: none;
+		border: 0;
+		color: var(--ink-faint);
+		font-size: 12px;
+		cursor: pointer;
+		padding: 0;
+	}
+	.bi-cancel:hover {
+		color: var(--hancur);
 	}
 
 	.other-clubs {

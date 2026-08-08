@@ -30,6 +30,10 @@ export type BillItem = {
 	amount: number;
 	played_on: string;
 	status: 'unpaid' | 'pending_review' | 'disputed';
+	// Cuma terisi kalau status pending_review (F6/2) — dipakai buat
+	// "batalkan klaim" (PayDialog.svelte).
+	payment_id?: string;
+	claimed_at?: string;
 };
 
 export type MyBill = {

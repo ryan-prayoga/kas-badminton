@@ -74,5 +74,7 @@ export const api = {
 		request<T>(path, { method: 'POST', body, query }),
 	patch: <T>(path: string, body?: unknown, ifMatch?: number) =>
 		request<T>(path, { method: 'PATCH', body, ifMatch }),
+	put: <T>(path: string, body?: unknown, ifMatch?: number) =>
+		request<T>(path, { method: 'PUT', body, ifMatch }),
 	del: <T>(path: string) => request<T>(path, { method: 'DELETE' })
 };
