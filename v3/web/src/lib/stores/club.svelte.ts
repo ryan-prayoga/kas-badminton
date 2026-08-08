@@ -30,6 +30,17 @@ export function otherMemberships(): MeMembership[] {
 	return memberships.filter((m) => m.club_id !== current?.club_id);
 }
 
+// hasManageMoney — cermin ringan perm.ManageMoney (server/internal/perm,
+// §7.4) buat GATING TAMPILAN saja ("pintu masuk Tagihan & Kas", §5.4).
+// Server tetap sumber kebenaran (RequirePerm di tiap endpoint) — helper
+// ini cuma mencegah UI menawarkan tombol yang bakal ditolak 403.
+export function hasManageMoney(m: MeMembership | null): boolean {
+	if (!m) return false;
+	if (m.role !== 'admin' && m.role !== 'bendahara') return false;
+	if (m.role_expires_at && new Date(m.role_expires_at) <= new Date()) return false;
+	return true;
+}
+
 export function hasLoadedMemberships(): boolean {
 	return loaded;
 }

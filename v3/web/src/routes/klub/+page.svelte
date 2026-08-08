@@ -8,7 +8,13 @@
 	import { goto } from '$app/navigation';
 	import { isLoggedIn } from '$lib/stores/session.svelte';
 	import { ApiError } from '$lib/api/client';
-	import { activeClub, hasLoadedMemberships, isLoadingMemberships, loadMe } from '$lib/stores/club.svelte';
+	import {
+		activeClub,
+		hasLoadedMemberships,
+		isLoadingMemberships,
+		hasManageMoney,
+		loadMe
+	} from '$lib/stores/club.svelte';
 	import { listMembers, type Member } from '$lib/api/members';
 	import { AppShell, Card, Badge, Input } from '$lib/components/ui';
 	import ClubHeaderBar from '$lib/components/ClubHeaderBar.svelte';
@@ -103,8 +109,24 @@
 		<ClubHeaderBar onSwitch={onSwitchClub} onCreateClub={() => (createOpen = true)} />
 	{/snippet}
 
-	<AppShell current="/klub" header={clubHeader}>
+	<AppShell
+		current="/klub"
+		header={clubHeader}
+		secondary={hasManageMoney(club)
+			? [{ href: '/klub/kas', label: 'Tagihan & Kas' }]
+			: []}
+	>
 		<div class="page">
+			{#if hasManageMoney(club)}
+				<a href="/klub/kas" class="kas-entry">
+					<div>
+						<p class="kas-title">Tagihan & Kas</p>
+						<p class="kas-sub">Verifikasi bayar, dompet anggota, pengeluaran, QRIS</p>
+					</div>
+					<span class="chev">→</span>
+				</a>
+			{/if}
+
 			<div class="pagehead">
 				<h1 class="h-title display">Anggota {club!.club_name}</h1>
 				<p class="h-sub">{members.length} orang · cari nama buat nemuin cepat</p>
@@ -152,6 +174,37 @@
 <CreateClubDialog bind:open={createOpen} />
 
 <style>
+	.kas-entry {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 12px;
+		padding: 16px;
+		background: color-mix(in srgb, var(--accent) 9%, var(--surface));
+		border: 1px solid color-mix(in srgb, var(--accent) 25%, var(--line));
+		border-radius: var(--radius-lg);
+		text-decoration: none;
+		transition: background var(--t-tap);
+	}
+	.kas-entry:hover {
+		background: color-mix(in srgb, var(--accent) 14%, var(--surface));
+	}
+	.kas-title {
+		font-size: 15px;
+		font-weight: 700;
+		color: var(--ink);
+	}
+	.kas-sub {
+		font-size: 12.5px;
+		color: var(--ink-soft);
+		margin-top: 2px;
+	}
+	.kas-entry .chev {
+		color: var(--accent);
+		font-size: 18px;
+		flex: none;
+	}
+
 	.hint {
 		font-size: 13.5px;
 		color: var(--ink-soft);
