@@ -5,6 +5,7 @@ data/
 !v3/.env.example
 *.log
 .DS_Store
+v3/deploy/backups/
 
 # Local tooling / agent sessions
 .omo/
