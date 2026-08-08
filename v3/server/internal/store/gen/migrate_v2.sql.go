@@ -23,6 +23,34 @@ func (q *Queries) CountMigratedGames(ctx context.Context, clubID uuid.UUID) (int
 	return column_1, err
 }
 
+const countMigratedPlayedMatches = `-- name: CountMigratedPlayedMatches :one
+SELECT COUNT(DISTINCT m.id)::bigint
+FROM matches m
+JOIN match_games mg ON mg.match_id = m.id
+WHERE m.tournament_id = $1
+`
+
+// "Partai" = match yang punya skor tercatat (F10 "jumlah game dan partai
+// cocok"). EXISTS match_games, bukan cuma baris matches — EnsureMatch
+// juga membuat baris buat match yang cuma punya kok tanpa skor.
+func (q *Queries) CountMigratedPlayedMatches(ctx context.Context, tournamentID uuid.UUID) (int64, error) {
+	row := q.db.QueryRow(ctx, countMigratedPlayedMatches, tournamentID)
+	var column_1 int64
+	err := row.Scan(&column_1)
+	return column_1, err
+}
+
+const countMigratedTournaments = `-- name: CountMigratedTournaments :one
+SELECT COUNT(*)::bigint FROM tournaments WHERE club_id = $1
+`
+
+func (q *Queries) CountMigratedTournaments(ctx context.Context, clubID uuid.UUID) (int64, error) {
+	row := q.db.QueryRow(ctx, countMigratedTournaments, clubID)
+	var column_1 int64
+	err := row.Scan(&column_1)
+	return column_1, err
+}
+
 const insertMigratedExpense = `-- name: InsertMigratedExpense :exec
 INSERT INTO expenses (id, club_id, amount, kok_type_id, type_name, note, recorded_by, created_at)
 VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
@@ -148,6 +176,70 @@ func (q *Queries) InsertMigratedGamePlayer(ctx context.Context, arg InsertMigrat
 	return err
 }
 
+const insertMigratedMatchKok = `-- name: InsertMigratedMatchKok :exec
+INSERT INTO match_koks (id, club_id, tournament_id, match_id, kok_type_id, type_name, price_per_person, qty, used_on)
+VALUES ($1, $2, $3, $4, $5, $6, $7, 1, $8)
+ON CONFLICT (id) DO NOTHING
+`
+
+type InsertMigratedMatchKokParams struct {
+	ID             uuid.UUID   `json:"id"`
+	ClubID         uuid.UUID   `json:"club_id"`
+	TournamentID   uuid.UUID   `json:"tournament_id"`
+	MatchID        *uuid.UUID  `json:"match_id"`
+	KokTypeID      *uuid.UUID  `json:"kok_type_id"`
+	TypeName       pgtype.Text `json:"type_name"`
+	PricePerPerson int64       `json:"price_per_person"`
+	UsedOn         pgtype.Date `json:"used_on"`
+}
+
+func (q *Queries) InsertMigratedMatchKok(ctx context.Context, arg InsertMigratedMatchKokParams) error {
+	_, err := q.db.Exec(ctx, insertMigratedMatchKok,
+		arg.ID,
+		arg.ClubID,
+		arg.TournamentID,
+		arg.MatchID,
+		arg.KokTypeID,
+		arg.TypeName,
+		arg.PricePerPerson,
+		arg.UsedOn,
+	)
+	return err
+}
+
+const insertMigratedMatchKokCharge = `-- name: InsertMigratedMatchKokCharge :exec
+INSERT INTO match_kok_charges (id, club_id, tournament_id, match_id, user_id, amount, paid_at, paid_by, charged_on)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+ON CONFLICT (id) DO NOTHING
+`
+
+type InsertMigratedMatchKokChargeParams struct {
+	ID           uuid.UUID          `json:"id"`
+	ClubID       uuid.UUID          `json:"club_id"`
+	TournamentID uuid.UUID          `json:"tournament_id"`
+	MatchID      *uuid.UUID         `json:"match_id"`
+	UserID       uuid.UUID          `json:"user_id"`
+	Amount       int64              `json:"amount"`
+	PaidAt       pgtype.Timestamptz `json:"paid_at"`
+	PaidBy       *uuid.UUID         `json:"paid_by"`
+	ChargedOn    pgtype.Date        `json:"charged_on"`
+}
+
+func (q *Queries) InsertMigratedMatchKokCharge(ctx context.Context, arg InsertMigratedMatchKokChargeParams) error {
+	_, err := q.db.Exec(ctx, insertMigratedMatchKokCharge,
+		arg.ID,
+		arg.ClubID,
+		arg.TournamentID,
+		arg.MatchID,
+		arg.UserID,
+		arg.Amount,
+		arg.PaidAt,
+		arg.PaidBy,
+		arg.ChargedOn,
+	)
+	return err
+}
+
 const insertMigratedWalletEntry = `-- name: InsertMigratedWalletEntry :exec
 INSERT INTO wallet_entries (id, club_id, user_id, kind, amount, note)
 VALUES ($1, $2, $3, 'topup', $4, 'Migrasi dari v2 (player_carry)')
@@ -171,6 +263,28 @@ func (q *Queries) InsertMigratedWalletEntry(ctx context.Context, arg InsertMigra
 		arg.Amount,
 	)
 	return err
+}
+
+const sumMatchKokCharges = `-- name: SumMatchKokCharges :one
+SELECT COALESCE(SUM(amount), 0)::bigint FROM match_kok_charges WHERE tournament_id = $1
+`
+
+func (q *Queries) SumMatchKokCharges(ctx context.Context, tournamentID uuid.UUID) (int64, error) {
+	row := q.db.QueryRow(ctx, sumMatchKokCharges, tournamentID)
+	var column_1 int64
+	err := row.Scan(&column_1)
+	return column_1, err
+}
+
+const sumTournamentFees = `-- name: SumTournamentFees :one
+SELECT COALESCE(SUM(amount), 0)::bigint FROM tournament_fees WHERE tournament_id = $1
+`
+
+func (q *Queries) SumTournamentFees(ctx context.Context, tournamentID uuid.UUID) (int64, error) {
+	row := q.db.QueryRow(ctx, sumTournamentFees, tournamentID)
+	var column_1 int64
+	err := row.Scan(&column_1)
+	return column_1, err
 }
 
 const sumUnpaidByPayerAllUsers = `-- name: SumUnpaidByPayerAllUsers :many
@@ -248,6 +362,133 @@ func (q *Queries) UpsertMigratedKokType(ctx context.Context, arg UpsertMigratedK
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.Version,
+	)
+	return i, err
+}
+
+const upsertMigratedTournament = `-- name: UpsertMigratedTournament :one
+
+INSERT INTO tournaments (id, club_id, name, starts_on, ends_on, format, size, fee, score_format, notes, recorded_by, created_at, updated_at)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $12)
+ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name
+RETURNING id, club_id, name, starts_on, ends_on, format, size, fee, score_format, notes, recorded_by, created_at, updated_at, deleted_at, version
+`
+
+type UpsertMigratedTournamentParams struct {
+	ID          uuid.UUID          `json:"id"`
+	ClubID      uuid.UUID          `json:"club_id"`
+	Name        string             `json:"name"`
+	StartsOn    pgtype.Date        `json:"starts_on"`
+	EndsOn      pgtype.Date        `json:"ends_on"`
+	Format      TournamentFormat   `json:"format"`
+	Size        int32              `json:"size"`
+	Fee         int64              `json:"fee"`
+	ScoreFormat ScoreFormat        `json:"score_format"`
+	Notes       pgtype.Text        `json:"notes"`
+	RecordedBy  *uuid.UUID         `json:"recorded_by"`
+	CreatedAt   pgtype.Timestamptz `json:"created_at"`
+}
+
+// --- Turnamen (F10 lanjutan) ---
+// Tabel tournaments TIDAK punya recorded_by_name fallback teks (beda dari
+// games, DDL.sql) — recorded_by yang tidak cocok mapping selalu NULL di
+// sini, sama seperti expenses (§14 F10, komentar migratev2/types.go).
+func (q *Queries) UpsertMigratedTournament(ctx context.Context, arg UpsertMigratedTournamentParams) (Tournament, error) {
+	row := q.db.QueryRow(ctx, upsertMigratedTournament,
+		arg.ID,
+		arg.ClubID,
+		arg.Name,
+		arg.StartsOn,
+		arg.EndsOn,
+		arg.Format,
+		arg.Size,
+		arg.Fee,
+		arg.ScoreFormat,
+		arg.Notes,
+		arg.RecordedBy,
+		arg.CreatedAt,
+	)
+	var i Tournament
+	err := row.Scan(
+		&i.ID,
+		&i.ClubID,
+		&i.Name,
+		&i.StartsOn,
+		&i.EndsOn,
+		&i.Format,
+		&i.Size,
+		&i.Fee,
+		&i.ScoreFormat,
+		&i.Notes,
+		&i.RecordedBy,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Version,
+	)
+	return i, err
+}
+
+const upsertMigratedTournamentFee = `-- name: UpsertMigratedTournamentFee :exec
+INSERT INTO tournament_fees (tournament_id, club_id, user_id, amount, paid_at, paid_by)
+VALUES ($1, $2, $3, $4, $5, $6)
+ON CONFLICT (tournament_id, user_id) DO NOTHING
+`
+
+type UpsertMigratedTournamentFeeParams struct {
+	TournamentID uuid.UUID          `json:"tournament_id"`
+	ClubID       uuid.UUID          `json:"club_id"`
+	UserID       uuid.UUID          `json:"user_id"`
+	Amount       int64              `json:"amount"`
+	PaidAt       pgtype.Timestamptz `json:"paid_at"`
+	PaidBy       *uuid.UUID         `json:"paid_by"`
+}
+
+func (q *Queries) UpsertMigratedTournamentFee(ctx context.Context, arg UpsertMigratedTournamentFeeParams) error {
+	_, err := q.db.Exec(ctx, upsertMigratedTournamentFee,
+		arg.TournamentID,
+		arg.ClubID,
+		arg.UserID,
+		arg.Amount,
+		arg.PaidAt,
+		arg.PaidBy,
+	)
+	return err
+}
+
+const upsertMigratedTournamentPair = `-- name: UpsertMigratedTournamentPair :one
+INSERT INTO tournament_pairs (id, tournament_id, club_id, slot, player_a, player_b)
+VALUES ($1, $2, $3, $4, $5, $6)
+ON CONFLICT (id) DO UPDATE SET slot = EXCLUDED.slot
+RETURNING id, tournament_id, club_id, slot, player_a, player_b
+`
+
+type UpsertMigratedTournamentPairParams struct {
+	ID           uuid.UUID  `json:"id"`
+	TournamentID uuid.UUID  `json:"tournament_id"`
+	ClubID       uuid.UUID  `json:"club_id"`
+	Slot         int32      `json:"slot"`
+	PlayerA      *uuid.UUID `json:"player_a"`
+	PlayerB      *uuid.UUID `json:"player_b"`
+}
+
+func (q *Queries) UpsertMigratedTournamentPair(ctx context.Context, arg UpsertMigratedTournamentPairParams) (TournamentPair, error) {
+	row := q.db.QueryRow(ctx, upsertMigratedTournamentPair,
+		arg.ID,
+		arg.TournamentID,
+		arg.ClubID,
+		arg.Slot,
+		arg.PlayerA,
+		arg.PlayerB,
+	)
+	var i TournamentPair
+	err := row.Scan(
+		&i.ID,
+		&i.TournamentID,
+		&i.ClubID,
+		&i.Slot,
+		&i.PlayerA,
+		&i.PlayerB,
 	)
 	return i, err
 }

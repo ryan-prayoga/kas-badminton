@@ -11,6 +11,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 
+	"github.com/ryan-prayoga/kas-badminton/v3/server/internal/domain"
 	"github.com/ryan-prayoga/kas-badminton/v3/server/internal/store"
 	"github.com/ryan-prayoga/kas-badminton/v3/server/internal/store/gen"
 )
@@ -37,7 +38,8 @@ type Result struct {
 	ExpensesCreated    int
 	WalletTopups       int
 	KasNet             int64 // sama di v2 & v3 — kalau beda, Migrate sudah gagal duluan
-	TournamentsSkipped int
+	TournamentsCreated int
+	PartaiCount        int // partai turnamen berskor — sama di v2 & v3, lihat verifikasi
 }
 
 var ErrVerificationFailed = errors.New("migratev2: verifikasi gagal, transaksi dibatalkan")
@@ -49,7 +51,7 @@ var ErrVerificationFailed = errors.New("migratev2: verifikasi gagal, transaksi d
 // TIDAK di sini — itu atribusi best-effort (games.recorded_by_name
 // fallback teks, PLAN.md komentar F10), bukan identitas yang menanggung
 // tagihan, jadi boleh tidak ketemu di mapping tanpa menggagalkan migrasi.
-func CollectNamesRequiringMapping(players []V2Player, carry []V2Carry, games []V2Game) []string {
+func CollectNamesRequiringMapping(players []V2Player, carry []V2Carry, games []V2Game, tournaments []V2Tournament) []string {
 	var names []string
 	for _, p := range players {
 		names = append(names, p.Name)
@@ -64,6 +66,7 @@ func CollectNamesRequiringMapping(players []V2Player, carry []V2Carry, games []V
 			}
 		}
 	}
+	names = append(names, participantNamesRequiringMapping(tournaments)...)
 	return names
 }
 
@@ -96,8 +99,12 @@ func Migrate(ctx context.Context, r Reader, s *store.Store, mapping NameMapping,
 	if err != nil {
 		return Result{}, err
 	}
+	tournaments, err := r.Tournaments(ctx)
+	if err != nil {
+		return Result{}, err
+	}
 
-	if missing := mapping.MissingNames(CollectNamesRequiringMapping(players, carry, games)); len(missing) > 0 {
+	if missing := mapping.MissingNames(CollectNamesRequiringMapping(players, carry, games, tournaments)); len(missing) > 0 {
 		return Result{}, fmt.Errorf("migratev2: nama belum ada di berkas pemetaan: %v — jalankan `migrate-v2 dedupe` dulu", missing)
 	}
 
@@ -118,7 +125,13 @@ func Migrate(ctx context.Context, r Reader, s *store.Store, mapping NameMapping,
 		knownKokType[k.ID] = true
 	}
 
-	expectedKasNet := expectedKasNetOf(games, expenses)
+	expectedTourCount, expectedPlayed, expectedFeeTotal, expectedKokPaidIncome, expectedRoundingKasIn := expectedTournamentStats(tournaments)
+	// kas net v3 (SumPaidKokIncome, treasury.sql) SUDAH menggabung kok
+	// main-harian DAN kok turnamen — expectedKasNet harus ikut
+	// menggabung, atau verifikasi di bawah akan SELALU gagal untuk klub
+	// yang punya turnamen (bukan bug migrasi, cuma definisi "kas" yang
+	// beda kalau dihitung terpisah).
+	expectedKasNet := expectedKasNetOf(games, expenses) + expectedKokPaidIncome + expectedRoundingKasIn
 	expectedUnpaid := expectedUnpaidByCanonicalName(games, mapping)
 
 	targetClubID, err := resolveClubID(ctx, s, opts.ClubSlug)
@@ -344,6 +357,18 @@ func Migrate(ctx context.Context, r Reader, s *store.Store, mapping NameMapping,
 			result.WalletTopups++
 		}
 
+		// --- Turnamen: bagan/klasemen/kok/iuran, lihat tournament.go. Di
+		// dalam closure yang SAMA — turnamen yang gagal verifikasi di
+		// bawah membatalkan SELURUH migrasi (termasuk main harian), bukan
+		// cuma turnamen itu sendiri (§14 F10 "verifikasi gagal = transaksi
+		// dibatalkan", bukan per-entitas). ---
+		for _, t := range tournaments {
+			if err := migrateTournament(ctx, q, targetClubID, opts.ClubSlug, t, mapping, kokTypeV3, ensureUser); err != nil {
+				return fmt.Errorf("turnamen %q (%s): %w", t.Name, t.ID, err)
+			}
+			result.TournamentsCreated++
+		}
+
 		// --- Verifikasi (§14 F10 "Verifikasi gagal = transaksi
 		// dibatalkan"). Semuanya dihitung ULANG dari sisi v3 lewat query
 		// yang SAMA dipakai endpoint produksi (treasury.go,
@@ -402,6 +427,41 @@ func Migrate(ctx context.Context, r Reader, s *store.Store, mapping NameMapping,
 			sort.Strings(mismatches)
 			return fmt.Errorf("%w: piutang per orang tidak cocok: %v", ErrVerificationFailed, mismatches)
 		}
+
+		// --- Verifikasi turnamen (§14 F10 "jumlah game DAN PARTAI
+		// cocok"). expectedTourCount/expectedPlayed/expectedFeeTotal
+		// dihitung SEKALI di atas (sebelum WithClub, expectedTournamentStats)
+		// dari domain.EnrichTournament langsung atas data v2 mentah —
+		// jalur independen dari migrateTournament (yang menulis), bukan
+		// membenarkan diri sendiri. ---
+		tourCount, err := q.CountMigratedTournaments(ctx, targetClubID)
+		if err != nil {
+			return err
+		}
+		if int(tourCount) != expectedTourCount {
+			return fmt.Errorf("%w: jumlah turnamen v3 = %d, mau %d", ErrVerificationFailed, tourCount, expectedTourCount)
+		}
+		var playedTotal, feeTotal int64
+		for _, t := range tournaments {
+			tID := tournamentID(opts.ClubSlug, t.ID)
+			played, err := q.CountMigratedPlayedMatches(ctx, tID)
+			if err != nil {
+				return err
+			}
+			playedTotal += played
+			fees, err := q.SumTournamentFees(ctx, tID)
+			if err != nil {
+				return err
+			}
+			feeTotal += fees
+		}
+		if int(playedTotal) != expectedPlayed {
+			return fmt.Errorf("%w: jumlah partai (berskor) v3 = %d, mau %d", ErrVerificationFailed, playedTotal, expectedPlayed)
+		}
+		if feeTotal != expectedFeeTotal {
+			return fmt.Errorf("%w: total iuran turnamen v3 = %d, mau %d", ErrVerificationFailed, feeTotal, expectedFeeTotal)
+		}
+		result.PartaiCount = int(playedTotal)
 
 		return nil
 	})
@@ -506,10 +566,12 @@ func parseDate(s string) (pgtype.Date, error) {
 	return pgtype.Date{Time: t, Valid: true}, nil
 }
 
-// expectedKasNetOf — port RINGKAS lib/domain/summary.ts summarize()
-// (v2): paid = total game yang SUDAH lunas (jumlah per-pemain yang
-// paid=true) + expense. Tournament kokPaid SENGAJA tidak ikut (cakupan
-// migrasi ini belum termasuk turnamen — lihat komentar package).
+// expectedKasNetOf — port RINGKAS lib/domain/summary.ts summarize() (v2):
+// paid = total game yang SUDAH lunas (jumlah per-pemain yang paid=true)
+// + expense. Kok turnamen yang lunas TIDAK dihitung di sini — itu
+// ditambahkan terpisah oleh pemanggil (Migrate) lewat
+// expectedTournamentStats, supaya dua sumber uang (main harian vs
+// turnamen) tetap bisa diuji sendiri-sendiri sebelum digabung.
 func expectedKasNetOf(games []V2Game, expenses []V2Expense) int64 {
 	var paid, expense int64
 	for _, g := range games {
@@ -530,6 +592,97 @@ func expectedKasNetOf(games []V2Game, expenses []V2Expense) int64 {
 // dikunci ke nama KANONIK (dua alias v2 yang sama orang otomatis
 // dijumlah jadi satu figur) — inilah yang dibandingkan ke
 // SumUnpaidByPayerAllUsers sisi v3 (games.sql pola SumUnpaidByPayer).
+// expectedTournamentStats — jalur INDEPENDEN dari migrateTournament
+// (tournament.go) buat verifikasi (§14 F10 "jumlah game dan partai
+// cocok") — sama-sama memanggil domain.EnrichTournament (satu-satunya
+// sumber kebenaran bagan, tidak ada rumus kedua yang bisa diam-diam
+// beda), tapi TIDAK menulis apa pun, cuma menghitung dari data v2
+// mentah. count = jumlah turnamen, played = total partai berskor lintas
+// semua turnamen, feeTotal = total iuran (lunas+belum) lintas semua
+// turnamen — langsung dari Cost.FeeTotal yang sudah dihitung
+// domain.TournamentCostOf, bukan dijumlah manual di sini.
+//
+// kokPaidIncome — total match_kok_charges yang LUNAS lintas semua
+// turnamen, langsung dari Cost.KokPaid (domain, matchesKokPaid) — ini
+// bagian dari kas v3 (SumPaidKokIncome, treasury.sql: "kok yang dibeli
+// di sela partai turnamen" ikut dihitung), jadi WAJIB masuk expectedKasNet
+// di Migrate juga, bukan cuma dihitung di sini buat gagah-gagahan.
+//
+// roundingKasIn — kelebihan pembulatan kok UMUM (matchId null) yang v3
+// catat sebagai kas masuk SEKETIKA (migrateTournament, sama aturan jalur
+// HTTP produksi addTournamentKok) — TIDAK PERNAH ada di v2 (v2 tidak
+// pernah menagih kok umum sama sekali, jadi tidak ada rupiah yang bisa
+// dibandingkan dari sana; angka ini murni konsekuensi migrasi menutup
+// lubang itu, dihitung ulang di sini dgn domain.PerPersonCost/Rounding
+// yang SAMA dipakai migrateTournament — independen, bukan membenarkan
+// diri sendiri, cuma rumusnya memang cuma satu yang benar).
+func expectedTournamentStats(tournaments []V2Tournament) (count, played int, feeTotal, kokPaidIncome, roundingKasIn int64) {
+	for _, t := range tournaments {
+		stored := toDomainStoredTournament(t)
+		enriched := domain.EnrichTournament(stored) // struktur bagan/klasemen SAJA — lihat catatan di bawah kenapa Cost.KokPaid tidak dipakai
+		count++
+		played += enriched.PlayedCount
+		feeTotal += enriched.Cost.FeeTotal
+
+		// kokPaidIncome DIHITUNG SENDIRI di sini, BUKAN enriched.Cost.KokPaid
+		// — domain.MatchKokPerPerson (dipakai Cost.KokPaid) mengasumsikan
+		// Kok.Price itu HARGA TOTAL yang dibagi 4 pakai PerPersonCost
+		// (komentar tournament.go baris 5-7: "Kok per-partai dibagi 4...
+		// pakai rumus pembulatan yang sama §9.5 A") — semantik BARU v3.
+		// v2 pricePerPerson SUDAH per-orang (migrate.go v2PerPersonCost,
+		// alasan sama persis kenapa main harian juga tidak lewat
+		// domain.GameCostOf). migrateTournament (tournament.go) menjumlah
+		// pricePerPerson v2 APA ADANYA buat tiap partai — baris di bawah
+		// mereplikasi ITU, bukan rumus domain, supaya benar-benar jadi
+		// verifikasi independen dari apa yang sungguh ditulis.
+		koksByMatch := map[string]int64{}
+		for _, k := range t.Koks {
+			if k.MatchID != nil && *k.MatchID != "" {
+				koksByMatch[*k.MatchID] += k.PricePerPerson
+			}
+		}
+		for matchID, perPerson := range koksByMatch {
+			paid, ok := stored.MatchKokPaid[matchID]
+			if !ok {
+				continue
+			}
+			var match *domain.BracketMatch
+			for i := range enriched.Matches {
+				if enriched.Matches[i].ID == matchID {
+					match = &enriched.Matches[i]
+					break
+				}
+			}
+			if match == nil || match.A.Bye || match.B.Bye {
+				continue
+			}
+			names := domain.MatchParticipants(*match)
+			for i, name := range names {
+				if name != "" && paid[i] {
+					kokPaidIncome += perPerson
+				}
+			}
+		}
+
+		var looseTotal int64
+		for _, k := range t.Koks {
+			if k.MatchID == nil || *k.MatchID == "" {
+				looseTotal += k.PricePerPerson * 4 // domain.KoksTotal: harga per kok = pricePerPerson × 4
+			}
+		}
+		if looseTotal <= 0 {
+			continue
+		}
+		participants := domain.ParticipantNames(stored.Pairs)
+		if len(participants) == 0 {
+			continue
+		}
+		perPerson := domain.PerPersonCost(looseTotal, len(participants))
+		roundingKasIn += domain.Rounding(perPerson, len(participants), looseTotal)
+	}
+	return
+}
+
 func expectedUnpaidByCanonicalName(games []V2Game, mapping NameMapping) map[string]int64 {
 	out := map[string]int64{}
 	for _, g := range games {

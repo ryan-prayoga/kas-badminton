@@ -19,6 +19,7 @@ type Reader interface {
 	KokTypes(ctx context.Context) ([]V2KokType, error)
 	Games(ctx context.Context) ([]V2Game, error)
 	Expenses(ctx context.Context) ([]V2Expense, error)
+	Tournaments(ctx context.Context) ([]V2Tournament, error)
 }
 
 // PgReader — Reader sungguhan lewat pgxpool ke DATABASE_URL v2 (dev:
@@ -142,6 +143,110 @@ func (r *PgReader) Games(ctx context.Context) ([]V2Game, error) {
 		}
 
 		out = append(out, g)
+	}
+	return out, rows.Err()
+}
+
+// jsonPair/jsonMatchScore/jsonTournamentKok/jsonTournamentFee — bentuk
+// mentah kolom JSON `tournaments` (lib/domain/types.ts TournamentPair/
+// MatchScore/TournamentKok/TournamentFee).
+type jsonPair struct {
+	ID   string `json:"id"`
+	Slot int    `json:"slot"`
+	A    string `json:"a"`
+	B    string `json:"b"`
+}
+
+type jsonMatchScore struct {
+	Format   string          `json:"format"`
+	Games    []jsonGameScore `json:"games"`
+	PlayedAt *string         `json:"playedAt"`
+}
+
+type jsonGameScore struct {
+	A int `json:"a"`
+	B int `json:"b"`
+}
+
+type jsonTournamentKok struct {
+	TypeID         *string `json:"typeId"`
+	TypeName       *string `json:"typeName"`
+	PricePerPerson int64   `json:"pricePerPerson"`
+	MatchID        *string `json:"matchId"`
+	Date           string  `json:"date"`
+}
+
+type jsonTournamentFee struct {
+	Name   string  `json:"name"`
+	Paid   bool    `json:"paid"`
+	PaidAt *string `json:"paidAt"`
+	PaidBy *string `json:"paidBy"`
+}
+
+func (r *PgReader) Tournaments(ctx context.Context) ([]V2Tournament, error) {
+	rows, err := r.pool.Query(ctx, `SELECT id, name, date, end_date, size, format, fee, score_format, pairs, results, koks, fees, match_kok_paid, notes, recorded_by, created_at, updated_at FROM tournaments ORDER BY date, created_at`)
+	if err != nil {
+		return nil, fmt.Errorf("migratev2: baca tournaments: %w", err)
+	}
+	defer rows.Close()
+
+	var out []V2Tournament
+	for rows.Next() {
+		var (
+			t                                                       V2Tournament
+			pairsRaw, resultsRaw, koksRaw, feesRaw, matchKokPaidRaw []byte
+			endDate, notes, recordedBy                              *string
+		)
+		if err := rows.Scan(&t.ID, &t.Name, &t.Date, &endDate, &t.Size, &t.Format, &t.Fee, &t.ScoreFormat,
+			&pairsRaw, &resultsRaw, &koksRaw, &feesRaw, &matchKokPaidRaw, &notes, &recordedBy, &t.CreatedAt, &t.UpdatedAt); err != nil {
+			return nil, err
+		}
+		t.EndDate, t.Notes, t.RecordedBy = endDate, notes, recordedBy
+
+		var jp []jsonPair
+		if err := json.Unmarshal(pairsRaw, &jp); err != nil {
+			return nil, fmt.Errorf("migratev2: parse pairs turnamen %s: %w", t.ID, err)
+		}
+		for _, p := range jp {
+			t.Pairs = append(t.Pairs, V2Pair{ID: p.ID, Slot: p.Slot, A: p.A, B: p.B})
+		}
+
+		var jr map[string]jsonMatchScore
+		if err := json.Unmarshal(resultsRaw, &jr); err != nil {
+			return nil, fmt.Errorf("migratev2: parse results turnamen %s: %w", t.ID, err)
+		}
+		t.Results = map[string]V2MatchScore{}
+		for id, sc := range jr {
+			var games []V2GameScore
+			for _, g := range sc.Games {
+				games = append(games, V2GameScore{A: g.A, B: g.B})
+			}
+			t.Results[id] = V2MatchScore{Format: sc.Format, Games: games, PlayedAt: sc.PlayedAt}
+		}
+
+		var jk []jsonTournamentKok
+		if err := json.Unmarshal(koksRaw, &jk); err != nil {
+			return nil, fmt.Errorf("migratev2: parse koks turnamen %s: %w", t.ID, err)
+		}
+		for _, k := range jk {
+			t.Koks = append(t.Koks, V2TournamentKok{TypeID: k.TypeID, TypeName: k.TypeName, PricePerPerson: k.PricePerPerson, MatchID: k.MatchID, Date: k.Date})
+		}
+
+		var jf []jsonTournamentFee
+		if err := json.Unmarshal(feesRaw, &jf); err != nil {
+			return nil, fmt.Errorf("migratev2: parse fees turnamen %s: %w", t.ID, err)
+		}
+		for _, f := range jf {
+			t.Fees = append(t.Fees, V2TournamentFee{Name: f.Name, Paid: f.Paid, PaidAt: f.PaidAt, PaidBy: f.PaidBy})
+		}
+
+		var jmkp map[string][4]bool
+		if err := json.Unmarshal(matchKokPaidRaw, &jmkp); err != nil {
+			return nil, fmt.Errorf("migratev2: parse match_kok_paid turnamen %s: %w", t.ID, err)
+		}
+		t.MatchKokPaid = jmkp
+
+		out = append(out, t)
 	}
 	return out, rows.Err()
 }

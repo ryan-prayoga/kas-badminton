@@ -1,11 +1,12 @@
 // Package migratev2 membaca database v2 (Prisma/Postgres, skema JSON
 // blob — v2/prisma/schema.prisma) dan menulisnya ke v3 sebagai klub
-// pertama (PLAN.md §14 F10). Cakupan pass ini: pemain, jenis kok, main
-// harian, pengeluaran, titipan (carry) → dompet awal. TURNAMEN BELUM
-// TERMASUK — bagan v2 (lib/domain/tournament.ts, ~800 baris logic murni)
-// butuh porting terpisah yang diuji seketat ini sebelum ikut; migrasi
-// main harian (paling kritis buat uang) sudah utuh & terverifikasi lebih
-// dulu di sini.
+// pertama (PLAN.md §14 F10). Cakupan: pemain, jenis kok, main harian,
+// pengeluaran, titipan (carry) → dompet awal, DAN turnamen (bagan/
+// klasemen, skor, kok per-partai & umum, iuran) — bagan turnamen TIDAK
+// dihitung ulang di sini; dipakai LANGSUNG internal/domain
+// (BuildBracket/BuildRoundRobin lewat EnrichTournament, port 1:1 dari
+// lib/domain/tournament.ts v2) supaya nol risiko re-implementasi yang
+// diam-diam beda hasil dari yang sudah diuji lewat tournament_test.go.
 //
 // v2 TIDAK PERNAH disentuh — package ini cuma database/sql SELECT
 // read-only ke DB v2 (reader.go), tidak pernah menulis ke sana (PLAN.md
@@ -84,4 +85,58 @@ type V2Expense struct {
 	Slops     int32
 	Amount    int64
 	CreatedAt time.Time
+}
+
+// --- Turnamen (lib/domain/types.ts StoredTournament & isinya) ---
+
+type V2Pair struct {
+	ID   string
+	Slot int
+	A, B string // "" = slot BYE (knockout) / tidak ikut (round robin)
+}
+
+type V2GameScore struct{ A, B int }
+
+type V2MatchScore struct {
+	Format   string // "single" | "bo3"
+	Games    []V2GameScore
+	PlayedAt *string // YYYY-MM-DD
+}
+
+// V2TournamentKok — MatchID nil = kok umum turnamen (v2 TIDAK PERNAH
+// menagihnya ke siapa pun — "lubang yang diakui", lihat komentar DDL.sql
+// match_koks.match_id). Migrasi menutup lubang itu (tournament.go).
+type V2TournamentKok struct {
+	TypeID         *string
+	TypeName       *string
+	PricePerPerson int64
+	MatchID        *string
+	Date           string
+}
+
+type V2TournamentFee struct {
+	Name   string
+	Paid   bool
+	PaidAt *string
+	PaidBy *string
+}
+
+type V2Tournament struct {
+	ID           string
+	Name         string
+	Date         string
+	EndDate      *string
+	Size         int
+	Format       string // "knockout" | "round_robin"
+	Fee          int64
+	ScoreFormat  string // "single" | "bo3"
+	Pairs        []V2Pair
+	Results      map[string]V2MatchScore // matchId -> skor
+	Koks         []V2TournamentKok
+	Fees         []V2TournamentFee
+	MatchKokPaid map[string][4]bool // matchId -> [sisiA.a, sisiA.b, sisiB.a, sisiB.b]
+	Notes        *string
+	RecordedBy   *string
+	CreatedAt    time.Time
+	UpdatedAt    time.Time
 }

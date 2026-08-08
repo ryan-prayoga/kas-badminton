@@ -10,10 +10,8 @@
 //     yang belum ada di berkas pemetaan atau ada game yang bukan ganda 4
 //     orang. Idempoten — aman dipanggil ulang dengan data v2 yang sama.
 //
-// CAKUPAN PASS INI: pemain, jenis kok, main harian, pengeluaran, carry→
-// dompet. TURNAMEN BELUM TERMASUK (internal/migratev2 komentar package)
-// — jalankan lagi setelah dukungan turnamen menyusul, sebelum cutover
-// sungguhan.
+// CAKUPAN: pemain, jenis kok, main harian, pengeluaran, carry→dompet,
+// DAN turnamen (bagan/klasemen, skor, kok per-partai & umum, iuran).
 package main
 
 import (
@@ -96,8 +94,12 @@ func runDedupe(args []string) error {
 	if err != nil {
 		return err
 	}
+	tournaments, err := r.Tournaments(ctx)
+	if err != nil {
+		return err
+	}
 
-	allNames := migratev2.CollectNamesRequiringMapping(players, carry, games)
+	allNames := migratev2.CollectNamesRequiringMapping(players, carry, games, tournaments)
 	clusters := migratev2.ClusterNames(allNames)
 
 	if len(clusters) == 0 {
@@ -185,10 +187,10 @@ func runMigrate(args []string) error {
   pengeluaran    : %d
   dompet awal    : %d orang
   kas net (v2=v3): Rp %d
-
-TURNAMEN BELUM DIMIGRASI (di luar cakupan pass ini) — jangan cutover
-sungguhan sebelum itu menyusul dan diuji seketat bagian ini.
+  turnamen       : %d
+  partai (v2=v3) : %d
 `, *name, result.ClubID, result.UsersCreated, result.KokTypesCreated,
-		result.GamesCreated, result.ExpensesCreated, result.WalletTopups, result.KasNet)
+		result.GamesCreated, result.ExpensesCreated, result.WalletTopups, result.KasNet,
+		result.TournamentsCreated, result.PartaiCount)
 	return nil
 }

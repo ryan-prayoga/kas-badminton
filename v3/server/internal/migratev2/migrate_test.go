@@ -20,18 +20,20 @@ import (
 )
 
 type fakeReader struct {
-	players  []V2Player
-	carry    []V2Carry
-	kokTypes []V2KokType
-	games    []V2Game
-	expenses []V2Expense
+	players     []V2Player
+	carry       []V2Carry
+	kokTypes    []V2KokType
+	games       []V2Game
+	expenses    []V2Expense
+	tournaments []V2Tournament
 }
 
-func (f *fakeReader) Players(context.Context) ([]V2Player, error)   { return f.players, nil }
-func (f *fakeReader) Carry(context.Context) ([]V2Carry, error)      { return f.carry, nil }
-func (f *fakeReader) KokTypes(context.Context) ([]V2KokType, error) { return f.kokTypes, nil }
-func (f *fakeReader) Games(context.Context) ([]V2Game, error)       { return f.games, nil }
-func (f *fakeReader) Expenses(context.Context) ([]V2Expense, error) { return f.expenses, nil }
+func (f *fakeReader) Players(context.Context) ([]V2Player, error)         { return f.players, nil }
+func (f *fakeReader) Carry(context.Context) ([]V2Carry, error)            { return f.carry, nil }
+func (f *fakeReader) KokTypes(context.Context) ([]V2KokType, error)       { return f.kokTypes, nil }
+func (f *fakeReader) Games(context.Context) ([]V2Game, error)             { return f.games, nil }
+func (f *fakeReader) Expenses(context.Context) ([]V2Expense, error)       { return f.expenses, nil }
+func (f *fakeReader) Tournaments(context.Context) ([]V2Tournament, error) { return f.tournaments, nil }
 
 func testSlug(t *testing.T) string {
 	t.Helper()

@@ -67,6 +67,56 @@ ON CONFLICT (id) DO NOTHING;
 -- name: CountMigratedGames :one
 SELECT COUNT(*)::bigint FROM games WHERE club_id = $1;
 
+-- --- Turnamen (F10 lanjutan) ---
+
+-- name: UpsertMigratedTournament :one
+-- Tabel tournaments TIDAK punya recorded_by_name fallback teks (beda dari
+-- games, DDL.sql) — recorded_by yang tidak cocok mapping selalu NULL di
+-- sini, sama seperti expenses (§14 F10, komentar migratev2/types.go).
+INSERT INTO tournaments (id, club_id, name, starts_on, ends_on, format, size, fee, score_format, notes, recorded_by, created_at, updated_at)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $12)
+ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name
+RETURNING *;
+
+-- name: UpsertMigratedTournamentPair :one
+INSERT INTO tournament_pairs (id, tournament_id, club_id, slot, player_a, player_b)
+VALUES ($1, $2, $3, $4, $5, $6)
+ON CONFLICT (id) DO UPDATE SET slot = EXCLUDED.slot
+RETURNING *;
+
+-- name: UpsertMigratedTournamentFee :exec
+INSERT INTO tournament_fees (tournament_id, club_id, user_id, amount, paid_at, paid_by)
+VALUES ($1, $2, $3, $4, $5, $6)
+ON CONFLICT (tournament_id, user_id) DO NOTHING;
+
+-- name: InsertMigratedMatchKok :exec
+INSERT INTO match_koks (id, club_id, tournament_id, match_id, kok_type_id, type_name, price_per_person, qty, used_on)
+VALUES ($1, $2, $3, $4, $5, $6, $7, 1, $8)
+ON CONFLICT (id) DO NOTHING;
+
+-- name: InsertMigratedMatchKokCharge :exec
+INSERT INTO match_kok_charges (id, club_id, tournament_id, match_id, user_id, amount, paid_at, paid_by, charged_on)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+ON CONFLICT (id) DO NOTHING;
+
+-- name: CountMigratedTournaments :one
+SELECT COUNT(*)::bigint FROM tournaments WHERE club_id = $1;
+
+-- name: CountMigratedPlayedMatches :one
+-- "Partai" = match yang punya skor tercatat (F10 "jumlah game dan partai
+-- cocok"). EXISTS match_games, bukan cuma baris matches — EnsureMatch
+-- juga membuat baris buat match yang cuma punya kok tanpa skor.
+SELECT COUNT(DISTINCT m.id)::bigint
+FROM matches m
+JOIN match_games mg ON mg.match_id = m.id
+WHERE m.tournament_id = $1;
+
+-- name: SumTournamentFees :one
+SELECT COALESCE(SUM(amount), 0)::bigint FROM tournament_fees WHERE tournament_id = $1;
+
+-- name: SumMatchKokCharges :one
+SELECT COALESCE(SUM(amount), 0)::bigint FROM match_kok_charges WHERE tournament_id = $1;
+
 -- name: SumUnpaidByPayerAllUsers :many
 -- Verifikasi F10 "piutang per orang cocok" — total belum lunas PER
 -- ORANG di klub hasil migrasi, dibandingkan hitungan sisi v2

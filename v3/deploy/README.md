@@ -80,10 +80,11 @@ mengandalkan jadwal mingguan kebetulan baru jalan.
 ## Migrasi v2 → v3 (F10, `cmd/migrate-v2`)
 
 v2 TIDAK PERNAH ditulis — `migrate-v2` cuma SELECT read-only ke DB v2.
-Cakupan pass ini: pemain, jenis kok, main harian, pengeluaran, carry→
-dompet awal. **Turnamen belum termasuk** — jangan cutover sungguhan
-sebelum itu menyusul dan diuji seketat bagian ini (lihat komentar
-`server/internal/migratev2/migrate.go`).
+Cakupan: pemain, jenis kok, main harian, pengeluaran, carry→dompet awal,
+DAN turnamen (bagan/klasemen, skor, kok per-partai & umum, iuran) —
+bagan turnamen dihitung ulang lewat `internal/domain` (port 1:1 dari
+`lib/domain/tournament.ts` v2), bukan diimplementasikan ulang di
+`migratev2`.
 
 ```bash
 # 1. Deteksi nama yang mungkin sama orang + tulis berkas pemetaan awal.

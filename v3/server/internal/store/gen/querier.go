@@ -57,6 +57,11 @@ type Querier interface {
 	// CreateMembership/CreateTournamentGuestMembership, bukan cuma ditampilkan.
 	CountMembers(ctx context.Context, clubID uuid.UUID) (int64, error)
 	CountMigratedGames(ctx context.Context, clubID uuid.UUID) (int64, error)
+	// "Partai" = match yang punya skor tercatat (F10 "jumlah game dan partai
+	// cocok"). EXISTS match_games, bukan cuma baris matches — EnsureMatch
+	// juga membuat baris buat match yang cuma punya kok tanpa skor.
+	CountMigratedPlayedMatches(ctx context.Context, tournamentID uuid.UUID) (int64, error)
+	CountMigratedTournaments(ctx context.Context, clubID uuid.UUID) (int64, error)
 	CountQueuedNotifications(ctx context.Context) (int64, error)
 	CountQueuedNotificationsByChannel(ctx context.Context) ([]CountQueuedNotificationsByChannelRow, error)
 	// Rate limit kirim ulang (PLAN.md §7.2) — dihitung dari SEMUA kode yang
@@ -282,6 +287,8 @@ type Querier interface {
 	// user_id = payer_id SELALU — v2 tidak punya konsep "dibayarin orang
 	// lain" (§8.2 fitur BARU v3), jadi pemetaannya lurus.
 	InsertMigratedGamePlayer(ctx context.Context, arg InsertMigratedGamePlayerParams) error
+	InsertMigratedMatchKok(ctx context.Context, arg InsertMigratedMatchKokParams) error
+	InsertMigratedMatchKokCharge(ctx context.Context, arg InsertMigratedMatchKokChargeParams) error
 	// player_carry v2 → saldo deposit awal (§14 F10). kind 'topup', note
 	// menandai asalnya jelas buat siapa pun yang baca jurnal nanti.
 	InsertMigratedWalletEntry(ctx context.Context, arg InsertMigratedWalletEntryParams) error
@@ -488,6 +495,7 @@ type Querier interface {
 	// Positif = kas keluar, negatif = kas masuk (DDL.sql) — jumlahnya
 	// langsung dikurangkan dari SumPaidKokIncome, bukan dipisah signed.
 	SumExpenses(ctx context.Context, clubID uuid.UUID) (int64, error)
+	SumMatchKokCharges(ctx context.Context, tournamentID uuid.UUID) (int64, error)
 	// Tiga kantong uang (PLAN.md §9.2) — dipisah karena deposit adalah
 	// KEWAJIBAN klub (bisa ditarik pemiliknya), bukan pemasukan; iuran
 	// turnamen pool terpisah per turnamen. Menggabungkannya bikin kas
@@ -497,6 +505,7 @@ type Querier interface {
 	// turnamen (tournament_fees) SENGAJA tidak ikut di sini — itu kantong
 	// terpisah (SumTournamentFeesPaid).
 	SumPaidKokIncome(ctx context.Context, clubID uuid.UUID) (int64, error)
+	SumTournamentFees(ctx context.Context, tournamentID uuid.UUID) (int64, error)
 	// Pool iuran turnamen (F7, belum ada handler yang menulis tabel ini —
 	// selalu 0 sampai F7 tiba, query disiapkan sekarang biar treasury tidak
 	// perlu diubah lagi nanti).
@@ -554,6 +563,13 @@ type Querier interface {
 	// authenticator (dua device beda pakai kredensial "sama" tanpa saling tahu).
 	UpdateWebauthnCredentialSignCount(ctx context.Context, arg UpdateWebauthnCredentialSignCountParams) error
 	UpsertMigratedKokType(ctx context.Context, arg UpsertMigratedKokTypeParams) (KokType, error)
+	// --- Turnamen (F10 lanjutan) ---
+	// Tabel tournaments TIDAK punya recorded_by_name fallback teks (beda dari
+	// games, DDL.sql) — recorded_by yang tidak cocok mapping selalu NULL di
+	// sini, sama seperti expenses (§14 F10, komentar migratev2/types.go).
+	UpsertMigratedTournament(ctx context.Context, arg UpsertMigratedTournamentParams) (Tournament, error)
+	UpsertMigratedTournamentFee(ctx context.Context, arg UpsertMigratedTournamentFeeParams) error
+	UpsertMigratedTournamentPair(ctx context.Context, arg UpsertMigratedTournamentPairParams) (TournamentPair, error)
 	// Migrasi v2 → v3 (PLAN.md §14 F10, cmd/migrate-v2). SEMUA insert di sini
 	// pakai ID yang DITENTUKAN PEMANGGIL (deterministik dari id/nama v2 —
 	// lihat internal/migratev2/ids.go), bukan gen_random_uuid() bawaan tabel

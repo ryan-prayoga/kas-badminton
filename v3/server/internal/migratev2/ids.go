@@ -43,3 +43,15 @@ func expenseID(slug, v2ID string) uuid.UUID { return deriveID("expense", slug, v
 func walletEntryID(slug, canonicalName string) uuid.UUID {
 	return deriveID("walletEntry", slug, "carry", canonicalName)
 }
+
+func tournamentID(slug, v2ID string) uuid.UUID { return deriveID("tournament", slug, v2ID) }
+func tournamentPairID(slug, v2TournamentID string, slot int) uuid.UUID {
+	return deriveID("tournamentPair", slug, v2TournamentID, fmt.Sprintf("%d", slot))
+}
+
+// matchKokID — matchDomainID kosong ("") buat kok UMUM turnamen (lepas
+// dari partai manapun) — beda dari gameKokID (main harian) meski
+// bentuknya sama, dipisah namanya biar jelas dua entitas beda tabel.
+func matchKokID(slug, v2TournamentID, matchDomainID, kokIdentity string) uuid.UUID {
+	return deriveID("matchKok", slug, v2TournamentID, matchDomainID, kokIdentity)
+}
