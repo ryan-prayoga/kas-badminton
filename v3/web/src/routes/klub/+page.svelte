@@ -112,9 +112,11 @@
 	<AppShell
 		current="/klub"
 		header={clubHeader}
-		secondary={hasManageMoney(club)
-			? [{ href: '/klub/kas', label: 'Tagihan & Kas' }]
-			: []}
+		secondary={[
+			...(hasManageMoney(club) ? [{ href: '/klub/kas', label: 'Tagihan & Kas' }] : []),
+			{ href: '/klub/peringkat', label: 'Papan Peringkat' },
+			{ href: '/klub/taruhan', label: 'Taruhan' }
+		]}
 	>
 		<div class="page">
 			{#if hasManageMoney(club)}
@@ -126,6 +128,17 @@
 					<span class="chev">→</span>
 				</a>
 			{/if}
+
+			<div class="entry-row">
+				<a href="/klub/peringkat" class="entry">
+					<span class="entry-title">🏆 Papan Peringkat</span>
+					<span class="chev">→</span>
+				</a>
+				<a href="/klub/taruhan" class="entry">
+					<span class="entry-title">🥤 Taruhan</span>
+					<span class="chev">→</span>
+				</a>
+			</div>
 
 			<div class="pagehead">
 				<h1 class="h-title display">Anggota {club!.club_name}</h1>
@@ -199,7 +212,33 @@
 		color: var(--ink-soft);
 		margin-top: 2px;
 	}
-	.kas-entry .chev {
+	.entry-row {
+		display: flex;
+		gap: 10px;
+	}
+	.entry {
+		flex: 1;
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 8px;
+		padding: 13px 14px;
+		background: var(--surface);
+		border: 1px solid var(--line-2);
+		border-radius: var(--radius-lg);
+		text-decoration: none;
+		transition: background var(--t-tap);
+	}
+	.entry:hover {
+		background: var(--surface-2);
+	}
+	.entry-title {
+		font-size: 13.5px;
+		font-weight: 700;
+		color: var(--ink);
+	}
+	.kas-entry .chev,
+	.entry .chev {
 		color: var(--accent);
 		font-size: 18px;
 		flex: none;

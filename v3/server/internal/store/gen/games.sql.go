@@ -633,6 +633,57 @@ func (q *Queries) ResolveGamePlayerDispute(ctx context.Context, arg ResolveGameP
 	return i, err
 }
 
+const setGamePlayersPayer = `-- name: SetGamePlayersPayer :many
+UPDATE game_players
+SET payer_id = $3
+WHERE game_id = $1 AND club_id = $2 AND paid_at IS NULL AND disputed_at IS NULL
+RETURNING id, game_id, club_id, user_id, payer_id, side, slot, amount, paid_at, paid_by, disputed_at, dispute_note
+`
+
+type SetGamePlayersPayerParams struct {
+	GameID  uuid.UUID `json:"game_id"`
+	ClubID  uuid.UUID `json:"club_id"`
+	PayerID uuid.UUID `json:"payer_id"`
+}
+
+// Preset taruhan kok "yang kalah bayar kok" (§8.2, §8.4
+// POST games/{id}/settle-bet) — pindahkan payer_id SEMUA baris main ini
+// ke satu orang (handler yang memilih siapa, biasanya pemain pertama sisi
+// kalah). paid_at IS NULL: baris yang sudah lunas tidak masuk akal
+// dipindah penanggungnya lagi.
+func (q *Queries) SetGamePlayersPayer(ctx context.Context, arg SetGamePlayersPayerParams) ([]GamePlayer, error) {
+	rows, err := q.db.Query(ctx, setGamePlayersPayer, arg.GameID, arg.ClubID, arg.PayerID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []GamePlayer{}
+	for rows.Next() {
+		var i GamePlayer
+		if err := rows.Scan(
+			&i.ID,
+			&i.GameID,
+			&i.ClubID,
+			&i.UserID,
+			&i.PayerID,
+			&i.Side,
+			&i.Slot,
+			&i.Amount,
+			&i.PaidAt,
+			&i.PaidBy,
+			&i.DisputedAt,
+			&i.DisputeNote,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const softDeleteGame = `-- name: SoftDeleteGame :one
 UPDATE games
 SET deleted_at = now(), updated_at = now(), version = version + 1

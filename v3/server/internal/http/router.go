@@ -103,6 +103,10 @@ func Mount(r chi.Router, s *store.Store, bus *realtime.Bus, notifier notify.Noti
 					// QRIS statis — siapa pun anggota boleh baca (layar
 					// bayar); PUT-nya di bawah, digerbang ManageMoney.
 					r.Get("/qris", handleGetQris(s))
+					// Papan peringkat (§8.3) — akses bersyarat pada saklar
+					// papan_peringkat, dicek manual (leaderboard.go), sama
+					// pola dgn treasury di atas.
+					r.Get("/leaderboard", handleGetLeaderboard(s))
 
 					r.Group(func(r chi.Router) {
 						r.Use(RequireIdempotency(s))
@@ -184,6 +188,29 @@ func Mount(r chi.Router, s *store.Store, bus *realtime.Bus, notifier notify.Noti
 							r.Use(RequireIdempotency(s))
 							r.Post("/{id}/players/{playerId}/dispute", handleDisputeGamePlayer(s))
 							r.Post("/{id}/players/{playerId}/resolve-dispute", handleResolveGamePlayerDispute(s))
+						})
+
+						// Taruhan kok "yang kalah bayar kok" (§8.2, §8.4) —
+						// preset payer_id, sama gerbang RecordGame dgn catat main.
+						r.Group(func(r chi.Router) {
+							r.Use(RequireIdempotency(s))
+							r.Use(RequirePerm(perm.RecordGame))
+							r.Post("/{id}/settle-bet", handleSettleBet(s))
+						})
+					})
+
+					// Taruhan barang (§8.4) — ledger terpisah tanpa rupiah,
+					// anggota mana pun (bukan RequirePerm, side_bets.go).
+					// GET+POST+PATCH SATU r.Route (bukan r.Get terpisah di
+					// path yang sama) — chi menolak Route() dua kali di
+					// pattern yang sama, sama jebakan yang sudah dicatat di
+					// claim-requests di atas.
+					r.Route("/side-bets", func(r chi.Router) {
+						r.Get("/", handleListSideBets(s))
+						r.Group(func(r chi.Router) {
+							r.Use(RequireIdempotency(s))
+							r.Post("/", handleCreateSideBet(s))
+							r.Patch("/{id}", handlePatchSideBet(s))
 						})
 					})
 

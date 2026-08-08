@@ -33,6 +33,14 @@ type defaultClubSettings struct {
 	TunggakanMinimal  int64  `json:"tunggakan_minimal"`
 	TunggakanJedaHari int    `json:"tunggakan_jeda_hari"`
 	PengingatWa       bool   `json:"pengingat_wa"`
+	// PapanPeringkat & TaruhanBarang — saklar F7 (§8.3, §8.4), default
+	// nyala. Papan peringkat mati → GET leaderboard balas 404 (§0 API.md).
+	// Taruhan barang mati cuma menyembunyikan UI-nya (POST side-bets tetap
+	// jalan di server kalau ada yang memanggil langsung — tidak ada uang
+	// yang dipertaruhkan di situ jadi tidak butuh penegakan server keras
+	// seperti transparansi_kas).
+	PapanPeringkat bool `json:"papan_peringkat"`
+	TaruhanBarang  bool `json:"taruhan_barang"`
 }
 
 func defaultSettingsJSON() []byte {
@@ -47,6 +55,8 @@ func defaultSettingsJSON() []byte {
 		TunggakanMinimal:  50000,
 		TunggakanJedaHari: 7,
 		PengingatWa:       false,
+		PapanPeringkat:    true,
+		TaruhanBarang:     true,
 	})
 	return b
 }

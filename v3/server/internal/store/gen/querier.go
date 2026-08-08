@@ -88,6 +88,11 @@ type Querier interface {
 	CreatePaymentAllocation(ctx context.Context, arg CreatePaymentAllocationParams) (PaymentAllocation, error)
 	CreateQrisDynamicEvent(ctx context.Context, arg CreateQrisDynamicEventParams) (QrisDynamicEvent, error)
 	CreateSession(ctx context.Context, arg CreateSessionParams) (Session, error)
+	// Taruhan barang (PLAN.md §8.4) — SENGAJA tidak ada kolom rupiah (lihat
+	// header migrasi 00013_side_bets.sql). game_id nullable: taruhan boleh
+	// lahir dari satu main tertentu ATAU berdiri sendiri ("siapa traktir
+	// minum minggu ini").
+	CreateSideBet(ctx context.Context, arg CreateSideBetParams) (SideBet, error)
 	// F7 (PLAN.md §14): turnamen — bagan/klasemen, skor, kok per-partai & umum,
 	// iuran. Bagan & klasemen sendiri TIDAK disimpan — dihitung ulang tiap baca
 	// lewat internal/domain (BuildBracket/BuildRoundRobin) dari pairs+results,
@@ -199,6 +204,7 @@ type Querier interface {
 	GetPin(ctx context.Context, userID uuid.UUID) (UserPin, error)
 	GetSessionByID(ctx context.Context, id uuid.UUID) (Session, error)
 	GetSessionByTokenHash(ctx context.Context, tokenHash []byte) (Session, error)
+	GetSideBet(ctx context.Context, arg GetSideBetParams) (SideBet, error)
 	GetTournament(ctx context.Context, arg GetTournamentParams) (Tournament, error)
 	GetUser(ctx context.Context, id uuid.UUID) (User, error)
 	GetUserByPhone(ctx context.Context, phone pgtype.Text) (User, error)
@@ -262,8 +268,16 @@ type Querier interface {
 	ListMembershipsWithClubByUser(ctx context.Context, userID uuid.UUID) ([]ListMembershipsWithClubByUserRow, error)
 	ListPaymentAllocationsByPayment(ctx context.Context, paymentID uuid.UUID) ([]PaymentAllocation, error)
 	ListPendingClaimRequests(ctx context.Context, clubID uuid.UUID) ([]ClaimRequest, error)
+	// Papan peringkat klub (PLAN.md §8.3, §14 F7) — cuma main yang SUDAH
+	// dinilai (winner_side terisi) yang ikut kehitung; main tanpa skor
+	// dilewati begitu saja di domain.LeaderboardOf. Diurutkan per tanggal
+	// naik supaya rentetan kemenangan (streak) terhitung benar di lapisan Go.
+	ListScoredGamePlayersForLeaderboard(ctx context.Context, arg ListScoredGamePlayersForLeaderboardParams) ([]ListScoredGamePlayersForLeaderboardRow, error)
 	// Daftar perangkat aktif (PLAN.md §7.2.2) — terbaru dulu.
 	ListSessionsByUser(ctx context.Context, userID uuid.UUID) ([]Session, error)
+	// sqlc.narg(open_only) — NULL/false = semua taruhan, true = cuma yang
+	// masih 'open'. Diurutkan terbaru dulu, sama pola daftar lain.
+	ListSideBetsByClub(ctx context.Context, arg ListSideBetsByClubParams) ([]SideBet, error)
 	ListTournamentFeesByTournament(ctx context.Context, tournamentID uuid.UUID) ([]TournamentFee, error)
 	ListTournamentPairsByTournament(ctx context.Context, tournamentID uuid.UUID) ([]TournamentPair, error)
 	// Cursor per tanggal mulai, sama pola ListGamesByClub.
@@ -351,6 +365,12 @@ type Querier interface {
 	// "Pilih namanya dari daftar belum-terklaim" (§6.4 alur gabung klub) — akun
 	// bayangan hasil migrasi v2, status masih 'unclaimed'.
 	SearchUnclaimedByClub(ctx context.Context, arg SearchUnclaimedByClubParams) ([]User, error)
+	// Preset taruhan kok "yang kalah bayar kok" (§8.2, §8.4
+	// POST games/{id}/settle-bet) — pindahkan payer_id SEMUA baris main ini
+	// ke satu orang (handler yang memilih siapa, biasanya pemain pertama sisi
+	// kalah). paid_at IS NULL: baris yang sudah lunas tidak masuk akal
+	// dipindah penanggungnya lagi.
+	SetGamePlayersPayer(ctx context.Context, arg SetGamePlayersPayerParams) ([]GamePlayer, error)
 	SoftDeleteGame(ctx context.Context, arg SoftDeleteGameParams) (Game, error)
 	// Titipan pemain = jumlah SEMUA saldo deposit anggota klub ini, lintas
 	// pemilik — kewajiban klub, bukan kas klub sendiri (§9.2).
@@ -406,6 +426,9 @@ type Querier interface {
 	UpdateMatchResult(ctx context.Context, arg UpdateMatchResultParams) (Match, error)
 	UpdateMembershipAutoDeduct(ctx context.Context, arg UpdateMembershipAutoDeductParams) (Membership, error)
 	UpdateMembershipRole(ctx context.Context, arg UpdateMembershipRoleParams) (Membership, error)
+	// Cuma dari 'open' — taruhan yang sudah settled/cancelled tidak bisa
+	// ditimpa status lain (jurnal taruhan tetap jujur, sama semangat §9.4).
+	UpdateSideBetStatus(ctx context.Context, arg UpdateSideBetStatusParams) (SideBet, error)
 	// API.md §5: PATCH cuma ubah fee & catatan. Versioning (invarian §3.4).
 	UpdateTournament(ctx context.Context, arg UpdateTournamentParams) (Tournament, error)
 	// Pemindahan nomor oleh admin (§7.2.1) — constraint users_phone_e164 dan

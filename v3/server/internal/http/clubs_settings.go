@@ -28,6 +28,8 @@ type patchClubSettingsRequest struct {
 	TunggakanMinimal  *int64  `json:"tunggakan_minimal"`
 	TunggakanJedaHari *int    `json:"tunggakan_jeda_hari"`
 	PengingatWa       *bool   `json:"pengingat_wa"`
+	PapanPeringkat    *bool   `json:"papan_peringkat"`
+	TaruhanBarang     *bool   `json:"taruhan_barang"`
 }
 
 var validSiapaBolehCatat = map[string]bool{"semua_anggota": true, "hanya_pengurus": true}
@@ -137,5 +139,11 @@ func applyClubSettingsPatch(cs *defaultClubSettings, p patchClubSettingsRequest)
 	}
 	if p.PengingatWa != nil {
 		cs.PengingatWa = *p.PengingatWa
+	}
+	if p.PapanPeringkat != nil {
+		cs.PapanPeringkat = *p.PapanPeringkat
+	}
+	if p.TaruhanBarang != nil {
+		cs.TaruhanBarang = *p.TaruhanBarang
 	}
 }

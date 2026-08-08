@@ -49,6 +49,17 @@ SELECT * FROM game_players WHERE game_id = $1 ORDER BY side, slot;
 -- name: ListGamePlayersByGames :many
 SELECT * FROM game_players WHERE game_id = ANY(sqlc.arg(game_ids)::uuid[]) ORDER BY side, slot;
 
+-- name: SetGamePlayersPayer :many
+-- Preset taruhan kok "yang kalah bayar kok" (§8.2, §8.4
+-- POST games/{id}/settle-bet) — pindahkan payer_id SEMUA baris main ini
+-- ke satu orang (handler yang memilih siapa, biasanya pemain pertama sisi
+-- kalah). paid_at IS NULL: baris yang sudah lunas tidak masuk akal
+-- dipindah penanggungnya lagi.
+UPDATE game_players
+SET payer_id = $3
+WHERE game_id = $1 AND club_id = $2 AND paid_at IS NULL AND disputed_at IS NULL
+RETURNING *;
+
 -- name: ListGameKoksByGame :many
 SELECT * FROM game_koks WHERE game_id = $1;
 

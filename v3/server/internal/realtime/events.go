@@ -51,6 +51,12 @@ const KindPaymentRejected Kind = "payment.rejected"
 // per-field), lebih sederhana daripada mendaftar satu kind per aksi kecil.
 const KindTournamentUpdated Kind = "tournament.updated"
 
+// KindSideBetUpdated — F7 (§8.4), dipicu create & PATCH status. Taruhan
+// barang tidak menyentuh uang jadi tidak butuh bill.updated berpasangan
+// (beda dari settle-bet di games.go yang MEMANG mengubah payer_id →
+// memicu game.updated + bill.updated seperti biasa).
+const KindSideBetUpdated Kind = "side_bet.updated"
+
 // Event adalah bentuk yang dikirim lewat NOTIFY dan diteruskan ke
 // subscriber SSE. ClubID dipakai bus buat filter kebocoran antar-klub
 // (§6.2) — subscriber cuma menerima event dari klub yang dia ikuti,

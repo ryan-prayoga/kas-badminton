@@ -18,6 +18,7 @@
 		type GameSummary,
 		type Game
 	} from '$lib/api/games';
+	import { settleBet } from '$lib/api/sideBets';
 	import { AppShell, Card, Badge, Button, toast } from '$lib/components/ui';
 	import ClubHeaderBar from '$lib/components/ClubHeaderBar.svelte';
 	import CreateClubDialog from '$lib/components/CreateClubDialog.svelte';
@@ -39,6 +40,7 @@
 	let expandedId = $state<string | null>(null);
 	let detailCache = $state<Record<string, Game>>({});
 	let detailLoading = $state<string | null>(null);
+	let settlingId = $state<string | null>(null);
 
 	onMount(() => {
 		if (!isLoggedIn()) {
@@ -117,6 +119,24 @@
 			// biarkan panel kosong — retry cukup dgn menutup-buka lagi.
 		} finally {
 			detailLoading = null;
+		}
+	}
+
+	// Taruhan kok "yang kalah bayar kok" (§8.2, §8.4) — preset payer_id,
+	// bukan mekanisme baru. Cuma tampil kalau main ini sudah ada skornya
+	// (butuh pemenang buat tahu sisi mana yang kalah).
+	async function onSettleBet(gameId: string) {
+		const club = activeClub();
+		if (!club) return;
+		settlingId = gameId;
+		try {
+			await settleBet(club.club_id, gameId);
+			detailCache = { ...detailCache, [gameId]: await getGame(club.club_id, gameId) };
+			toast('Tagihan kok dipindah ke sisi yang kalah.', { tone: 'lunas' });
+		} catch (e) {
+			toast(e instanceof ApiError ? e.message : 'Gagal memindah tagihan kok.', { tone: 'hancur' });
+		} finally {
+			settlingId = null;
 		}
 	}
 
@@ -228,6 +248,11 @@
 											{/each}
 										</div>
 										{#if detail.notes}<p class="notes">"{detail.notes}"</p>{/if}
+										{#if detail.winner_side}
+											<button class="settle-btn" disabled={settlingId === g.id} onclick={() => onSettleBet(g.id)}>
+												{settlingId === g.id ? 'Memindah…' : 'Taruhan kok: yang kalah bayar'}
+											</button>
+										{/if}
 									{:else}
 										<p class="hint">Gagal memuat detail. Tutup lalu buka lagi.</p>
 									{/if}
@@ -386,5 +411,16 @@
 		font-size: 12.5px;
 		color: var(--ink-faint);
 		font-style: italic;
+	}
+	.settle-btn {
+		margin-top: 10px;
+		border: 1px solid var(--line-2);
+		background: var(--surface-2);
+		border-radius: 999px;
+		padding: 7px 12px;
+		font-size: 12px;
+		font-weight: 600;
+		color: var(--ink-soft);
+		cursor: pointer;
 	}
 </style>
