@@ -60,6 +60,13 @@ services:
     build:
       context: ..
       dockerfile: deploy/Dockerfile
+      # WAJIB eksplisit — Dockerfile punya stage SETELAH `final` (migrate-v2,
+      # sync-v2), jadi "stage terakhir di file" (default docker build tanpa
+      # --target) BUKAN LAGI `final`. Tanpa baris ini, `api` diam-diam
+      # kebangun jadi image sync-v2 (ketauan dari kejadian nyata pas deploy
+      # manual pertama kali — container jalan tapi ENTRYPOINT-nya sync-v2,
+      # bukan api, gak ada tanda di build log kalau gak dicek).
+      target: final
     restart: unless-stopped
     depends_on:
       db:
