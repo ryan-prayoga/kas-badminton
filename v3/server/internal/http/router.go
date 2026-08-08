@@ -26,6 +26,20 @@ func Mount(r chi.Router, s *store.Store, bus *realtime.Bus, notifier notify.Noti
 			r.Post("/", handleJoinRequest(s, notifier))
 		})
 
+		// Halaman publik klub (§6.3, F9) — TANPA auth, gerbangnya
+		// RequirePublicClub (public.go): 404 kalau klub tidak ada ATAU
+		// saklar halaman_publik mati. Query terpisah "aman-publik",
+		// bukan endpoint anggota yang disaring belakangan.
+		r.Route("/public/clubs/{slug}", func(r chi.Router) {
+			r.Use(RequirePublicClub(s))
+			r.Get("/", handleGetPublicClub(s))
+			r.Get("/treasury", handleGetPublicTreasury(s))
+			r.Get("/bills", handleListPublicBills(s))
+			r.Get("/leaderboard", handleGetPublicLeaderboard(s))
+			r.Get("/tournaments", handleListPublicTournaments(s))
+			r.Get("/tournaments/{id}", handleGetPublicTournament(s))
+		})
+
 		r.Route("/auth", func(r chi.Router) {
 			// Publik — belum ada sesi sama sekali di titik ini (API.md §1).
 			r.Post("/otp/request", handleOTPRequest(s, notifier))

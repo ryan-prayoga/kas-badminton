@@ -224,6 +224,16 @@ type Querier interface {
 	GetNotificationPref(ctx context.Context, arg GetNotificationPrefParams) (NotificationPref, error)
 	GetPayment(ctx context.Context, arg GetPaymentParams) (Payment, error)
 	GetPin(ctx context.Context, userID uuid.UUID) (UserPin, error)
+	// Query khusus halaman publik klub (PLAN.md §6.3, §9). SATU aturan buat
+	// seluruh berkas ini: TIDAK PERNAH SELECT nomor telepon (users.phone),
+	// saldo deposit perorangan (wallet_entries per user_id), riwayat
+	// pembayaran perorangan (payments), atau audit_log. Kalau sebuah kolom
+	// ragu-ragu boleh publik atau tidak, JANGAN dimasukkan di sini — tambah di
+	// query berpemilik yang sudah digerbang auth.
+	// Statistik ringkas kartu "tentang klub" — jumlah anggota aktif, total
+	// main tercatat, total turnamen. Tiga subquery independen (bukan JOIN)
+	// supaya tidak ada perkalian baris antar tabel yang tidak berelasi.
+	GetPublicClubStats(ctx context.Context, clubID uuid.UUID) (GetPublicClubStatsRow, error)
 	GetSessionByID(ctx context.Context, id uuid.UUID) (Session, error)
 	GetSessionByTokenHash(ctx context.Context, tokenHash []byte) (Session, error)
 	GetSideBet(ctx context.Context, arg GetSideBetParams) (SideBet, error)
@@ -307,6 +317,12 @@ type Querier interface {
 	ListOverdueDebtorsByClub(ctx context.Context, clubID uuid.UUID) ([]ListOverdueDebtorsByClubRow, error)
 	ListPaymentAllocationsByPayment(ctx context.Context, paymentID uuid.UUID) ([]PaymentAllocation, error)
 	ListPendingClaimRequests(ctx context.Context, clubID uuid.UUID) ([]ClaimRequest, error)
+	// "Rekap tagihan per nama" (§6.3) — SENGAJA cuma total per orang, bukan
+	// baris per main: rincian tanggal/jumlah partai tetap privat, publik cuma
+	// lihat siapa yang masih punya sisa dan berapa totalnya (sama semangat
+	// dengan SumUnpaidByPayer, games.sql — disputed & pending_review
+	// dikecualikan). display_name doang, TANPA users.phone.
+	ListPublicUnpaidTotals(ctx context.Context, clubID uuid.UUID) ([]ListPublicUnpaidTotalsRow, error)
 	ListPushSubscriptionsByUser(ctx context.Context, userID uuid.UUID) ([]PushSubscription, error)
 	// Papan peringkat klub (PLAN.md §8.3, §14 F7) — cuma main yang SUDAH
 	// dinilai (winner_side terisi) yang ikut kehitung; main tanpa skor
